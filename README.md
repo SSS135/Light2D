@@ -2,6 +2,8 @@
 
 [Asset Store link](https://www.assetstore.unity3d.com/en/#!/content/30953)
 
+[Description in Russian](https://habrahabr.ru/post/248149/)
+
 [Tutorial video](https://www.youtube.com/watch?v=ic5t2MFiowk)
 
 ## Features:
