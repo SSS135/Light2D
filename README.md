@@ -1,4 +1,8 @@
-2D lighting system for Unity3D that runs on GPU.
+2D lighting system that performs computations on the GPU. This allows to get better lighting quality and use more lights, compared to other 2D lighting systems.
+
+[Asset Store link](https://www.assetstore.unity3d.com/en/#!/content/30953)
+
+[Tutorial video](https://www.youtube.com/watch?v=ic5t2MFiowk)
 
 ## Features:
 * Normal mapping (not on mobiles). 
@@ -10,6 +14,64 @@
 * Colored lights and light obstacles. 
 * Particle system support. 
 * Supports Unity 5. 
+
+## How it works
+
+![How it works](Images/how_it_works.png)
+
+Light is computed on small textures, 160x88 px size is used in this images. Quality of lighting is mostly depending on that resolution. When you increase it lighting will became more precise and will affect smaller light obstacles, but it will make computations more expensive.
+
+Each frame system is rendering light obstacles, light sources, ambient light to RenderTextures. Then system mixes light sources and ambient light together and draws them as post effect.
+
+### Light obstacles.
+
+![Light obstacles texture](Images/light_obstacles.png)
+
+*Light obstacles texture (RGB). That and following textures is upscaled to 400%.*
+
+Black areas are fully transparent for light, white is fully opaque. There is support for colors too, for example, fully red pixels would absorb red part of light and allow passing green and blue components unchanged.
+
+### Light sources.
+
+![Light sources texture](Images/light_sources.png)
+
+*Light sources texture.*
+
+Light sources is a main part of lighting system. They are using GPU ray tracking on light obstacle texture to cast shadows. MeshRenderer draws light source with generated mesh of four vertices. Light emits from light origin, which could have point or line shape. Position of light origin is configurable.
+
+Different shaders is used to draw light sources, with GPU ray tracking or without it. Shaders with ray tracking could have fixed or variable point count. Shader without ray tracking is used with particle systems.
+
+### Ambient light.
+
+![Ambient light texture](Images/ambient_light.png)
+
+*Ambient light texture.*
+
+Opposite to light source, ambient light is emitting from whole area. For example, you could use ambient light to create minimal light level in caves without light sources. See areas unaffected by light sources in Rocket Example. They would be completely black without ambient light.
+
+## Overall pros and cons.
+
+**Pros:**
+* Sprites is used as light sources. That means lights can have any shape.
+* Light source is just a MeshRenderer with 4 vertices.
+* Dynamic batching works with light sources.
+* Point and line light emission types.
+* Mobile device support. Rocket Example is using 8-10 ms per frame on Nexus 4 with profiler attached (where lighting itself taking 2-3 ms).
+* Fully dynamic lighting system. That means you could create or destroy lights or light obstacles without a performance overhead (except Instantiate/Destroy itself).
+* Ambient light support.
+* Colored light sources and light obstacles.
+* Variable light obstacles transparency.
+* Support for light sources emission in Unity particle system.
+* Flexible quality settings.
+* Works with OpenGL ES 2.0 / DirectX 9.
+* Supports Unity 5, 2D Toolkit.
+
+**Cons:**
+* Perspective camera mode is partially supported.
+* Lights could ignore some small obstacles. Increasing resolution of render texture fixes that, however, can have a performance hit.
+* System is creating 6-10 DrawCalls, depending on settings.
+* Size of lighting camera must be bigger than of game camera by x1-x1.5. This is required to compute off screen lights correctly.
+* It still consuming about 1 - 2ms per frame (on Nexus 4) when there is no lights on screen (if system is not disabled).
 
 
 ## Setup guide:
