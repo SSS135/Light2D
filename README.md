@@ -5,7 +5,6 @@
 [Tutorial video](https://www.youtube.com/watch?v=ic5t2MFiowk)
 
 ## Features:
-* Normal mapping (not on mobiles). 
 * It's fully dynamic: lights and obstacles could be moved in runtime. 
 * Optimized for mobiles. 
 * No need for physics colliders. 
@@ -13,6 +12,7 @@
 * Point, linear and ambient light types. 
 * Colored lights and light obstacles. 
 * Particle system support. 
+* Normal mapping (too expensive for mobiles and not really tested). 
 * Supports Unity 5. 
 
 ## How it works
