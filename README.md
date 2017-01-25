@@ -1,4 +1,4 @@
-2D lighting system that performs computations on the GPU. This allows to get better lighting quality and use more lights, compared to other 2D lighting systems.
+2D lighting system that performs computations on the GPU. This allows to get better lighting quality and use more lights, compared to some other 2D lighting systems.
 
 [Asset Store link](https://www.assetstore.unity3d.com/en/#!/content/30953)
 
