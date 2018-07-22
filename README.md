@@ -237,3 +237,6 @@ Change background color in *Light Camera* to set minimal light level.
 *Light obstacle is generated at wrong position.* Set sprite mesh type to full rect, turn off mip maps.
 
 *Light is jerky with perspective camera.* Set `LightingSystem.CameraToLightObstaclesDistance` to distance from camera to light obstacles. Also all light obstacles should have same Z-depth.
+
+## Hiring?
+sss13594@gmail.com
