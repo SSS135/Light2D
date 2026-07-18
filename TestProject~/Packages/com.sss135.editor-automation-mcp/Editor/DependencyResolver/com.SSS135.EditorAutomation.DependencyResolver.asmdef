@@ -1,0 +1,16 @@
+{
+    "name": "com.SSS135.EditorAutomation.DependencyResolver",
+    "rootNamespace": "com.SSS135.EditorAutomation.Editor.DependencyResolver",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

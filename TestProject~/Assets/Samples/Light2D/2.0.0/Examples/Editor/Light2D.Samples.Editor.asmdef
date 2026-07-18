@@ -1,0 +1,11 @@
+{
+  "name": "Light2D.Samples.Editor",
+  "rootNamespace": "Light2D.Examples",
+  "references": [
+    "Light2D.Runtime",
+    "Light2D.Samples.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

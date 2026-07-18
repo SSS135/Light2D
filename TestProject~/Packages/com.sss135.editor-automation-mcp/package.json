@@ -1,0 +1,37 @@
+{
+  "name": "com.sss135.editor-automation-mcp",
+  "displayName": "Unity Editor Automation",
+  "author": {
+    "name": "Alexander Penkin (SSS135)",
+    "url": "https://github.com/SSS135"
+  },
+  "keywords": [
+    "AI",
+    "AI Skills",
+    "AI Tools",
+    "AI Integration",
+    "Skills",
+    "MCP",
+    "Editor Automation",
+    "Unity Editor"
+  ],
+  "version": "0.72.1",
+  "unity": "2022.3",
+  "description": "Editor Automation for Unity: drive the Editor from AI agents through a single MCP tool with live wiki navigation, an attribute-driven tool framework, Roslyn-backed script execution, and a recorder/query engine. Any C# method may be turned into a tool by a single line. Works with Claude Code, Gemini, Copilot, Cursor and any other MCP client. Based on Unity-MCP by Ivan Murzak (Apache-2.0).",
+  "documentationUrl": "https://github.com/SSS135/unity-editor-automation/blob/main/README.md",
+  "changelogUrl": "https://github.com/SSS135/unity-editor-automation/blob/main/CHANGELOG.md",
+  "dependencies": {
+    "com.unity.test-framework": "1.1.33",
+    "com.unity.modules.uielements": "1.0.0",
+    "extensions.unity.playerprefsex": "2.1.3"
+  },
+  "scopedRegistries": [
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "extensions.unity"
+      ]
+    }
+  ]
+}

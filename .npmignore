@@ -1,0 +1,23 @@
+# Publish only the Unity Package Manager package surface.
+*
+
+!Runtime/
+!Runtime/**
+!Runtime.meta
+!Editor/
+!Editor/**
+!Editor.meta
+!Samples~/
+!Samples~/**
+!Tests/
+!Tests/**
+!Tests.meta
+!Documentation~/
+!Documentation~/**
+
+!README.md
+!README.md.meta
+!LICENSE.md
+!LICENSE.md.meta
+!package.json
+!package.json.meta

@@ -1,0 +1,12 @@
+{
+  "name": "Light2D.TestProject.Editor",
+  "rootNamespace": "Light2D.TestProject.Editor",
+  "references": [
+    "Light2D.Runtime",
+    "Unity.RenderPipelines.Core.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

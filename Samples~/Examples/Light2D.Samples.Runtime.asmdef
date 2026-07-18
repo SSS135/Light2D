@@ -1,0 +1,8 @@
+{
+  "name": "Light2D.Samples.Runtime",
+  "rootNamespace": "Light2D.Examples",
+  "references": [
+    "Light2D.Runtime",
+    "Unity.UGUI"
+  ]
+}

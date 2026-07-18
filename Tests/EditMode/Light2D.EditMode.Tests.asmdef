@@ -1,0 +1,20 @@
+{
+  "name": "Light2D.EditMode.Tests",
+  "rootNamespace": "Light2D.Tests",
+  "references": [
+    "Light2D.Runtime",
+    "Light2D.Editor",
+    "Unity.RenderPipelines.Core.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Universal.2D.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

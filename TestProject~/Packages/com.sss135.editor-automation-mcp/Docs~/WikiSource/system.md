@@ -1,0 +1,36 @@
+# system
+
+Small plumbing surface — liveness, registry introspection, registry toggles.
+These are the calls you reach for *before* doing real work, not the work
+itself. None of them edit assets, scenes, or play state.
+
+## Cheat sheet
+
+| Goal | Call | Notes |
+|---|---|---|
+| Is the gateway reachable? | `call("ping", {})` | Cheapest readiness probe. Returns `pong` (or the echoed `message`). |
+| What tools exist right now? | `call("tool.list", {})` | Live registry snapshot; honours `regexSearch`. |
+| Mute / restore a tool by name | `call("tool.set-enabled-state", {...})` | Targeted enable/disable; see [`tool`](tool.md). |
+
+## Liveness probing
+
+`ping` is the watchdog primitive. The gateway runs inside the Editor's main
+loop, and Unity throttles `EditorApplication.update` when its window isn't
+foregrounded — so the port is the canonical signal that the Editor is alive
+and the message pump is draining. A `ping` round-trip under a few hundred
+milliseconds means the gateway is responsive; a missed `ping` means the
+Editor either isn't focused, is mid-compile / domain reload, or has crashed.
+
+The shipped [`wake-unity.ps1`](../../Tools/wake-unity.ps1) one-shot helper
+(at `Packages/com.sss135.editor-automation-mcp/Tools/wake-unity.ps1`) is built
+around exactly this: it foregrounds the Editor process so a stalled
+reload can complete. Treat any longer call (`tests.run`, `assets.refresh`
+after a `.cs` write, `package.add`) as a recompile risk and run
+[`wake-unity.ps1`](../../Tools/wake-unity.ps1) immediately before issuing
+it, not after the gateway has already gone silent.
+
+## See also
+
+- [`tool`](tool.md) — registry-management entry points (`tool.list`,
+  `tool.set-enabled-state`).
+- [`wiki`](wiki.md) — routing rules for the `call()` shape itself.

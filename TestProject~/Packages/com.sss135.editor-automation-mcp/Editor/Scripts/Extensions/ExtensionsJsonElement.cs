@@ -1,0 +1,173 @@
+#nullable enable
+using System.Text.Json;
+using com.IvanMurzak.ReflectorNet;
+using com.IvanMurzak.ReflectorNet.Model;
+using EA;
+using Microsoft.Extensions.Logging;
+
+namespace com.SSS135.EditorAutomation.Runtime.Extensions
+{
+    public static class ExtensionsJsonElement
+    {
+        public static GameObjectRef? ToGameObjectRef(
+            this JsonElement? jsonElement,
+            Reflector reflector,
+            bool suppressException = true,
+            int depth = 0,
+            Logs? logs = null,
+            ILogger? logger = null)
+        {
+            if (jsonElement == null)
+                return null;
+
+            return ToGameObjectRef(
+                jsonElement: jsonElement.Value,
+                reflector: reflector,
+                suppressException: suppressException,
+                depth: depth,
+                logs: logs,
+                logger: logger
+            );
+        }
+        public static GameObjectRef? ToGameObjectRef(
+            this JsonElement jsonElement,
+            Reflector reflector,
+            bool suppressException = true,
+            int depth = 0,
+            Logs? logs = null,
+            ILogger? logger = null)
+        {
+            if (!suppressException)
+                return reflector.JsonSerializer.Deserialize<GameObjectRef>(jsonElement);
+            try
+            {
+                return reflector.JsonSerializer.Deserialize<GameObjectRef>(jsonElement);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+        public static ComponentRef? ToComponentRef(
+            this JsonElement? jsonElement,
+            Reflector reflector,
+            bool suppressException = true,
+            int depth = 0,
+            Logs? logs = null,
+            ILogger? logger = null)
+        {
+            if (jsonElement == null)
+                return null;
+
+            return ToComponentRef(
+                jsonElement: jsonElement.Value,
+                reflector: reflector,
+                suppressException: suppressException,
+                depth: depth,
+                logs: logs,
+                logger: logger
+            );
+        }
+        public static ComponentRef? ToComponentRef(
+            this JsonElement jsonElement,
+            Reflector reflector,
+            bool suppressException = true,
+            int depth = 0,
+            Logs? logs = null,
+            ILogger? logger = null)
+        {
+            if (!suppressException)
+                return reflector.JsonSerializer.Deserialize<ComponentRef>(jsonElement);
+            try
+            {
+                return reflector.JsonSerializer.Deserialize<ComponentRef>(jsonElement);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+        public static AssetObjectRef? ToAssetObjectRef(
+            this JsonElement? jsonElement,
+            Reflector? reflector = null,
+            bool suppressException = true,
+            int depth = 0,
+            Logs? logs = null,
+            ILogger? logger = null)
+        {
+            if (jsonElement == null)
+                return null;
+
+            return ToAssetObjectRef(
+                jsonElement: jsonElement.Value,
+                reflector: reflector,
+                suppressException: suppressException,
+                depth: depth,
+                logs: logs,
+                logger: logger
+            );
+        }
+        public static AssetObjectRef? ToAssetObjectRef(
+            this JsonElement jsonElement,
+            Reflector? reflector = null,
+            bool suppressException = true,
+            int depth = 0,
+            Logs? logs = null,
+            ILogger? logger = null)
+        {
+            if (!suppressException)
+                return reflector != null
+                    ? reflector.JsonSerializer.Deserialize<AssetObjectRef>(jsonElement)
+                    : JsonSerializer.Deserialize<AssetObjectRef>(jsonElement);
+            try
+            {
+                return reflector != null
+                    ? reflector.JsonSerializer.Deserialize<AssetObjectRef>(jsonElement)
+                    : JsonSerializer.Deserialize<AssetObjectRef>(jsonElement);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+        public static ObjectRef? ToObjectRef(
+            this JsonElement? jsonElement,
+            Reflector reflector,
+            bool suppressException = true,
+            int depth = 0,
+            Logs? logs = null,
+            ILogger? logger = null)
+        {
+            if (jsonElement == null)
+                return null;
+
+            return ToObjectRef(
+                jsonElement: jsonElement.Value,
+                reflector: reflector,
+                suppressException: suppressException,
+                depth: depth,
+                logs: logs,
+                logger: logger
+            );
+        }
+        public static ObjectRef? ToObjectRef(
+            this JsonElement jsonElement,
+            Reflector reflector,
+            bool suppressException = true,
+            int depth = 0,
+            Logs? logs = null,
+            ILogger? logger = null)
+        {
+            if (!suppressException)
+                return reflector.JsonSerializer.Deserialize<ObjectRef>(jsonElement);
+            try
+            {
+                return reflector.JsonSerializer.Deserialize<ObjectRef>(jsonElement);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+}

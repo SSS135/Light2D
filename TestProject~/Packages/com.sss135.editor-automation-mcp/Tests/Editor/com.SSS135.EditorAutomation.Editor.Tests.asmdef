@@ -1,0 +1,25 @@
+{
+    "name": "com.SSS135.EditorAutomation.Editor.Tests",
+    "rootNamespace": "com.SSS135.EditorAutomation.Editor.Tests",
+    "references": [
+        "com.SSS135.EditorAutomation.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "EDITOR_AUTOMATION_READY"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Light2D.Editor",
+  "rootNamespace": "Light2D",
+  "references": [
+    "Light2D.Runtime",
+    "Unity.RenderPipelines.Core.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Universal.2D.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "com.sss13594.light2d",
+  "displayName": "Light2D",
+  "version": "2.0.0",
+  "unity": "6000.4",
+  "description": "GPU-accelerated dynamic 2D lighting for Unity.",
+  "license": "MIT",
+  "licensesUrl": "https://github.com/SSS135/Light2D/blob/master/LICENSE.md",
+  "author": {
+    "name": "SSS13594",
+    "url": "https://github.com/SSS135"
+  },
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "17.4.0",
+    "com.unity.ugui": "2.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "Examples",
+      "description": "Small Examples and Rocket demonstration scenes with their supporting assets.",
+      "path": "Samples~/Examples"
+    }
+  ]
+}
