@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Collections;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 
 
 namespace Light2D.Examples
@@ -19,7 +13,8 @@ namespace Light2D.Examples
 
         private IEnumerator Start()
         {
-            TouchControls.SetActive(Input.touchSupported);
+            if (TouchControls != null)
+                TouchControls.SetActive(Application.isMobilePlatform && Input.touchSupported);
 
             ControlledSpacecraft.MainRigidbody.bodyType = RigidbodyType2D.Kinematic;
             yield return new WaitForSeconds(1);
@@ -43,10 +38,10 @@ namespace Light2D.Examples
             ControlledSpacecraft.SideLeftEngine.ForcePercent = 0;
 
             var moveDir = Vector2.zero;
-            if (Input.GetKey(KeyCode.UpArrow) || UpButton.IsPressed) moveDir += new Vector2(0, 1);
-            if (Input.GetKey(KeyCode.DownArrow) || DownButton.IsPressed) moveDir += new Vector2(0, -1);
-            if (Input.GetKey(KeyCode.RightArrow) || RightButton.IsPressed) moveDir += new Vector2(1, 0);
-            if (Input.GetKey(KeyCode.LeftArrow) || LeftButton.IsPressed) moveDir += new Vector2(-1, 0);
+            if (Input.GetKey(KeyCode.UpArrow) || IsPressed(UpButton)) moveDir += Vector2.up;
+            if (Input.GetKey(KeyCode.DownArrow) || IsPressed(DownButton)) moveDir += Vector2.down;
+            if (Input.GetKey(KeyCode.RightArrow) || IsPressed(RightButton)) moveDir += Vector2.right;
+            if (Input.GetKey(KeyCode.LeftArrow) || IsPressed(LeftButton)) moveDir += Vector2.left;
 
             ControlledSpacecraft.BottomLeftEngine.ForcePercent = moveDir.y*2f + moveDir.x;
             ControlledSpacecraft.BottomRightEngine.ForcePercent = moveDir.y*2f - moveDir.x;
@@ -74,6 +69,11 @@ namespace Light2D.Examples
         public void Restart()
         {
             SceneManager.LoadScene(gameObject.scene.name);
+        }
+
+        private static bool IsPressed(ButtonHelper button)
+        {
+            return button != null && button.IsPressed;
         }
     }
 }

@@ -29,7 +29,7 @@ namespace Light2D.Examples
                 FindNewFlyTarget();
 
             var direction = rot*new Vector3(0, 1, 0);
-            var targetRot = Quaternion.Euler(0, 0, (_flyTarget - (Vector2)pos).AngleZ());
+            var targetRot = Quaternion.Euler(0, 0, SampleUtilities.AngleZ(_flyTarget - (Vector2)pos));
             transform.rotation = Quaternion.Lerp(rot, targetRot, RotationLerpFactor*Time.deltaTime);
 
             transform.position = pos + direction*MoveSpeed*Time.deltaTime;

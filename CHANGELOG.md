@@ -1,6 +1,6 @@
 # Changelog
 
-All notable package changes are documented here.
+All notable package changes are documented here. This file at the package root is the canonical changelog location.
 
 ## [2.0.0]
 
@@ -14,9 +14,14 @@ All notable package changes are documented here.
 - Added editor commands to install, repair, and remove the URP renderer feature selected by a camera.
 - Added multi-instance `LightingSystem` tracking and per-camera URP contexts.
 - Added XY/XZ shader variants and retained legacy shader names and serialized property names for material compatibility.
-- Removed the obsolete 2D Toolkit enable workflow; the remaining menu command removes the legacy `LIGHT2D_2DTK` scripting define.
-- Added `TestProject~` as the package development host and an editor-automation MCP endpoint on port 17777.
-- Added 17 EditMode tests, Built-in behavioral PlayMode coverage, and a URP PlayMode test. URP behavioral execution remains blocked on the Unity 6000.4.7f1/ShaderGraph 17.4 global-settings import defect.
+- Added `LightingSystem.ActivePipeline` and the `Light2DPipeline` classification distinguishing Built-in, supported URP, and unsupported Scriptable Render Pipelines; `IsRenderingReady` reports unsupported pipelines as not ready and an unsupported pipeline logs one actionable warning.
+- Added `Light2DProfiling` markers and `Light2DDiagnostics`/`Light2DFrameMetrics` as the supported diagnostics API.
+- Removed the legacy public utility API: the `Util` extension class, the `Point2` struct (replaced internally by `Vector2Int`), the unused `ReadOnlyAttribute`, and the remaining `LIGHT2D_2DTK`/2D Toolkit compile branches. These types were unreferenced by package serialized assets; code that consumed them must migrate to `UnityEngine` equivalents.
+- Made implementation helpers internal. The supported public runtime API is the components (`LightingSystem`, `LightSprite`, `CustomSprite`, `LightObstacleSprite`, `LightObstacleMesh`, `LightObstacleGenerator`, `LightingSystemPrefabConfig`), the URP renderer feature, the diagnostics types, and `Light2DPipeline`.
+- Replaced unqualified editor `Resources.Load` calls with package-qualified `AssetDatabase` paths.
+- Removed the obsolete 2D Toolkit enable workflow and the legacy `LIGHT2D_2DTK` scripting define.
+- Added `TestProject~` as the package development host and an editor-automation MCP endpoint on port 17777. Host automation is self-contained and has no external sibling-project fallback.
+- Added EditMode suites covering contracts, lifecycle and resource release, components, diagnostics, editor workflows, package integrity, shader import, and URP feature setup, plus Built-in behavioral PlayMode coverage and a URP PlayMode test. URP behavioral execution remains blocked on the Unity 6000.4.7f1/ShaderGraph 17.4 global-settings import defect.
 - Validated a Built-in Windows x64 sample-player build with a successful `BuildReport`, zero reported errors, and zero actionable step errors.
 
 ### Migration notes
@@ -26,7 +31,8 @@ All notable package changes are documented here.
 - Recreate or verify the three Light2D layers because Unity layer indices belong to the consuming project and are not supplied by a UPM package.
 - Recheck source-camera culling masks and all serialized layer indices after migration.
 - Built-in scenes require the helper `Lighting Camera`; URP scenes use the source camera and require the renderer feature selected by that camera, with no helper `LightCamera` assignment.
-- See [MIGRATION.md](MIGRATION.md) for the complete sequence and rollback guidance.
+- Project code that used `Light2D.Util` or `Light2D.Point2` must switch to `UnityEngine` equivalents such as `Vector2Int`, `Object.Destroy`, and `Vector2` math; the package no longer ships these helpers.
+- See [MIGRATION.md](Documentation~/MIGRATION.md) for the complete sequence and rollback guidance.
 
 ## [1.4]
 

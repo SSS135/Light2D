@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEditor;
 #endif
 using UnityEngine;
@@ -6,27 +6,22 @@ using UnityEngine;
 namespace Light2D
 {
     /// <summary>
-    /// Sprite with dual color support. Grabs sprite from GameSpriteRenderer field.
+    /// Mirrors sprite geometry into the obstacle layer and stores additive color in UV1.
     /// </summary>
-    [ExecuteInEditMode]
     public class LightObstacleSprite : CustomSprite
     {
-        /// <summary>
-        /// Renderer from which sprite will be used.
-        /// </summary>
         public Renderer GameSpriteRenderer;
-
-        /// <summary>
-        /// Color is packed in mesh UV1.
-        /// </summary>
         public Color AdditiveColor;
-
         public LightingSystem Owner;
 
         private Color _oldSecondaryColor;
         private Renderer _oldGameSpriteRenderer;
-        private SpriteRenderer _oldUnitySprite;
-        private CustomSprite _oldCustomSprite;
+        private Sprite _oldSourceSprite;
+        private LightingSystem _oldResolvedOwner;
+        private int _oldObstacleLayer = -1;
+        private Renderer _sourceRenderer;
+        private CustomSprite _sourceCustomSprite;
+        private SpriteRenderer _sourceSpriteRenderer;
 
         protected override void OnEnable()
         {
@@ -37,33 +32,20 @@ namespace Light2D
                 Material = AssetDatabase.LoadAssetAtPath<Material>(path);
             }
 #endif
+            if (GameSpriteRenderer == null && transform.parent != null)
+                GameSpriteRenderer = transform.parent.GetComponent<Renderer>();
 
             base.OnEnable();
-
-            if (GameSpriteRenderer == null && transform.parent != null)
-                GameSpriteRenderer = transform.parent.gameObject.GetComponent<Renderer>();
-
-            var lightingSystem = Owner != null ? Owner : LightingSystem.Instance;
-            if (lightingSystem != null)
-                gameObject.layer = lightingSystem.LightObstaclesLayer;
-
             UpdateMeshData(true);
         }
 
-        protected override bool UseNormalTexcoordMaterial
-        {
-            get { return true; }
-        }
+        protected override bool UseNormalTexcoordMaterial { get { return true; } }
 
         private void UpdateSecondaryColor()
         {
-            var uv1 = new Vector2(
-                Util.DecodeFloatRGBA((Vector4)AdditiveColor),
-                Util.DecodeFloatRGBA(new Vector4(AdditiveColor.a, 0, 0)));
-            for (int i = 0; i < _uv1.Length; i++)
-            {
-                _uv1[i] = uv1;
-            }
+            var uv = Light2DColorEncoding.EncodeAdditiveColorToUv(AdditiveColor);
+            for (var i = 0; i < _uv1.Length; i++)
+                _uv1[i] = uv;
         }
 
         protected override void UpdateMeshData(bool forceUpdate = false)
@@ -71,35 +53,55 @@ namespace Light2D
             if (_meshRenderer == null || _meshFilter == null || IsPartOfStaticBatch)
                 return;
 
-            if (GameSpriteRenderer != null && (GameSpriteRenderer != _oldGameSpriteRenderer || forceUpdate ||
-                (_oldUnitySprite != null && _oldUnitySprite.sprite != null && _oldUnitySprite.sprite != Sprite) ||
-                (_oldCustomSprite != null && _oldCustomSprite.Sprite != null && _oldCustomSprite.Sprite != Sprite)))
+            var sourceSprite = ResolveSourceSprite(GameSpriteRenderer);
+            if (GameSpriteRenderer != _oldGameSpriteRenderer || sourceSprite != _oldSourceSprite || forceUpdate)
             {
+                Sprite = sourceSprite;
                 _oldGameSpriteRenderer = GameSpriteRenderer;
-
-                _oldCustomSprite = GameSpriteRenderer.GetComponent<CustomSprite>();
-                if (_oldCustomSprite != null)
-                {
-                    Sprite = _oldCustomSprite.Sprite;
-                }
-                else
-                {
-                    _oldUnitySprite = GameSpriteRenderer.GetComponent<SpriteRenderer>();
-                    if (_oldUnitySprite != null)
-                        Sprite = _oldUnitySprite.sprite;
-                }
-
+                _oldSourceSprite = sourceSprite;
             }
+
+            base.UpdateMeshData(forceUpdate);
 
             if (_oldSecondaryColor != AdditiveColor || forceUpdate)
             {
                 UpdateSecondaryColor();
-                _isMeshDirty = true;
                 _oldSecondaryColor = AdditiveColor;
+                _isMeshDirty = true;
+                base.UpdateMeshData();
             }
 
-            base.UpdateMeshData(forceUpdate);
+            var resolvedOwner = Light2DObjectUtility.ResolveOwner(Owner);
+            var obstacleLayer = resolvedOwner != null ? resolvedOwner.LightObstaclesLayer : -1;
+            if (!Light2DObjectUtility.IsInPrefabStage(gameObject) &&
+                (resolvedOwner != _oldResolvedOwner || obstacleLayer != _oldObstacleLayer) && obstacleLayer >= 0)
+                gameObject.layer = obstacleLayer;
+            _oldResolvedOwner = resolvedOwner;
+            _oldObstacleLayer = obstacleLayer;
+        }
+
+        private Sprite ResolveSourceSprite(Renderer source)
+        {
+            if (source == null)
+            {
+                _sourceRenderer = null;
+                _sourceCustomSprite = null;
+                _sourceSpriteRenderer = null;
+                return null;
+            }
+
+            // Component lookup runs only when the source renderer changes; the cached source stays live-read.
+            if (source != _sourceRenderer)
+            {
+                _sourceRenderer = source;
+                var customSprite = source.GetComponent<CustomSprite>();
+                _sourceCustomSprite = customSprite != this ? customSprite : null;
+                _sourceSpriteRenderer = _sourceCustomSprite != null ? null : source as SpriteRenderer;
+            }
+
+            if (_sourceCustomSprite != null)
+                return _sourceCustomSprite.Sprite;
+            return _sourceSpriteRenderer != null ? _sourceSpriteRenderer.sprite : null;
         }
     }
 }
-

@@ -7,6 +7,7 @@ using Random = UnityEngine.Random;
 
 namespace Light2D.Examples
 {
+    [RequireComponent(typeof(SpriteRenderer))]
     public class ColorTweener : MonoBehaviour
     {
         public float TweenInterval = 2.5f;

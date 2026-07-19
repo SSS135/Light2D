@@ -2,8 +2,6 @@
 #define LIGHT2D_URP_FULLSCREEN_INCLUDED
 
 #include "Light2DURPCommon.hlsl"
-#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/DynamicScaling.hlsl"
-
 float4 _BlitScaleBias;
 
 struct Light2DFullscreenAttributes
@@ -44,7 +42,7 @@ Light2DFullscreenVaryings Light2DFullscreenVert(Light2DFullscreenAttributes inpu
 {
     Light2DFullscreenVaryings output;
     output.positionCS = GetFullScreenTriangleVertexPosition(input.vertexID);
-    output.uv = DYNAMIC_SCALING_APPLY_SCALEBIAS(GetFullScreenTriangleTexCoord(input.vertexID));
+    output.uv = GetFullScreenTriangleTexCoord(input.vertexID) * _BlitScaleBias.xy + _BlitScaleBias.zw;
     output.color = half4(1.0h, 1.0h, 1.0h, 1.0h);
     return output;
 }
@@ -71,17 +69,17 @@ half4 Light2DObstaclePostFrag(Light2DFullscreenVaryings input) : SV_Target
 
 half4 Light2DFastBlurFrag(Light2DFullscreenVaryings input) : SV_Target
 {
-    half2 distanceUV = _Distance / _ScreenParams.xy;
-    half diagonal = distanceUV.y * 0.707h;
+    half2 distanceUV = _Distance * _Light2DURPMainTex_TexelSize.xy;
+    half2 diagonal = distanceUV * 0.707h;
     half4 sum = SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv);
     sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(distanceUV.x, 0));
     sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(-distanceUV.x, 0));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(0, distanceUV.x));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(0, -distanceUV.x));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(diagonal, diagonal));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(diagonal, -diagonal));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(-diagonal, diagonal));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(-diagonal, -diagonal));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(0, distanceUV.y));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(0, -distanceUV.y));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + diagonal);
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + diagonal * half2(1, -1));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + diagonal * half2(-1, 1));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv - diagonal);
     return sum / 9.0h;
 }
 
@@ -110,8 +108,9 @@ Light2DOverlayVaryings Light2DOverlayVert(Light2DFullscreenAttributes input)
 {
     Light2DOverlayVaryings output;
     output.positionCS = GetFullScreenTriangleVertexPosition(input.vertexID);
-    output.gameUV = DYNAMIC_SCALING_APPLY_SCALEBIAS(GetFullScreenTriangleTexCoord(input.vertexID));
-    output.lightUV = (output.gameUV - 0.5) * _Scale + 0.5 + _Offset;
+    float2 fullscreenUV = GetFullScreenTriangleTexCoord(input.vertexID);
+    output.gameUV = fullscreenUV * _BlitScaleBias.xy + _BlitScaleBias.zw;
+    output.lightUV = (fullscreenUV - 0.5) * _Scale + 0.5 + _Offset;
     output.ambientUV = (output.lightUV - 0.5) * _ExtendedToSmallTextureScale + 0.5;
     return output;
 }
@@ -130,7 +129,7 @@ Light2DNormalLightVaryings Light2DNormalLightVert(Light2DFullscreenAttributes in
 {
     Light2DNormalLightVaryings output;
     output.positionCS = GetFullScreenTriangleVertexPosition(input.vertexID);
-    output.normalUV = DYNAMIC_SCALING_APPLY_SCALEBIAS(GetFullScreenTriangleTexCoord(input.vertexID));
+    output.normalUV = GetFullScreenTriangleTexCoord(input.vertexID);
     output.lightUV = output.normalUV;
     output.lightPosition = _LightPos;
     return output;

@@ -1,152 +1,127 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Light2D
 {
     /// <summary>
-    /// Custom sprite wich uses MeshFilter and MeshRenderer to render.
-    /// Main improvement from Unity SpriteRenderer is that you can access and modify mesh.
-    /// Also multiple CustomSprites could be merged to single mesh with MeshCombiner,
-    /// which gives much better performance for small meshes than StaticBatchingUtility.Combine.
+    /// Renders a Sprite through an owned Mesh and a cached Material instance.
     /// </summary>
-    [ExecuteInEditMode]
+    [ExecuteAlways]
+    [DisallowMultipleComponent]
+    [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class CustomSprite : MonoBehaviour
     {
-        /// <summary>
-        /// Vertex color of mesh.
-        /// </summary>
         public Color Color = Color.white;
-
-        /// <summary>
-        /// Sprite from which mesh will be generated.
-        /// </summary>
         public Sprite Sprite;
-
-        /// <summary>
-        /// Sorting order of MeshRenderer.
-        /// </summary>
         public int SortingOrder;
-
-        /// <summary>
-        /// Material to be used.
-        /// </summary>
         public Material Material;
 
-        // mesh data
-        protected Color[] _colors;
-        protected Vector2[] _uv0;
-        protected Vector2[] _uv1;
-        protected Vector3[] _vertices;
-        protected int[] _triangles;
-        protected Vector4[] _tangents;
-
-        protected bool _isMeshDirty = false;
+        protected Color[] _colors = Array.Empty<Color>();
+        protected Vector2[] _uv0 = Array.Empty<Vector2>();
+        protected Vector2[] _uv1 = Array.Empty<Vector2>();
+        protected Vector3[] _vertices = Array.Empty<Vector3>();
+        protected int[] _triangles = Array.Empty<int>();
+        protected Vector4[] _tangents = Array.Empty<Vector4>();
+        protected bool _isMeshDirty;
         protected MeshRenderer _meshRenderer;
         protected MeshFilter _meshFilter;
         protected Mesh _mesh;
+
         private Color _oldColor;
         private Sprite _oldSprite;
         private Material _oldMaterial;
         private MaterialKey _oldMaterialKey;
-        private Camera _normalMappingCamera;
-        private static readonly Dictionary<MaterialKey, MaterialValue> MaterialMap = new Dictionary<MaterialKey, MaterialValue>();
+
+        private static readonly Dictionary<MaterialKey, MaterialValue> MaterialMap =
+            new Dictionary<MaterialKey, MaterialValue>();
+        private static readonly HashSet<CustomSprite> LiveSprites = new HashSet<CustomSprite>();
         private static Material _defaultSpriteMaterial;
+
         private const string DefaultSpriteMaterialName = "Generated Default Sprite Material (DONT change it)";
         private const string GeneratedMaterialName = "Generated Material (DONT change it)";
         private const string GeneratedMeshName = "Generated Mesh (DONT change it)";
 
-        public bool RendererEnabled { get; private set; }
+        public bool RendererEnabled { get { return _meshRenderer != null && _meshRenderer.enabled; } }
+        public bool IsPartOfStaticBatch { get { return _meshRenderer != null && _meshRenderer.isPartOfStaticBatch; } }
 
-        /// <summary>
-        /// Is that sprite is staticaly batched?
-        /// </summary>
-        public bool IsPartOfStaticBatch
-        {
-            get { return _meshRenderer.isPartOfStaticBatch; }
-        }
+        protected virtual bool UseNormalTexcoordMaterial { get { return false; } }
 
         protected virtual void OnEnable()
         {
-            _colors = new Color[4];
-            _uv1 = new Vector2[4];
-            _uv0 = new Vector2[4];
-            _vertices = new Vector3[4];
-            _triangles = new[] {2, 1, 0, 1, 2, 3};
             _meshRenderer = GetComponent<MeshRenderer>();
             _meshFilter = GetComponent<MeshFilter>();
-
-            if (_meshRenderer == null)
-                _meshRenderer = gameObject.AddComponent<MeshRenderer>();
-
-            if (_meshFilter == null)
-                _meshFilter = gameObject.AddComponent<MeshFilter>();
-
-            if (_oldMaterialKey == null && _meshRenderer.sharedMaterial != null &&
-                _meshRenderer.sharedMaterial.name == GeneratedMaterialName)
-            {
-                Util.Destroy(_meshRenderer.sharedMaterial);
-                _meshRenderer.sharedMaterial = null;
-            }
-
-            TryReleaseMesh();
-            _meshFilter.sharedMesh = _mesh = new Mesh();
-            _mesh.MarkDynamic();
-            _mesh.name = GeneratedMeshName;
-            _mesh.hideFlags = HideFlags.DontSave;
-
-            _tangents = new Vector4[4];
-            for (int i = 0; i < _tangents.Length; i++)
-                _tangents[i] = new Vector4(1, 0, 0);
-
+            ReleaseOrphanedResources();
+            CreateMesh();
+            LiveSprites.Add(this);
             UpdateMeshData(true);
-
-            RendererEnabled = _meshRenderer.enabled;
         }
 
-        protected virtual void Start()
+        protected virtual void OnDisable()
         {
-            UpdateMeshData(true);
+            LiveSprites.Remove(this);
+            ReleaseOwnedResources();
         }
 
-        private void OnWillRenderObject()
+        protected virtual void OnDestroy()
+        {
+            LiveSprites.Remove(this);
+            ReleaseOwnedResources();
+        }
+
+        private void Update()
         {
             UpdateMeshData();
-            if (_normalMappingCamera == null)
-                RendererEnabled = _meshRenderer.enabled;
-            if (Application.isPlaying && GraphicsSettings.currentRenderPipeline == null &&
-                LightingSystem.IsNormalMappingLightCamera(Camera.current))
+        }
+
+        private void OnValidate()
+        {
+            if (isActiveAndEnabled)
+                UpdateMeshData(true);
+        }
+
+        private void CreateMesh()
+        {
+            _mesh = new Mesh
             {
-                RendererEnabled = _meshRenderer.enabled;
-                _meshRenderer.enabled = false;
-                _normalMappingCamera = Camera.current;
+                name = GeneratedMeshName,
+                hideFlags = HideFlags.DontSave
+            };
+            _mesh.MarkDynamic();
+            _meshFilter.sharedMesh = _mesh;
+        }
+
+        private void ReleaseOrphanedResources()
+        {
+            if (_meshFilter.sharedMesh != null && _meshFilter.sharedMesh.name == GeneratedMeshName)
+            {
+                Light2DObjectUtility.Destroy(_meshFilter.sharedMesh);
+                _meshFilter.sharedMesh = null;
+            }
+
+            if (IsGeneratedMaterial(_meshRenderer.sharedMaterial))
+            {
+                Light2DObjectUtility.Destroy(_meshRenderer.sharedMaterial);
+                _meshRenderer.sharedMaterial = null;
             }
         }
 
-        private void OnRenderObject()
+        private void ReleaseOwnedResources()
         {
-            if (Application.isPlaying && GraphicsSettings.currentRenderPipeline == null &&
-                _normalMappingCamera != null && Camera.current == _normalMappingCamera)
-            {
-                _meshRenderer.enabled = RendererEnabled;
-                _normalMappingCamera = null;
-            }
+            if (_meshFilter != null && _meshFilter.sharedMesh == _mesh)
+                _meshFilter.sharedMesh = null;
+            if (_mesh != null)
+                Light2DObjectUtility.Destroy(_mesh);
+            _mesh = null;
+
+            ReleaseMaterialReference();
+            if (_meshRenderer != null && IsGeneratedMaterial(_meshRenderer.sharedMaterial))
+                _meshRenderer.sharedMaterial = null;
         }
 
-        protected virtual bool UseNormalTexcoordMaterial
-        {
-            get { return false; }
-        }
-
-        /// <summary>
-        /// Getting material from cache or instantiating new one.
-        /// </summary>
-        /// <returns></returns>
         private Material GetOrCreateMaterial()
         {
-            TryReleaseMaterial();
-
+            ReleaseMaterialReference();
             if (Sprite == null)
                 return null;
 
@@ -170,11 +145,7 @@ namespace Light2D
             };
             return _defaultSpriteMaterial;
         }
-        
-        /// <summary>
-        /// Getting material from cache or instantiating new one.
-        /// </summary>
-        /// <returns></returns>
+
         internal static Material AcquireMaterial(Material baseMaterial, Texture2D texture, bool normalTexcoord,
             out MaterialKey materialKey)
         {
@@ -184,63 +155,85 @@ namespace Light2D
                 return null;
             }
 
-            MaterialValue matValue;
             var key = materialKey = new MaterialKey(baseMaterial, texture, normalTexcoord);
-
-            if (!MaterialMap.TryGetValue(key, out matValue) || matValue.Material == null)
+            MaterialValue value;
+            if (!MaterialMap.TryGetValue(key, out value) || value.Material == null)
             {
                 MaterialMap.Remove(key);
-                var mat = (Material)Instantiate(baseMaterial);
-                mat.name = GeneratedMaterialName;
-                mat.hideFlags = HideFlags.DontSave;
-                mat.mainTexture = texture;
-                if (normalTexcoord)
-                    mat.EnableKeyword("NORMAL_TEXCOORD");
-                else
-                    mat.DisableKeyword("NORMAL_TEXCOORD");
-                MaterialMap[key] = matValue = new MaterialValue(mat, 1);
+                var material = new Material(baseMaterial)
+                {
+                    name = GeneratedMaterialName,
+                    hideFlags = HideFlags.DontSave
+                };
+                ApplyMaterialState(material, baseMaterial, texture, normalTexcoord);
+                value = new MaterialValue(material, baseMaterial.ComputeCRC());
+                MaterialMap[key] = value;
             }
             else
             {
-                matValue.UsageCount++;
+                value.UsageCount++;
+                ApplyMaterialState(value.Material, baseMaterial, texture, normalTexcoord);
+                value.SourceCrc = baseMaterial.ComputeCRC();
             }
-            
-            return matValue.Material;
+
+            return value.Material;
         }
 
-        /// <summary>
-        /// Deleting material from cache with reference counting.
-        /// </summary>
-        /// <param name="key"></param>
-        internal static void ReleaseMaterial(MaterialKey key)
+        internal static void RefreshMaterial(MaterialKey key)
         {
-            MaterialValue matValue;
-
-            if (!MaterialMap.TryGetValue(key, out matValue))
+            MaterialValue value;
+            if (key == null || !MaterialMap.TryGetValue(key, out value) || value.Material == null ||
+                key.Material == null || key.Texture == null)
                 return;
 
-            matValue.UsageCount--;
+            // Change-detected live mirroring: per-frame callers skip the property copy (and the allocating
+            // shaderKeywords getter) unless the serialized source material actually changed.
+            var sourceCrc = key.Material.ComputeCRC();
+            if (sourceCrc == value.SourceCrc)
+                return;
 
-            if (matValue.UsageCount <= 0)
-            {
-                Util.Destroy(matValue.Material);
-                MaterialMap.Remove(key);
-                TryReleaseDefaultSpriteMaterial();
-            }
+            ApplyMaterialState(value.Material, key.Material, key.Texture, key.NormalTexcoord);
+            value.SourceCrc = sourceCrc;
+        }
+
+        private static void ApplyMaterialState(Material target, Material source, Texture2D texture, bool normalTexcoord)
+        {
+            target.CopyPropertiesFromMaterial(source);
+            target.shaderKeywords = source.shaderKeywords;
+            target.renderQueue = source.renderQueue;
+            target.mainTexture = texture;
+            if (normalTexcoord)
+                target.EnableKeyword("NORMAL_TEXCOORD");
+            else
+                target.DisableKeyword("NORMAL_TEXCOORD");
+        }
+
+        internal static void ReleaseMaterial(MaterialKey key)
+        {
+            MaterialValue value;
+            if (key == null || !MaterialMap.TryGetValue(key, out value))
+                return;
+
+            value.UsageCount--;
+            if (value.UsageCount > 0)
+                return;
+
+            Light2DObjectUtility.Destroy(value.Material);
+            MaterialMap.Remove(key);
+            TryReleaseDefaultSpriteMaterial();
         }
 
         private static void TryReleaseDefaultSpriteMaterial()
         {
             if (_defaultSpriteMaterial == null)
                 return;
-
             foreach (var key in MaterialMap.Keys)
             {
                 if (key.Material == _defaultSpriteMaterial)
                     return;
             }
 
-            Util.Destroy(_defaultSpriteMaterial);
+            Light2DObjectUtility.Destroy(_defaultSpriteMaterial);
             _defaultSpriteMaterial = null;
         }
 
@@ -253,103 +246,80 @@ namespace Light2D
         private static void ResetMaterialCache()
         {
             foreach (var value in MaterialMap.Values)
-                Util.Destroy(value.Material);
+                Light2DObjectUtility.Destroy(value.Material);
             MaterialMap.Clear();
-            Util.Destroy(_defaultSpriteMaterial);
+            Light2DObjectUtility.Destroy(_defaultSpriteMaterial);
             _defaultSpriteMaterial = null;
+
+            foreach (var sprite in LiveSprites)
+            {
+                if (sprite == null)
+                    continue;
+                sprite._oldMaterialKey = null;
+                sprite._oldMaterial = null;
+                if (sprite._meshRenderer != null)
+                    sprite._meshRenderer.sharedMaterial = null;
+                sprite.UpdateMeshData(true);
+            }
         }
 
-        private void TryReleaseMesh()
+        private void ReleaseMaterialReference()
         {
-            if (_meshFilter != null && _meshFilter.sharedMesh != null &&
-                (_meshFilter.sharedMesh == _mesh || _meshFilter.sharedMesh.name == GeneratedMeshName))
-            {
-                Util.Destroy(_meshFilter.sharedMesh);
-                _meshFilter.sharedMesh = null;
-            }
-            else if (_mesh != null)
-            {
-                Util.Destroy(_mesh);
-            }
-
-            _mesh = null;
-        }
-
-        private void TryReleaseMaterial()
-        {
-            if (_oldMaterialKey != default(MaterialKey))
-            {
+            if (_oldMaterialKey != null)
                 ReleaseMaterial(_oldMaterialKey);
-                _oldMaterialKey = default(MaterialKey);
-            }
-        }
-
-        protected virtual void OnDestroy()
-        {
-            TryReleaseMesh();
-            TryReleaseMaterial();
+            _oldMaterialKey = null;
         }
 
         protected virtual void UpdateColor()
         {
-            for (int i = 0; i < _colors.Length; i++)
+            for (var i = 0; i < _colors.Length; i++)
                 _colors[i] = Color;
         }
 
-        /// <summary>
-        /// Recreating mesh data for Sprite based on it's bounds.
-        /// </summary>
         protected virtual void UpdateSprite()
         {
+            ReleaseMaterialReference();
             if (Sprite == null)
             {
-                TryReleaseMaterial();
-                if (_meshRenderer != null)
-                    _meshRenderer.sharedMaterial = null;
+                _vertices = Array.Empty<Vector3>();
+                _triangles = Array.Empty<int>();
+                _uv0 = Array.Empty<Vector2>();
+                ResizeVertexData(0);
+                _meshRenderer.sharedMaterial = null;
                 return;
             }
-            
-            var rect = Sprite.textureRect;
-            var bounds = Sprite.bounds;
-            var tex = Sprite.texture;
-            var textureSize = new Point2(tex.width, tex.height);
-            
-            // HACK: mipmap could cause texture padding sometimes so padded size of texture needs to be computed.
-            var realSize =
-#if UNITY_EDITOR || UNITY_STANDALONE
-                tex.mipmapCount <= 1
-#else
-                true
-#endif
-                    ? textureSize
-                    : new Point2(Mathf.NextPowerOfTwo(textureSize.x), Mathf.NextPowerOfTwo(textureSize.y));
 
-            var unitSize2 = rect.size/Sprite.pixelsPerUnit/2f;
-            var offest = (Vector2) bounds.center;
+            var spriteVertices = Sprite.vertices;
+            var spriteTriangles = Sprite.triangles;
+            _vertices = new Vector3[spriteVertices.Length];
+            for (var i = 0; i < spriteVertices.Length; i++)
+                _vertices[i] = spriteVertices[i];
 
-            _vertices[0] = new Vector3(-unitSize2.x + offest.x, -unitSize2.y + offest.y, 0);
-            _vertices[1] = new Vector3(unitSize2.x + offest.x, -unitSize2.y + offest.y, 0);
-            _vertices[2] = new Vector3(-unitSize2.x + offest.x, unitSize2.y + offest.y, 0);
-            _vertices[3] = new Vector3(unitSize2.x + offest.x, unitSize2.y + offest.y, 0);
+            _triangles = new int[spriteTriangles.Length];
+            for (var i = 0; i < spriteTriangles.Length; i++)
+                _triangles[i] = spriteTriangles[i];
 
-            _uv0[0] = new Vector2(rect.xMin/realSize.x, rect.yMin/realSize.y); // 0, 0
-            _uv0[1] = new Vector2(rect.xMax/realSize.x, rect.yMin/realSize.y); // 1, 0
-            _uv0[2] = new Vector2(rect.xMin/realSize.x, rect.yMax/realSize.y); // 0, 1
-            _uv0[3] = new Vector2(rect.xMax/realSize.x, rect.yMax/realSize.y); // 1, 1
-
-            for (int i = 0; i < 4; i++)
-            {
-                _colors[i] = Color;
-            }
-
+            _uv0 = Sprite.uv;
+            ResizeVertexData(_vertices.Length);
             _meshRenderer.sharedMaterial = GetOrCreateMaterial();
         }
 
-        /// <summary>
-        /// Clearing and rebuilding mesh.
-        /// </summary>
+        private void ResizeVertexData(int vertexCount)
+        {
+            if (_colors.Length == vertexCount)
+                return;
+
+            _colors = new Color[vertexCount];
+            _uv1 = new Vector2[vertexCount];
+            _tangents = new Vector4[vertexCount];
+            for (var i = 0; i < vertexCount; i++)
+                _tangents[i] = new Vector4(1, 0, 0, 1);
+        }
+
         protected virtual void UpdateMesh()
         {
+            if (_mesh == null)
+                return;
             _mesh.Clear();
             _mesh.vertices = _vertices;
             _mesh.triangles = _triangles;
@@ -359,31 +329,29 @@ namespace Light2D
             _mesh.tangents = _tangents;
         }
 
-        /// <summary>
-        /// Checking public fields and mesh data, then rebuilding internal state if changes found.
-        /// </summary>
-        /// <param name="forceUpdate">Force update even if no changes found.</param>
         protected virtual void UpdateMeshData(bool forceUpdate = false)
         {
-            if (_meshRenderer == null || _meshFilter == null || IsPartOfStaticBatch)
+            if (_meshRenderer == null || _meshFilter == null || _mesh == null || IsPartOfStaticBatch)
                 return;
 
             _meshRenderer.sortingOrder = SortingOrder;
-
-            if (Color != _oldColor || forceUpdate)
-            {
-                UpdateColor();
-                _isMeshDirty = true;
-                _oldColor = Color;
-            }
-            if (Sprite != _oldSprite || Material != _oldMaterial ||
-                (Sprite != null && Material != null && _meshRenderer.sharedMaterial == null) || forceUpdate)
+            var spriteChanged = Sprite != _oldSprite;
+            if (spriteChanged || Material != _oldMaterial || _meshRenderer.sharedMaterial == null || forceUpdate)
             {
                 UpdateSprite();
-                _isMeshDirty = true;
                 _oldSprite = Sprite;
                 _oldMaterial = Material;
+                _isMeshDirty = true;
             }
+
+            if (spriteChanged || Color != _oldColor || forceUpdate)
+            {
+                UpdateColor();
+                _oldColor = Color;
+                _isMeshDirty = true;
+            }
+
+            RefreshMaterial(_oldMaterialKey);
             if (_isMeshDirty)
             {
                 UpdateMesh();
@@ -391,44 +359,25 @@ namespace Light2D
             }
         }
 
-        /// <summary>
-        /// Used as a value to material map to support reference counting.
-        /// </summary>
         private sealed class MaterialValue
         {
-            /// <summary>
-            /// Instantiated material from MaterialKey.Material with texture from MaterialKey.Texture.
-            /// </summary>
-            public Material Material;
-
-            /// <summary>
-            /// Count of CustomSprites using that material.
-            /// </summary>
+            public readonly Material Material;
             public int UsageCount;
+            public int SourceCrc;
 
-            public MaterialValue(Material material, int usageCount)
+            public MaterialValue(Material material, int sourceCrc)
             {
                 Material = material;
-                UsageCount = usageCount;
+                UsageCount = 1;
+                SourceCrc = sourceCrc;
             }
         }
 
-        /// <summary>
-        /// Used as a key to material map.
-        /// </summary>
         internal sealed class MaterialKey : IEquatable<MaterialKey>
         {
-            /// <summary>
-            /// Sprite's texture.
-            /// </summary>
-            public Texture2D Texture;
-
-            /// <summary>
-            /// Non instantiated material.
-            /// </summary>
-            public Material Material;
-
-            public bool NormalTexcoord;
+            public readonly Texture2D Texture;
+            public readonly Material Material;
+            public readonly bool NormalTexcoord;
 #if UNITY_6000_0_OR_NEWER
             private readonly EntityId _textureId;
             private readonly EntityId _materialId;
@@ -453,18 +402,13 @@ namespace Light2D
 
             public bool Equals(MaterialKey other)
             {
-                if (ReferenceEquals(null, other)) return false;
-                if (ReferenceEquals(this, other)) return true;
-                return _textureId == other._textureId && _materialId == other._materialId &&
-                    NormalTexcoord == other.NormalTexcoord;
+                return !ReferenceEquals(other, null) && _textureId == other._textureId &&
+                    _materialId == other._materialId && NormalTexcoord == other.NormalTexcoord;
             }
 
             public override bool Equals(object obj)
             {
-                if (ReferenceEquals(null, obj)) return false;
-                if (ReferenceEquals(this, obj)) return true;
-                if (obj.GetType() != this.GetType()) return false;
-                return Equals((MaterialKey) obj);
+                return Equals(obj as MaterialKey);
             }
 
             public override int GetHashCode()
@@ -472,19 +416,9 @@ namespace Light2D
                 unchecked
                 {
                     var hashCode = _textureId.GetHashCode();
-                    hashCode = (hashCode*397) ^ _materialId.GetHashCode();
-                    return (hashCode*397) ^ NormalTexcoord.GetHashCode();
+                    hashCode = (hashCode * 397) ^ _materialId.GetHashCode();
+                    return (hashCode * 397) ^ NormalTexcoord.GetHashCode();
                 }
-            }
-
-            public static bool operator ==(MaterialKey left, MaterialKey right)
-            {
-                return Equals(left, right);
-            }
-
-            public static bool operator !=(MaterialKey left, MaterialKey right)
-            {
-                return !Equals(left, right);
             }
         }
     }

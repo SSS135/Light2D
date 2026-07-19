@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using System.Collections;
 
 namespace Light2D.Examples
 {
@@ -7,24 +6,33 @@ namespace Light2D.Examples
     {
         public bool RightClickRotation = false;
         private Vector2 _pressPos;
+        private Camera _camera;
+
+        private void Awake()
+        {
+            _camera = Camera.main;
+        }
 
         private void LateUpdate()
         {
-            if (Input.GetMouseButtonDown(0))
-                _pressPos = Util.GetMousePosInUnits();
+            if (_camera == null)
+                return;
 
-            if (Input.GetMouseButton(0) && RightClickRotation)
+            if (SampleUtilities.PointerPressedThisFrame())
+                _pressPos = SampleUtilities.PointerWorldPosition(_camera);
+
+            if (SampleUtilities.PointerHeld() && RightClickRotation)
             {
-                var shift = Util.GetMousePosInUnits() - _pressPos;
+                var shift = SampleUtilities.PointerWorldPosition(_camera) - _pressPos;
                 if (shift.sqrMagnitude > 0.1f*0.1f)
                 {
-                    var angle = shift.AngleZ();
+                    var angle = SampleUtilities.AngleZ(shift);
                     transform.rotation = Quaternion.Euler(0, 0, angle);
                 }
             }
             else
             {
-                Vector3 pos = Util.GetMousePosInUnits();
+                Vector3 pos = SampleUtilities.PointerWorldPosition(_camera);
                 pos.z = transform.position.z;
                 transform.position = pos;
             }

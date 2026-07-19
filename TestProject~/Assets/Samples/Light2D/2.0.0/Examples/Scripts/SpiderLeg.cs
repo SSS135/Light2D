@@ -34,8 +34,8 @@ namespace Light2D.Examples
             var length = (worldAnchor - worldOrigin).magnitude;
 
             _transform.position = worldOrigin;
-            _transform.localScale = transform.localScale.WithY(length);
-            _transform.rotation = Quaternion.Euler(0, 0, (worldOrigin - worldAnchor).AngleZ());
+            _transform.localScale = SampleUtilities.WithY(transform.localScale, length);
+            _transform.rotation = Quaternion.Euler(0, 0, SampleUtilities.AngleZ(worldOrigin - worldAnchor));
         }
 
         private void FixedUpdate()

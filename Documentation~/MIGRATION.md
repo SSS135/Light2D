@@ -23,6 +23,16 @@ Light2D 2.0 is a UPM package, not a folder to copy under `Assets`. Package asset
 9. Import **Examples** through Package Manager if the project used the old example assets. Do not restore `Assets/Light2D/Examples` from backup.
 10. Open and save migrated scenes and prefabs only after references and rendering have been verified.
 
+## Removed Legacy Utility API
+
+Version 2.0.0 removes the legacy public helper types that shipped alongside the old `Assets/Light2D` scripts:
+
+- `Light2D.Util` (extension methods, XML serialization, input, and object helpers) has no replacement in the package. Migrate project code to `UnityEngine` equivalents such as `Vector2`/`Vector3` math, `Object.Destroy`, and `Mathf`.
+- `Light2D.Point2` is replaced by `UnityEngine.Vector2Int` in project code. No package serialized assets referenced `Point2`, so scenes and prefabs are unaffected.
+- `Light2D.ReadOnlyAttribute` and the `LIGHT2D_2DTK` (2D Toolkit) compile branches were removed without replacement.
+
+Compilation errors naming these types come from project code, not package assets; update that code before continuing the sequence above.
+
 ## Custom Legacy Changes
 
 UPM package updates can replace package files. Do not reapply custom modifications directly inside Package Cache. Choose one of these approaches:

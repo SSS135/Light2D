@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace Light2D.Examples
 {
@@ -10,6 +6,14 @@ namespace Light2D.Examples
     {
         public float Force;
         public GameObject LineLight;
+        private Rigidbody2D _rigidbody;
+        private Camera _camera;
+
+        private void Awake()
+        {
+            _rigidbody = GetComponent<Rigidbody2D>();
+            _camera = Camera.main;
+        }
 
         void Update()
         {
@@ -23,11 +27,14 @@ namespace Light2D.Examples
             if (moveVec.sqrMagnitude > 0.01f*0.01f)
             {
                 var force = moveVec.normalized*Force;
-                GetComponent<Rigidbody2D>().AddForce(force, ForceMode2D.Force);
+                _rigidbody.AddForce(force, ForceMode2D.Force);
             }
 
-            var lightAngle = (Util.GetMousePosInUnits() - (Vector2) transform.position).AngleZ();
-            LineLight.transform.rotation = Quaternion.Euler(0, 0, lightAngle);
+            if (_camera != null)
+            {
+                var lightAngle = SampleUtilities.AngleZ(SampleUtilities.PointerWorldPosition(_camera) - (Vector2)transform.position);
+                LineLight.transform.rotation = Quaternion.Euler(0, 0, lightAngle);
+            }
         }
     }
 }

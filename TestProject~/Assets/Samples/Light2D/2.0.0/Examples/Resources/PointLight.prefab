@@ -44,8 +44,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 61930e16e81db5c43a4ecc22422a0953, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   Color: {r: 1, g: 1, b: 1, a: 0.5019608}
   Sprite: {fileID: 21300000, guid: 5ab76b236a24d3d438b5523b794eeea6, type: 3}
   SortingOrder: 0

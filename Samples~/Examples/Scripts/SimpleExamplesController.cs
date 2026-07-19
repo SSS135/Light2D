@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace Light2D.Examples
 {
@@ -22,7 +18,7 @@ namespace Light2D.Examples
 
         void Update()
         {
-            if (Input.GetMouseButtonUp(0))
+            if (Input.GetMouseButtonUp(0) || TouchEnded(0))
             {
                 _currExampleIndex++;
                 if (_currExampleIndex >= Examples.Length)
@@ -31,7 +27,7 @@ namespace Light2D.Examples
                 UpdateExample();
             }
 
-            if (Input.GetMouseButtonUp(1))
+            if (Input.GetMouseButtonUp(1) || TouchEnded(1))
             {
                 _currColorIndex++;
                 if (_currColorIndex >= LightColors.Length)
@@ -45,14 +41,20 @@ namespace Light2D.Examples
         {
             var color = LightColors.Length == 0 ? Color.white : LightColors[_currColorIndex];
             for (int i = 0; i < ColoredLights.Length; i++)
-                ColoredLights[i].Color = color.WithAlpha(ColoredLights[i].Color.a);
+                ColoredLights[i].Color = SampleUtilities.WithAlpha(color, ColoredLights[i].Color.a);
         }
 
         void UpdateExample()
         {
             for (int i = 0; i < Examples.Length; i++)
                 Examples[i].SetActive(i == _currExampleIndex);
-            LightingSystem.Instance.LoopAmbientLight(20);
+            if (LightingSystem.Instance != null)
+                LightingSystem.Instance.LoopAmbientLight(20);
+        }
+
+        private static bool TouchEnded(int fingerIndex)
+        {
+            return Input.touchCount > fingerIndex && Input.GetTouch(fingerIndex).phase == TouchPhase.Ended;
         }
     }
 }

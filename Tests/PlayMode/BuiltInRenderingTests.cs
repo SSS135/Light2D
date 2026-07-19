@@ -80,7 +80,7 @@ namespace Light2D.Tests
                 RenderTexture ambient = lighting.AmbientTexture;
                 Assert.That(obstacles, Is.Not.Null);
                 Assert.That(sources, Is.Not.Null);
-                Assert.That(ambient, Is.Not.Null);
+                Assert.That(ambient, Is.Null, "Disabled ambient lighting allocated textures");
                 Material[] ownedMaterials = FindOwnedMaterials();
                 Camera[] ownedCameras = FindNormalsCameras();
                 Assert.That(ownedMaterials, Is.Not.Empty);
@@ -93,7 +93,6 @@ namespace Light2D.Tests
                 Assert.That(lighting.AmbientTexture, Is.Null);
                 Assert.That(obstacles == null, Is.True);
                 Assert.That(sources == null, Is.True);
-                Assert.That(ambient == null, Is.True);
                 Assert.That(ownedMaterials.All(material => material == null), Is.True,
                     "A generated material survived disable");
                 Assert.That(ownedCameras.All(camera => camera == null), Is.True,
@@ -111,6 +110,74 @@ namespace Light2D.Tests
                 Assert.That(ownedCameras.All(camera => camera == null), Is.True,
                     "The generated normals camera survived destroy");
                 Assert.That(fixture.LightCamera, Is.Not.Null, "The user-owned lighting camera was destroyed");
+            }
+            finally
+            {
+                fixture?.Dispose();
+                QualitySettings.renderPipeline = oldQuality;
+                GraphicsSettings.defaultRenderPipeline = oldDefault;
+            }
+        }
+
+        [UnityTest, Timeout(30000)]
+        public IEnumerator InvalidSettingsCopySourceAndDoNotAllocateTextures()
+        {
+            RenderPipelineAsset oldDefault = GraphicsSettings.defaultRenderPipeline;
+            RenderPipelineAsset oldQuality = QualitySettings.renderPipeline;
+            RenderFixture fixture = null;
+            try
+            {
+                QualitySettings.renderPipeline = null;
+                GraphicsSettings.defaultRenderPipeline = null;
+                yield return WaitForBuiltInPipeline();
+                fixture = new RenderFixture(false);
+                fixture.Lighting.LightPixelSize = float.NaN;
+                LogAssert.Expect(LogType.Error,
+                    "Light2D skipped rendering: Light Pixel Size must be finite and greater than zero.");
+
+                PixelMetrics output = fixture.RenderSourceAndMeasure();
+
+                Assert.That(output.Range, Is.LessThan(0.001f), output.ToString());
+                Assert.That(output.Center, Is.EqualTo(1f).Within(0.01f), output.ToString());
+                Assert.That(fixture.Lighting.ObstaclesTexture, Is.Null);
+                Assert.That(fixture.Lighting.LightSourcesTexture, Is.Null);
+                Assert.That(fixture.Lighting.AmbientTexture, Is.Null);
+            }
+            finally
+            {
+                fixture?.Dispose();
+                QualitySettings.renderPipeline = oldQuality;
+                GraphicsSettings.defaultRenderPipeline = oldDefault;
+            }
+        }
+
+        [UnityTest, Timeout(30000)]
+        public IEnumerator PointBlurKeepsTextureIdentityAndFeatureTogglesReleaseAmbientTextures()
+        {
+            RenderPipelineAsset oldDefault = GraphicsSettings.defaultRenderPipeline;
+            RenderPipelineAsset oldQuality = QualitySettings.renderPipeline;
+            RenderFixture fixture = null;
+            try
+            {
+                QualitySettings.renderPipeline = null;
+                GraphicsSettings.defaultRenderPipeline = null;
+                yield return WaitForBuiltInPipeline();
+                fixture = new RenderFixture(false);
+                fixture.Lighting.BlurLightSources = true;
+                fixture.Lighting.LightTexturesFilterMode = FilterMode.Point;
+
+                fixture.RenderAndMeasure();
+                RenderTexture sources = fixture.Lighting.LightSourcesTexture;
+                fixture.RenderAndMeasure();
+                Assert.That(fixture.Lighting.LightSourcesTexture, Is.SameAs(sources));
+                Assert.That(sources.filterMode, Is.EqualTo(FilterMode.Point));
+
+                fixture.Lighting.EnableAmbientLight = true;
+                fixture.RenderAndMeasure();
+                Assert.That(fixture.Lighting.AmbientTexture, Is.Not.Null);
+                fixture.Lighting.EnableAmbientLight = false;
+                fixture.RenderAndMeasure();
+                Assert.That(fixture.Lighting.AmbientTexture, Is.Null);
             }
             finally
             {
@@ -247,6 +314,12 @@ namespace Light2D.Tests
                     Measure(_target),
                     Measure(Lighting.ObstaclesTexture),
                     Measure(Lighting.LightSourcesTexture));
+            }
+
+            internal PixelMetrics RenderSourceAndMeasure()
+            {
+                _cameraObject.GetComponent<Camera>().Render();
+                return Measure(_target);
             }
 
             private static PixelMetrics Measure(RenderTexture target)

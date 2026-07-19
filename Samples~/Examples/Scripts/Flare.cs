@@ -17,7 +17,7 @@ namespace Light2D.Examples
         void Start()
         {
             _startColor = Light.Color;
-            Light.Color = _startColor.WithAlpha(0);
+            Light.Color = SampleUtilities.WithAlpha(_startColor, 0);
         }
 
         void Update()
@@ -34,7 +34,10 @@ namespace Light2D.Examples
 
 
             var alpha = Mathf.Lerp(0, _startColor.a, Mathf.Min(_lifetimeElapsed, AlphaGrowTime)/AlphaGrowTime);
-            Light.Color = Color.Lerp(_startColor.WithAlpha(alpha), _startColor.WithAlpha(0), _lifetimeElapsed/Lifetime);
+            Light.Color = Color.Lerp(
+                SampleUtilities.WithAlpha(_startColor, alpha),
+                SampleUtilities.WithAlpha(_startColor, 0),
+                _lifetimeElapsed/Lifetime);
         }
     }
 }

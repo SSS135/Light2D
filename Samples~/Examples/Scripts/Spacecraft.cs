@@ -1,6 +1,6 @@
-﻿using System.Linq;
+﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
-using System.Collections;
 
 namespace Light2D.Examples
 {
@@ -47,12 +47,21 @@ namespace Light2D.Examples
         private void BalanceCenterOfMass()
         {
             var rigidbodies = GetComponentsInChildren<Rigidbody2D>();
-            var groups = rigidbodies
-                .GroupBy(rb => rb.name.Replace("Left", "").Replace("Right", ""))
-                .ToArray();
-            foreach (var group in groups)
+            var groups = new Dictionary<string, List<Rigidbody2D>>();
+            foreach (var rigidbody in rigidbodies)
             {
-                var mainCenterOfMass = transform.InverseTransformPoint(group.First().worldCenterOfMass);
+                var key = rigidbody.name.Replace("Left", "").Replace("Right", "");
+                if (!groups.TryGetValue(key, out var group))
+                {
+                    group = new List<Rigidbody2D>();
+                    groups.Add(key, group);
+                }
+                group.Add(rigidbody);
+            }
+
+            foreach (var group in groups.Values)
+            {
+                var mainCenterOfMass = transform.InverseTransformPoint(group[0].worldCenterOfMass);
                 foreach (var rb in group)
                 {
                     var cm = transform.InverseTransformPoint(rb.worldCenterOfMass);

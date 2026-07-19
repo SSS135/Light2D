@@ -1,15 +1,21 @@
-﻿using System.Linq;
-using UnityEngine;
-using System.Collections;
 using UnityEditor;
+using UnityEngine;
 
-public class HingeJointUtil : MonoBehaviour
+namespace Light2D.Examples
 {
-    [MenuItem("CONTEXT/HingeJoint2D/Anchor To Conn Acnchor")]
-    private static void AnchorToConnAnchor(MenuCommand menuCommand)
+    internal static class HingeJointTools
     {
-        var joint = (HingeJoint2D) menuCommand.context;
-        var worldAnchor = joint.connectedBody.transform.TransformPoint(joint.connectedAnchor);
-        joint.anchor = joint.transform.InverseTransformPoint(worldAnchor);
+        [MenuItem("CONTEXT/HingeJoint2D/Align Anchor To Connected Anchor")]
+        private static void AlignAnchor(MenuCommand menuCommand)
+        {
+            var joint = (HingeJoint2D)menuCommand.context;
+            if (joint.connectedBody == null)
+                return;
+
+            Undo.RecordObject(joint, "Align Hinge Anchor");
+            var worldAnchor = joint.connectedBody.transform.TransformPoint(joint.connectedAnchor);
+            joint.anchor = joint.transform.InverseTransformPoint(worldAnchor);
+            EditorUtility.SetDirty(joint);
+        }
     }
 }

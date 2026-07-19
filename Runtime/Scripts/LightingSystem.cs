@@ -1,11 +1,21 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Profiling;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace Light2D
 {
+    /// <summary>
+    /// Render pipeline classification used by Light2D readiness and diagnostics.
+    /// </summary>
+    public enum Light2DPipeline
+    {
+        BuiltIn,
+        UniversalRenderPipeline,
+        UnsupportedScriptableRenderPipeline
+    }
+
     /// <summary>
     /// Main script for lights. Should be attached to camera.
     /// </summary>
@@ -13,6 +23,10 @@ namespace Light2D
     [RequireComponent(typeof(Camera))]
     public class LightingSystem : MonoBehaviour
     {
+        private const int MaximumAmbientCyclesPerFrame = 8;
+        private const int MaximumQueuedAmbientCycles = 64;
+        private const long MaximumOwnedTexturePixels = 16L * 1024L * 1024L;
+
         public float LightPixelSize = 0.05f;
         public float LightCameraSizeAdd = 3;
         public float LightCameraFovAdd = 30;
@@ -42,8 +56,10 @@ namespace Light2D
         private LightingRenderResources _resources;
         private ObstacleCameraPostPorcessor _obstaclesPostProcessor;
         private readonly List<LightSprite> _lightSpritesCache = new List<LightSprite>();
-        private Point2 _extendedLightTextureSize;
-        private Point2 _smallLightTextureSize;
+        private readonly List<MeshRenderer> _flatPassHiddenRenderers = new List<MeshRenderer>();
+        private readonly Plane[] _frustumPlanes = new Plane[6];
+        private Vector2Int _extendedLightTextureSize;
+        private Vector2Int _smallLightTextureSize;
         private Vector3 _oldPos;
         private Vector3 _currPos;
         private RenderTextureFormat _texFormat;
@@ -60,10 +76,22 @@ namespace Light2D
         private FlareLayer _flareLayer;
         private bool _flareLayerEnabled;
         private bool _xzNormalMappingWarningIssued;
+        private bool _unsupportedPipelineWarningIssued;
+        private int _validationDiagnosticHash;
+        private int _frameReallocations;
 
-#if LIGHT2D_2DTK
-        private tk2dCamera _tk2dCamera;
-#endif
+        private static readonly int ObstacleTexId = Shader.PropertyToID("_ObstacleTex");
+        private static readonly int NormalsBufferId = Shader.PropertyToID("_NormalsBuffer");
+        private static readonly int PixelsPerBlockId = Shader.PropertyToID("_PixelsPerBlock");
+        private static readonly int ExtendedToSmallTextureScaleId = Shader.PropertyToID("_ExtendedToSmallTextureScale");
+        private static readonly int PosOffsetId = Shader.PropertyToID("_PosOffset");
+        private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
+        private static readonly int LightSourcesTexId = Shader.PropertyToID("_LightSourcesTex");
+        private static readonly int AmbientLightTexId = Shader.PropertyToID("_AmbientLightTex");
+        private static readonly int GameTexId = Shader.PropertyToID("_GameTex");
+        private static readonly int ShiftId = Shader.PropertyToID("_Shift");
+        private static readonly int OffsetId = Shader.PropertyToID("_Offset");
+        private static readonly int ScaleId = Shader.PropertyToID("_Scale");
 
         public static LightingSystem Instance
         {
@@ -88,22 +116,41 @@ namespace Light2D
         }
 
         public Camera SourceCamera { get { return _camera != null ? _camera : GetComponent<Camera>(); } }
+        public static Light2DPipeline ActivePipeline { get { return ClassifyPipeline(GraphicsSettings.currentRenderPipeline); } }
         public bool IsScriptableRenderPipelineActive { get { return GraphicsSettings.currentRenderPipeline != null; } }
         public bool IsRenderingReady
         {
             get
             {
-                return isActiveAndEnabled && LightOverlayMaterial != null &&
-                       (IsScriptableRenderPipelineActive || LightCamera != null);
+                if (!isActiveAndEnabled || LightOverlayMaterial == null)
+                    return false;
+                switch (ActivePipeline)
+                {
+                    case Light2DPipeline.BuiltIn:
+                        return LightCamera != null;
+                    case Light2DPipeline.UniversalRenderPipeline:
+                        return true;
+                    default:
+                        return false;
+                }
             }
         }
         public float LightPixelsPerUnityMeter { get { return 1f / Mathf.Max(LightPixelSize, 0.00001f); } }
-        public Vector2Int SmallLightTextureSize { get { return new Vector2Int(_smallLightTextureSize.x, _smallLightTextureSize.y); } }
-        public Vector2Int ExtendedLightTextureSize { get { return new Vector2Int(_extendedLightTextureSize.x, _extendedLightTextureSize.y); } }
+        public Vector2Int SmallLightTextureSize { get { return _smallLightTextureSize; } }
+        public Vector2Int ExtendedLightTextureSize { get { return _extendedLightTextureSize; } }
         public RenderTexture ObstaclesTexture { get { return _resources == null ? null : _resources.ObstaclesTexture; } }
         public RenderTexture LightSourcesTexture { get { return _resources == null ? null : _resources.LightSourcesTexture; } }
         public RenderTexture AmbientTexture { get { return _resources == null ? null : _resources.AmbientTexture; } }
         private bool BuiltInNormalMappingEnabled { get { return EnableNormalMapping && !XZPlane; } }
+
+        internal static Light2DPipeline ClassifyPipeline(RenderPipelineAsset pipelineAsset)
+        {
+            if (pipelineAsset == null)
+                return Light2DPipeline.BuiltIn;
+            return pipelineAsset is UniversalRenderPipelineAsset
+                ? Light2DPipeline.UniversalRenderPipeline
+                : Light2DPipeline.UnsupportedScriptableRenderPipeline;
+        }
 
         internal static bool IsNormalMappingLightCamera(Camera camera)
         {
@@ -121,15 +168,7 @@ namespace Light2D
 
         private float SourceOrthographicSize
         {
-            get
-            {
-#if LIGHT2D_2DTK
-                if (_tk2dCamera != null &&
-                    _tk2dCamera.CameraSettings.projection == tk2dCameraSettings.ProjectionType.Orthographic)
-                    return _tk2dCamera.ScreenExtents.yMax;
-#endif
-                return _camera.orthographicSize;
-            }
+            get { return _camera.orthographicSize; }
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -150,6 +189,13 @@ namespace Light2D
         {
             ActiveInstances.Add(this);
             _camera = GetComponent<Camera>();
+            if (ActivePipeline == Light2DPipeline.UnsupportedScriptableRenderPipeline &&
+                !_unsupportedPipelineWarningIssued)
+            {
+                _unsupportedPipelineWarningIssued = true;
+                Debug.LogWarning("Light2D supports the Built-in Render Pipeline and URP only. " +
+                                 "The active Scriptable Render Pipeline is unsupported, so Light2D will not render.", this);
+            }
         }
 
         private void Start()
@@ -157,7 +203,7 @@ namespace Light2D
 #if UNITY_EDITOR
             if (!Application.isPlaying)
             {
-                Shader.SetGlobalTexture("_ObstacleTex", Texture2D.whiteTexture);
+                Shader.SetGlobalTexture(ObstacleTexId, Texture2D.whiteTexture);
                 return;
             }
 #endif
@@ -187,7 +233,7 @@ namespace Light2D
 #if UNITY_EDITOR
             if (!Application.isPlaying)
             {
-                Shader.SetGlobalTexture("_ObstacleTex", Texture2D.whiteTexture);
+                Shader.SetGlobalTexture(ObstacleTexId, Texture2D.whiteTexture);
                 BlitToDestination(src, dest);
                 return;
             }
@@ -197,17 +243,16 @@ namespace Light2D
             var shaderState = GlobalShaderState.Capture();
             try
             {
-                EnsureInitialized(src.descriptor);
-                if (!_initialized)
+                if (!EnsureInitialized(src.descriptor))
                 {
                     BlitToDestination(src, dest);
                     return;
                 }
 
                 EnsureFrameResources(src.descriptor);
-                Update2DTK();
                 UpdateCamera();
-                LightSprite.PrepareSnapshot(_lightSpritesCache, XZPlane, LightSourcesLayer, _camera);
+                using (Light2DProfiling.Culling.Auto())
+                    LightSprite.PrepareSnapshot(_lightSpritesCache, XZPlane, LightSourcesLayer, _camera);
                 SetKeyword("LIGHT2D_XZ_PLANE", XZPlane);
                 SetKeyword("HDR", _texFormat == RenderTextureFormat.ARGBHalf);
                 SetKeyword("PERSPECTIVE_CAMERA", !_camera.orthographic);
@@ -216,8 +261,9 @@ namespace Light2D
                 RenderNormalBuffer();
                 RenderLightSources();
                 RenderLightSourcesBlur();
-                RenderAmbientLight();
+                int ambientCyclesConsumed = RenderAmbientLight();
                 RenderLightOverlay(src, dest);
+                ReportBuiltInFrame(ambientCyclesConsumed);
             }
             catch (Exception exception)
             {
@@ -268,34 +314,61 @@ namespace Light2D
                 return false;
             if (_camera == null)
                 _camera = GetComponent<Camera>();
-            if (LightCamera == null || LightOverlayMaterial == null)
+            RenderTextureDescriptor descriptor;
+            LightingFrameConfig frameConfig;
+            using (Light2DProfiling.Validation.Auto())
             {
-                if (!_initialized)
-                    Debug.LogError("Lighting Camera and LightOverlayMaterial must be assigned for Light2D to render.", this);
-                return false;
-            }
-            if (AffectOnlyThisCamera && _camera.targetTexture != null && !_mainCameraStateCaptured)
-            {
-                Debug.LogError("\"Affect Only This Camera\" will not work if camera.targetTexture is set.", this);
-                return false;
-            }
-            if (BuiltInNormalMappingEnabled && !_camera.orthographic)
-            {
-                Debug.LogError("Normal mapping is not supported with perspective camera.", this);
-                return false;
-            }
-            if (EnableNormalMapping && XZPlane)
-            {
-                if (!_xzNormalMappingWarningIssued)
+                if (LightCamera == null || LightOverlayMaterial == null)
                 {
-                    Debug.LogWarning("Built-in Light2D normal mapping supports the XY plane only. " +
-                                     "Normal mapping is disabled for this camera; disable XZ Plane to enable it.", this);
-                    _xzNormalMappingWarningIssued = true;
+                    if (!_initialized)
+                        Debug.LogError("Lighting Camera and LightOverlayMaterial must be assigned for Light2D to render.", this);
+                    return false;
                 }
-            }
-            else
-            {
-                _xzNormalMappingWarningIssued = false;
+                descriptor = sourceDescriptor ?? (_hasSourceDescriptor ? _sourceDescriptor : CreateCameraDescriptor());
+                var settings = new LightingFrameSettings(
+                    pixelSize: LightPixelSize,
+                    orthographicSizeAdd: LightCameraSizeAdd,
+                    fieldOfViewAdd: LightCameraFovAdd,
+                    obstacleDistance: LightObstaclesDistance,
+                    lightSourcesLayer: LightSourcesLayer,
+                    ambientLightLayer: AmbientLightLayer,
+                    lightObstaclesLayer: LightObstaclesLayer,
+                    hdr: HDR,
+                    enableAmbientLight: EnableAmbientLight,
+                    obstacleAntialiasing: LightObstaclesAntialiasing,
+                    normalMapping: BuiltInNormalMappingEnabled,
+                    maximumTexturePixels: MaximumOwnedTexturePixels);
+                if (!TryCreateFrameConfig(_camera, LightCamera, descriptor, settings, out frameConfig,
+                        out var validationError))
+                {
+                    ReportValidationError(validationError);
+                    InvalidateRendering();
+                    return false;
+                }
+                _validationDiagnosticHash = 0;
+                if (AffectOnlyThisCamera && _camera.targetTexture != null && !_mainCameraStateCaptured)
+                {
+                    Debug.LogError("\"Affect Only This Camera\" will not work if camera.targetTexture is set.", this);
+                    return false;
+                }
+                if (BuiltInNormalMappingEnabled && !_camera.orthographic)
+                {
+                    Debug.LogError("Normal mapping is not supported with perspective camera.", this);
+                    return false;
+                }
+                if (EnableNormalMapping && XZPlane)
+                {
+                    if (!_xzNormalMappingWarningIssued)
+                    {
+                        Debug.LogWarning("Built-in Light2D normal mapping supports the XY plane only. " +
+                                         "Normal mapping is disabled for this camera; disable XZ Plane to enable it.", this);
+                        _xzNormalMappingWarningIssued = true;
+                    }
+                }
+                else
+                {
+                    _xzNormalMappingWarningIssued = false;
+                }
             }
 
             if (_resources == null)
@@ -328,15 +401,14 @@ namespace Light2D
             _texFormat = HDR && SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGBHalf)
                 ? RenderTextureFormat.ARGBHalf
                 : RenderTextureFormat.ARGB32;
-            InitTK2D();
-            CalculateTextureSizes();
+            _smallLightTextureSize = frameConfig.SmallSize;
+            _extendedLightTextureSize = frameConfig.ExtendedSize;
 
             if (sourceDescriptor.HasValue)
             {
                 _sourceDescriptor = sourceDescriptor.Value;
                 _hasSourceDescriptor = true;
             }
-            var descriptor = _hasSourceDescriptor ? _sourceDescriptor : CreateCameraDescriptor();
             int settingsHash = CalculateSettingsHash(descriptor);
             bool resourcesChanged = !_initialized || _settingsHash != settingsHash;
             if (resourcesChanged)
@@ -349,121 +421,164 @@ namespace Light2D
             if (_obstaclesPostProcessor == null)
                 _obstaclesPostProcessor = new ObstacleCameraPostPorcessor();
             _initialized = true;
-            if (resourcesChanged)
+            if (resourcesChanged && EnableAmbientLight)
                 LoopAmbientLight(100);
             return true;
         }
 
-        private void CalculateTextureSizes()
-        {
-            float pixelsPerMeter = LightPixelsPerUnityMeter;
-            if (_camera.orthographic)
-            {
-                float rawHeight = (SourceOrthographicSize + LightCameraSizeAdd) * 2f;
-                float rawWidth = (SourceOrthographicSize * _camera.aspect + LightCameraSizeAdd) * 2f;
-                _extendedLightTextureSize = new Point2(Mathf.RoundToInt(rawWidth * pixelsPerMeter),
-                    Mathf.RoundToInt(rawHeight * pixelsPerMeter));
-                float smallHeight = SourceOrthographicSize * 2f * pixelsPerMeter;
-                _smallLightTextureSize = new Point2(Mathf.RoundToInt(smallHeight * _camera.aspect),
-                    Mathf.RoundToInt(smallHeight));
-            }
-            else
-            {
-                float extendedSize = Mathf.Tan((_camera.fieldOfView + LightCameraFovAdd) * Mathf.Deg2Rad * 0.5f) *
-                                     LightObstaclesDistance * 2f;
-                int extendedHeight = Mathf.RoundToInt(extendedSize / Mathf.Max(LightPixelSize, 0.00001f));
-                _extendedLightTextureSize = Point2.Round(new Vector2(extendedHeight * _camera.aspect, extendedHeight));
-                float smallSize = Mathf.Tan(_camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * LightObstaclesDistance * 2f;
-                int smallHeight = Mathf.RoundToInt(smallSize / Mathf.Max(LightPixelSize, 0.00001f));
-                _smallLightTextureSize = Point2.Round(new Vector2(smallHeight * _camera.aspect, smallHeight));
-            }
-            _extendedLightTextureSize.x = Mathf.Max(4, _extendedLightTextureSize.x + (_extendedLightTextureSize.x & 1));
-            _extendedLightTextureSize.y = Mathf.Max(4, _extendedLightTextureSize.y + (_extendedLightTextureSize.y & 1));
-            _smallLightTextureSize.x = Mathf.Max(4, _smallLightTextureSize.x);
-            _smallLightTextureSize.y = Mathf.Max(4, _smallLightTextureSize.y);
-        }
-
         private void EnsureFrameResources(RenderTextureDescriptor sourceDescriptor)
         {
-            var lightDescriptor = sourceDescriptor;
-            lightDescriptor.colorFormat = _texFormat;
-            lightDescriptor.depthBufferBits = 0;
-            lightDescriptor.msaaSamples = 1;
-
-            SetSize(ref lightDescriptor, _extendedLightTextureSize.x, _extendedLightTextureSize.y);
-            _resources.EnsureTexture(ref _resources.ObstaclesTexture, lightDescriptor, LightTexturesFilterMode, "Obstacles");
-            bool ambientTextureChanged = _resources.EnsureTexture(ref _resources.AmbientTexture, lightDescriptor,
-                LightTexturesFilterMode, "Ambient");
-            bool previousAmbientTextureChanged = _resources.EnsureTexture(ref _resources.PreviousAmbientTexture,
-                lightDescriptor, LightTexturesFilterMode, "Previous Ambient");
-            if (ambientTextureChanged)
-                ClearTexture(_resources.AmbientTexture);
-            if (previousAmbientTextureChanged)
-                ClearTexture(_resources.PreviousAmbientTexture);
-            _resources.EnsureTexture(ref _resources.AmbientEmissionTexture, lightDescriptor, LightTexturesFilterMode, "Ambient Emission");
-
-            var upsampledSize = _extendedLightTextureSize * (LightObstaclesAntialiasing ? 2 : 1);
-            SetSize(ref lightDescriptor, upsampledSize.x, upsampledSize.y);
-            _resources.EnsureTexture(ref _resources.ObstaclesUpsampledTexture, lightDescriptor, LightTexturesFilterMode,
-                "Upsampled Obstacles");
-
-            SetSize(ref lightDescriptor, BuiltInNormalMappingEnabled ? sourceDescriptor.width : _smallLightTextureSize.x,
-                BuiltInNormalMappingEnabled ? sourceDescriptor.height : _smallLightTextureSize.y);
-            _resources.EnsureTexture(ref _resources.LightSourcesTexture, lightDescriptor,
-                BuiltInNormalMappingEnabled ? FilterMode.Point : LightTexturesFilterMode, "Light Sources");
-
-            if (BuiltInNormalMappingEnabled)
+            using (Light2DProfiling.ResourceReconciliation.Auto())
             {
-                SetSize(ref lightDescriptor, _smallLightTextureSize.x, _smallLightTextureSize.y);
-                _resources.EnsureTexture(ref _resources.SingleLightSourceTexture, lightDescriptor,
-                    LightTexturesFilterMode, "Single Light Source");
-                var normalDescriptor = sourceDescriptor;
-                normalDescriptor.colorFormat = RenderTextureFormat.ARGB32;
-                _resources.EnsureTexture(ref _resources.NormalMapBuffer, normalDescriptor, FilterMode.Point, "Normals");
+                int reallocations = 0;
+                var lightDescriptor = sourceDescriptor;
+                lightDescriptor.colorFormat = _texFormat;
+                lightDescriptor.depthBufferBits = 0;
+                lightDescriptor.msaaSamples = 1;
+
+                SetSize(ref lightDescriptor, _extendedLightTextureSize.x, _extendedLightTextureSize.y);
+                if (_resources.EnsureTexture(ref _resources.ObstaclesTexture, lightDescriptor,
+                        LightTexturesFilterMode, "Obstacles"))
+                    reallocations++;
+                if (EnableAmbientLight)
+                {
+                    bool ambientTextureChanged = _resources.EnsureTexture(ref _resources.AmbientTexture,
+                        lightDescriptor, LightTexturesFilterMode, "Ambient");
+                    bool previousAmbientTextureChanged = _resources.EnsureTexture(ref _resources.PreviousAmbientTexture,
+                        lightDescriptor, LightTexturesFilterMode, "Previous Ambient");
+                    if (ambientTextureChanged)
+                    {
+                        reallocations++;
+                        ClearTexture(_resources.AmbientTexture);
+                    }
+                    if (previousAmbientTextureChanged)
+                    {
+                        reallocations++;
+                        ClearTexture(_resources.PreviousAmbientTexture);
+                    }
+                    if (_resources.EnsureTexture(ref _resources.AmbientEmissionTexture, lightDescriptor,
+                            LightTexturesFilterMode, "Ambient Emission"))
+                        reallocations++;
+                }
+                else
+                {
+                    _aditionalAmbientLightCycles = 0;
+                    _resources.ReleaseAmbientTextures();
+                }
+
+                if (LightObstaclesAntialiasing)
+                {
+                    var upsampledSize = _extendedLightTextureSize * 2;
+                    SetSize(ref lightDescriptor, upsampledSize.x, upsampledSize.y);
+                    if (_resources.EnsureTexture(ref _resources.ObstaclesUpsampledTexture, lightDescriptor,
+                            LightTexturesFilterMode, "Upsampled Obstacles"))
+                        reallocations++;
+                }
+                else
+                {
+                    _resources.ReleaseAntialiasingTexture();
+                }
+
+                SetSize(ref lightDescriptor, BuiltInNormalMappingEnabled ? sourceDescriptor.width : _smallLightTextureSize.x,
+                    BuiltInNormalMappingEnabled ? sourceDescriptor.height : _smallLightTextureSize.y);
+                if (_resources.EnsureTexture(ref _resources.LightSourcesTexture, lightDescriptor,
+                        BuiltInNormalMappingEnabled ? FilterMode.Point : LightTexturesFilterMode, "Light Sources"))
+                    reallocations++;
+
+                if (BuiltInNormalMappingEnabled)
+                {
+                    SetSize(ref lightDescriptor, _smallLightTextureSize.x, _smallLightTextureSize.y);
+                    if (_resources.EnsureTexture(ref _resources.SingleLightSourceTexture, lightDescriptor,
+                            LightTexturesFilterMode, "Single Light Source"))
+                        reallocations++;
+                    var normalDescriptor = sourceDescriptor;
+                    normalDescriptor.colorFormat = RenderTextureFormat.ARGB32;
+                    if (_resources.EnsureTexture(ref _resources.NormalMapBuffer, normalDescriptor,
+                            FilterMode.Point, "Normals"))
+                        reallocations++;
+                }
+                else
+                {
+                    _resources.ReleaseNormalMappingTextures();
+                }
+
+                int blurWidth = _resources.LightSourcesTexture.width == _smallLightTextureSize.x
+                    ? _resources.LightSourcesTexture.width * 2
+                    : _resources.LightSourcesTexture.width;
+                int blurHeight = _resources.LightSourcesTexture.height == _smallLightTextureSize.y
+                    ? _resources.LightSourcesTexture.height * 2
+                    : _resources.LightSourcesTexture.height;
+                if (BlurLightSources && _resources.LightSourcesBlurMaterial != null)
+                {
+                    SetSize(ref lightDescriptor, blurWidth, blurHeight);
+                    if (_resources.EnsureTexture(ref _resources.BlurredLightTexture, lightDescriptor,
+                            FilterMode.Bilinear, "Blurred Light Sources"))
+                        reallocations++;
+                }
+                else
+                {
+                    _resources.ReleaseBlurTexture();
+                }
+
+                var outputDescriptor = sourceDescriptor;
+                outputDescriptor.depthBufferBits = 0;
+                outputDescriptor.msaaSamples = 1;
+                if (AffectOnlyThisCamera)
+                {
+                    if (_resources.EnsureTexture(ref _resources.CameraTargetTexture, outputDescriptor,
+                            FilterMode.Point, "Camera Target"))
+                        reallocations++;
+                }
+                else
+                {
+                    _resources.ReleaseCameraTargetTexture();
+                }
+
+                _frameReallocations += reallocations;
             }
-
-            int blurWidth = _resources.LightSourcesTexture.width == _smallLightTextureSize.x
-                ? _resources.LightSourcesTexture.width * 2
-                : _resources.LightSourcesTexture.width;
-            int blurHeight = _resources.LightSourcesTexture.height == _smallLightTextureSize.y
-                ? _resources.LightSourcesTexture.height * 2
-                : _resources.LightSourcesTexture.height;
-            SetSize(ref lightDescriptor, blurWidth, blurHeight);
-            _resources.EnsureTexture(ref _resources.BlurredLightTexture, lightDescriptor, FilterMode.Bilinear,
-                "Blurred Light Sources");
-
-            var outputDescriptor = sourceDescriptor;
-            outputDescriptor.depthBufferBits = 0;
-            outputDescriptor.msaaSamples = 1;
-            _resources.EnsureTexture(ref _resources.ScreenBlitTexture, outputDescriptor, FilterMode.Point,
-                "Final Temporary Output");
-            if (AffectOnlyThisCamera)
-                _resources.EnsureTexture(ref _resources.CameraTargetTexture, outputDescriptor, FilterMode.Point,
-                    "Camera Target");
         }
 
         private void RenderObstacles()
         {
-            ConfigLightCamera(true);
-            LightCamera.enabled = false;
-            LightCamera.targetTexture = _resources.ObstaclesUpsampledTexture;
-            LightCamera.cullingMask = 1 << LightObstaclesLayer;
-            LightCamera.backgroundColor = new Color(1, 1, 1, 0);
-            _obstaclesPostProcessor.DrawMesh(LightCamera, LightObstaclesAntialiasing ? 2f : 1f,
-                LightObstaclesLayer);
-            LightCamera.Render();
-            _resources.ObstaclesTexture.DiscardContents();
-            Graphics.Blit(_resources.ObstaclesUpsampledTexture, _resources.ObstaclesTexture);
+            using (Light2DProfiling.Obstacles.Auto())
+            {
+                ConfigLightCamera(true);
+                LightCamera.enabled = false;
+                var obstacleTarget = LightObstaclesAntialiasing
+                    ? _resources.ObstaclesUpsampledTexture
+                    : _resources.ObstaclesTexture;
+                LightCamera.targetTexture = obstacleTarget;
+                LightCamera.cullingMask = 1 << LightObstaclesLayer;
+                LightCamera.backgroundColor = new Color(1, 1, 1, 0);
+                var borderCommand = _obstaclesPostProcessor.GetDrawCommand(LightCamera,
+                    LightObstaclesAntialiasing ? 2f : 1f);
+                if (borderCommand != null)
+                    LightCamera.AddCommandBuffer(CameraEvent.AfterEverything, borderCommand);
+                try
+                {
+                    LightCamera.Render();
+                }
+                finally
+                {
+                    if (borderCommand != null)
+                        LightCamera.RemoveCommandBuffer(CameraEvent.AfterEverything, borderCommand);
+                }
+                if (LightObstaclesAntialiasing)
+                {
+                    _resources.ObstaclesTexture.DiscardContents();
+                    Graphics.Blit(_resources.ObstaclesUpsampledTexture, _resources.ObstaclesTexture);
+                }
+            }
         }
 
         private void SetupShaders()
         {
-            Shader.SetGlobalTexture("_ObstacleTex", _resources.ObstaclesTexture);
-            Shader.SetGlobalFloat("_PixelsPerBlock", LightPixelsPerUnityMeter);
-            Shader.SetGlobalVector("_ExtendedToSmallTextureScale", new Vector2(
+            Shader.SetGlobalTexture(ObstacleTexId, _resources.ObstaclesTexture);
+            Shader.SetGlobalFloat(PixelsPerBlockId, LightPixelsPerUnityMeter);
+            Shader.SetGlobalVector(ExtendedToSmallTextureScaleId, new Vector2(
                 _smallLightTextureSize.x / (float)_extendedLightTextureSize.x,
                 _smallLightTextureSize.y / (float)_extendedLightTextureSize.y));
-            Shader.SetGlobalVector("_PosOffset", LightObstaclesAntialiasing
+            Shader.SetGlobalVector(PosOffsetId, LightObstaclesAntialiasing
                 ? (BuiltInNormalMappingEnabled ? _resources.ObstaclesUpsampledTexture.texelSize * 0.75f : _resources.ObstaclesUpsampledTexture.texelSize * 0.25f)
                 : (BuiltInNormalMappingEnabled ? _resources.ObstaclesTexture.texelSize : _resources.ObstaclesTexture.texelSize * 0.5f));
         }
@@ -473,19 +588,28 @@ namespace Light2D
             SetKeyword("NORMAL_MAPPED_LIGHTS", BuiltInNormalMappingEnabled);
             if (!BuiltInNormalMappingEnabled)
                 return;
-            var normalCamera = _resources.EnsureNormalMapCamera(_camera.transform);
-            normalCamera.CopyFrom(_camera);
-            normalCamera.transform.position = LightCamera.transform.position;
-            normalCamera.clearFlags = CameraClearFlags.SolidColor;
-            normalCamera.targetTexture = _resources.NormalMapBuffer;
-            normalCamera.cullingMask = int.MaxValue;
-            normalCamera.backgroundColor = new Color(0.5f, 0.5f, 0, 1);
-            normalCamera.enabled = false;
-            normalCamera.RenderWithShader(_normalMapRenderShader, "LightObstacle");
-            Shader.SetGlobalTexture("_NormalsBuffer", _resources.NormalMapBuffer);
+            using (Light2DProfiling.Normals.Auto())
+            {
+                var normalCamera = _resources.EnsureNormalMapCamera(_camera.transform);
+                normalCamera.CopyFrom(_camera);
+                normalCamera.transform.position = LightCamera.transform.position;
+                normalCamera.clearFlags = CameraClearFlags.SolidColor;
+                normalCamera.targetTexture = _resources.NormalMapBuffer;
+                normalCamera.cullingMask = 1 << LightObstaclesLayer;
+                normalCamera.backgroundColor = new Color(0.5f, 0.5f, 0, 1);
+                normalCamera.enabled = false;
+                normalCamera.RenderWithShader(_normalMapRenderShader, "LightObstacle");
+                Shader.SetGlobalTexture(NormalsBufferId, _resources.NormalMapBuffer);
+            }
         }
 
         private void RenderLightSources()
+        {
+            using (Light2DProfiling.Sources.Auto())
+                RenderLightSourcesCore();
+        }
+
+        private void RenderLightSourcesCore()
         {
             ConfigLightCamera(false);
             LightCamera.backgroundColor = Color.clear;
@@ -504,16 +628,26 @@ namespace Light2D
             var oldActive = RenderTexture.active;
             try
             {
-                Graphics.SetRenderTarget(_resources.LightSourcesTexture);
-                GL.Clear(false, true, LightCamera.backgroundColor);
-                var planes = GeometryUtility.CalculateFrustumPlanes(_camera);
+                var clearCommands = CommandBufferPool.Get("Light2D Clear Light Sources");
+                try
+                {
+                    clearCommands.SetRenderTarget(_resources.LightSourcesTexture);
+                    clearCommands.ClearRenderTarget(false, true, LightCamera.backgroundColor);
+                    Graphics.ExecuteCommandBuffer(clearCommands);
+                }
+                finally
+                {
+                    CommandBufferPool.Release(clearCommands);
+                }
+                GeometryUtility.CalculateFrustumPlanes(_camera, _frustumPlanes);
                 var lightCameraLocalPosition = LightCamera.transform.localPosition;
                 LightCamera.targetTexture = _resources.SingleLightSourceTexture;
                 LightCamera.cullingMask = 0;
                 LightCamera.backgroundColor = Color.clear;
                 foreach (var lightSprite in _lightSpritesCache)
                 {
-                    if (!lightSprite.RendererEnabled || !GeometryUtility.TestPlanesAABB(planes, lightSprite.Renderer.bounds))
+                    if (!lightSprite.RendererEnabled ||
+                        !GeometryUtility.TestPlanesAABB(_frustumPlanes, lightSprite.Renderer.bounds))
                         continue;
                     LightCamera.RenderWithShader(_normalMapRenderShader, "f84j");
                     Graphics.SetRenderTarget(_resources.SingleLightSourceTexture);
@@ -521,8 +655,32 @@ namespace Light2D
                     Graphics.SetRenderTarget(_resources.LightSourcesTexture);
                     lightSprite.DrawLightNormalsNow(normalMaterial);
                 }
-                LightCamera.cullingMask = 1 << LightSourcesLayer;
-                LightCamera.Render();
+                // Light sprites were already drawn manually above; hide their renderers so the
+                // flat camera pass draws only the remaining light-sources layer content.
+                var hiddenRenderers = _flatPassHiddenRenderers;
+                try
+                {
+                    foreach (var lightSprite in _lightSpritesCache)
+                    {
+                        var renderer = lightSprite.Renderer;
+                        if (renderer != null && renderer.enabled)
+                        {
+                            renderer.enabled = false;
+                            hiddenRenderers.Add(renderer);
+                        }
+                    }
+                    LightCamera.cullingMask = 1 << LightSourcesLayer;
+                    LightCamera.Render();
+                }
+                finally
+                {
+                    foreach (var renderer in hiddenRenderers)
+                    {
+                        if (renderer != null)
+                            renderer.enabled = true;
+                    }
+                    hiddenRenderers.Clear();
+                }
                 Graphics.Blit(_resources.SingleLightSourceTexture, _resources.LightSourcesTexture, combiningMaterial);
             }
             finally
@@ -536,31 +694,30 @@ namespace Light2D
             var blurMaterial = _resources.LightSourcesBlurMaterial;
             if (!BlurLightSources || blurMaterial == null)
                 return;
-            Profiler.BeginSample("LightingSystem.OnRenderImage Bluring Light Sources");
-            try
+            using (Light2DProfiling.Blur.Auto())
             {
-                _resources.LightSourcesTexture.filterMode = FilterMode.Bilinear;
-                blurMaterial.mainTexture = _resources.LightSourcesTexture;
-                Graphics.Blit(null, _resources.BlurredLightTexture, blurMaterial);
-                if (LightTexturesFilterMode == FilterMode.Point)
+                var originalFilterMode = _resources.LightSourcesTexture.filterMode;
+                try
                 {
-                    _resources.LightSourcesTexture.filterMode = FilterMode.Point;
-                    Graphics.Blit(_resources.BlurredLightTexture, _resources.LightSourcesTexture);
+                    _resources.LightSourcesTexture.filterMode = FilterMode.Bilinear;
+                    blurMaterial.mainTexture = _resources.LightSourcesTexture;
+                    Graphics.Blit(null, _resources.BlurredLightTexture, blurMaterial);
+                    if (LightTexturesFilterMode == FilterMode.Point)
+                        Graphics.Blit(_resources.BlurredLightTexture, _resources.LightSourcesTexture);
                 }
-            }
-            finally
-            {
-                Profiler.EndSample();
+                finally
+                {
+                    _resources.LightSourcesTexture.filterMode = originalFilterMode;
+                }
             }
         }
 
-        private void RenderAmbientLight()
+        private int RenderAmbientLight()
         {
             var computeMaterial = _resources.AmbientLightComputeMaterial;
             if (!EnableAmbientLight || computeMaterial == null)
-                return;
-            Profiler.BeginSample("LightingSystem.OnRenderImage Ambient Light");
-            try
+                return 0;
+            using (Light2DProfiling.Ambient.Auto())
             {
                 ConfigLightCamera(true);
                 LightCamera.targetTexture = _resources.AmbientEmissionTexture;
@@ -572,11 +729,12 @@ namespace Light2D
                 {
                     Swap(ref _resources.PreviousAmbientTexture, ref _resources.AmbientTexture);
                     var textureSize = new Vector2(_resources.AmbientTexture.width, _resources.AmbientTexture.height);
-                    var positionShift = ((Vector2)(_currPos - _oldPos) / LightPixelSize).Div(textureSize);
+                    var pixelShift = (Vector2)(_currPos - _oldPos) / LightPixelSize;
+                    var positionShift = new Vector2(pixelShift.x / textureSize.x, pixelShift.y / textureSize.y);
                     _oldPos = _currPos;
-                    computeMaterial.SetTexture("_LightSourcesTex", _resources.AmbientEmissionTexture);
-                    computeMaterial.SetTexture("_MainTex", _resources.PreviousAmbientTexture);
-                    computeMaterial.SetVector("_Shift", positionShift);
+                    computeMaterial.SetTexture(LightSourcesTexId, _resources.AmbientEmissionTexture);
+                    computeMaterial.SetTexture(MainTexId, _resources.PreviousAmbientTexture);
+                    computeMaterial.SetVector(ShiftId, positionShift);
                     Graphics.Blit(null, _resources.AmbientTexture, computeMaterial);
                     if (BlurAmbientLight && _resources.AmbientLightBlurMaterial != null)
                     {
@@ -585,17 +743,13 @@ namespace Light2D
                         Swap(ref _resources.PreviousAmbientTexture, ref _resources.AmbientTexture);
                     }
                 }
-            }
-            finally
-            {
-                Profiler.EndSample();
+                return additionalCycles + 1;
             }
         }
 
         private void RenderLightOverlay(RenderTexture src, RenderTexture dest)
         {
-            Profiler.BeginSample("LightingSystem.OnRenderImage Light Overlay");
-            try
+            using (Light2DProfiling.Composition.Auto())
             {
                 ConfigLightCamera(false);
                 var texelSize = new Vector2(1f / _smallLightTextureSize.x, 1f / _smallLightTextureSize.y);
@@ -611,17 +765,12 @@ namespace Light2D
                     : Mathf.Tan(_camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * LightObstaclesDistance;
                 float scaleY = sourceOrthographicSize / LightCamera.orthographicSize;
                 var overlay = _resources.LightOverlayMaterial;
-                overlay.SetTexture("_AmbientLightTex", EnableAmbientLight ? _resources.AmbientTexture : null);
-                overlay.SetTexture("_LightSourcesTex", lightSources);
-                overlay.SetTexture("_GameTex", src);
-                overlay.SetVector("_Offset", offset);
-                overlay.SetVector("_Scale", new Vector2(scaleY * _camera.aspect / LightCamera.aspect, scaleY));
-                Graphics.Blit(null, _resources.ScreenBlitTexture, overlay);
-                BlitToDestination(_resources.ScreenBlitTexture, dest);
-            }
-            finally
-            {
-                Profiler.EndSample();
+                overlay.SetTexture(AmbientLightTexId, EnableAmbientLight ? _resources.AmbientTexture : null);
+                overlay.SetTexture(LightSourcesTexId, lightSources);
+                overlay.SetTexture(GameTexId, src);
+                overlay.SetVector(OffsetId, offset);
+                overlay.SetVector(ScaleId, new Vector2(scaleY * _camera.aspect / LightCamera.aspect, scaleY));
+                Graphics.Blit(null, dest, overlay);
             }
         }
 
@@ -642,17 +791,21 @@ namespace Light2D
 
         public void LoopAmbientLight(int cycles)
         {
-            if (cycles <= 0)
+            if (!EnableAmbientLight || cycles <= 0)
                 return;
-            _aditionalAmbientLightCycles = _aditionalAmbientLightCycles > int.MaxValue - cycles
-                ? int.MaxValue
-                : _aditionalAmbientLightCycles + cycles;
+            _aditionalAmbientLightCycles = Mathf.Min(MaximumQueuedAmbientCycles,
+                _aditionalAmbientLightCycles + Mathf.Min(cycles, MaximumQueuedAmbientCycles));
         }
 
         public int ConsumePendingAmbientLightCycles()
         {
-            int cycles = Mathf.Max(0, _aditionalAmbientLightCycles);
-            _aditionalAmbientLightCycles = 0;
+            if (!EnableAmbientLight)
+            {
+                _aditionalAmbientLightCycles = 0;
+                return 0;
+            }
+            int cycles = Mathf.Min(MaximumAmbientCyclesPerFrame, Mathf.Max(0, _aditionalAmbientLightCycles));
+            _aditionalAmbientLightCycles -= cycles;
             return cycles;
         }
 
@@ -750,6 +903,81 @@ namespace Light2D
             return descriptor;
         }
 
+        private void ReportValidationError(string message)
+        {
+            int hash = message.GetHashCode();
+            if (_validationDiagnosticHash == hash)
+                return;
+            _validationDiagnosticHash = hash;
+            Debug.LogError("Light2D skipped rendering: " + message, this);
+        }
+
+        private void InvalidateRendering()
+        {
+            RestoreMainCameraState();
+            if (_resources != null)
+                _resources.ReleaseTextures();
+            _initialized = false;
+            _settingsHash = 0;
+            _aditionalAmbientLightCycles = 0;
+        }
+
+        private static bool TryCreateFrameConfig(Camera sourceCamera, Camera lightCamera,
+            RenderTextureDescriptor sourceDescriptor, in LightingFrameSettings settings,
+            out LightingFrameConfig config, out string error)
+        {
+            config = default(LightingFrameConfig);
+            error = null;
+            if (sourceCamera == null || lightCamera == null)
+                error = "source and helper cameras must be assigned.";
+            else if (sourceCamera == lightCamera || lightCamera.GetComponent<LightingSystem>() != null)
+                error = "the helper camera must not be a LightingSystem source camera.";
+            else if (LightingSettingsValidator.ValidateLayers(settings.LightSourcesLayer, settings.AmbientLightLayer,
+                         settings.LightObstaclesLayer, false) is var layerError && layerError != null)
+                error = layerError;
+            else if ((sourceCamera.cullingMask & ((1 << settings.LightSourcesLayer) | (1 << settings.AmbientLightLayer) |
+                                                  (1 << settings.LightObstaclesLayer))) != 0)
+                error = "the source camera culling mask must exclude all Light2D layers.";
+            else if (sourceDescriptor.width <= 0 || sourceDescriptor.height <= 0 || sourceDescriptor.volumeDepth != 1 ||
+                     sourceDescriptor.dimension != TextureDimension.Tex2D || sourceDescriptor.vrUsage != VRTextureUsage.None)
+                error = "the source render target must be a non-XR 2D texture with positive dimensions.";
+            if (error != null)
+                return false;
+
+            if (!LightingSettingsValidator.TryCalculateSizes(sourceCamera, settings.PixelSize,
+                    settings.OrthographicSizeAdd, settings.FieldOfViewAdd, settings.ObstacleDistance, settings.Hdr,
+                    settings.EnableAmbientLight, settings.ObstacleAntialiasing, settings.NormalMapping,
+                    out var estimate, out error))
+                return false;
+
+            long largestWidth = (long)estimate.Extended.x * (settings.ObstacleAntialiasing ? 2 : 1);
+            long largestHeight = (long)estimate.Extended.y * (settings.ObstacleAntialiasing ? 2 : 1);
+            if (sourceDescriptor.width > SystemInfo.maxTextureSize || sourceDescriptor.height > SystemInfo.maxTextureSize ||
+                largestWidth * largestHeight > settings.MaximumTexturePixels ||
+                (long)sourceDescriptor.width * sourceDescriptor.height > settings.MaximumTexturePixels)
+            {
+                error = "requested textures exceed the platform size limit or Light2D pixel budget.";
+                return false;
+            }
+
+            config = new LightingFrameConfig(estimate.Small, estimate.Extended);
+            return true;
+        }
+
+        private void ReportBuiltInFrame(int ambientCyclesConsumed)
+        {
+            int reallocations = _frameReallocations;
+            _frameReallocations = 0;
+            Light2DDiagnostics.ReportFrame(new Light2DFrameMetrics(
+                _extendedLightTextureSize.x,
+                _extendedLightTextureSize.y,
+                Light2DDiagnostics.OwnedTextureBytes,
+                _lightSpritesCache.Count,
+                ambientCyclesConsumed,
+                reallocations,
+                Light2DDiagnostics.ContextCount));
+        }
+
         private static void SetSize(ref RenderTextureDescriptor descriptor, int width, int height)
         {
             descriptor.width = Mathf.Max(1, width);
@@ -808,18 +1036,6 @@ namespace Light2D
             right = temporary;
         }
 
-        private void InitTK2D()
-        {
-#if LIGHT2D_2DTK
-            _tk2dCamera = GetComponent<tk2dCamera>();
-            Update2DTK();
-#endif
-        }
-
-        private void Update2DTK()
-        {
-        }
-
         private void LateUpdate()
         {
 #if UNITY_EDITOR
@@ -832,8 +1048,10 @@ namespace Light2D
                 else
                     LightCamera.fieldOfView = _camera.fieldOfView + LightCameraFovAdd;
             }
-            if (!Application.isPlaying || Util.IsSceneViewFocused)
-                Shader.SetGlobalTexture("_ObstacleTex", Texture2D.whiteTexture);
+            if (!Application.isPlaying ||
+                (UnityEditor.SceneView.currentDrawingSceneView != null &&
+                 UnityEditor.SceneView.currentDrawingSceneView == UnityEditor.EditorWindow.focusedWindow))
+                Shader.SetGlobalTexture(ObstacleTexId, Texture2D.whiteTexture);
 #endif
         }
 
@@ -891,6 +1109,57 @@ namespace Light2D
             }
         }
 
+        private readonly struct LightingFrameConfig
+        {
+            internal readonly Vector2Int SmallSize;
+            internal readonly Vector2Int ExtendedSize;
+
+            internal LightingFrameConfig(Vector2Int smallSize, Vector2Int extendedSize)
+            {
+                SmallSize = smallSize;
+                ExtendedSize = extendedSize;
+            }
+        }
+
+        /// <summary>
+        /// Groups the per-frame lighting settings consumed by frame-config validation.
+        /// Construct with named arguments to avoid positional-parameter transposition.
+        /// </summary>
+        private readonly struct LightingFrameSettings
+        {
+            internal readonly float PixelSize;
+            internal readonly float OrthographicSizeAdd;
+            internal readonly float FieldOfViewAdd;
+            internal readonly float ObstacleDistance;
+            internal readonly int LightSourcesLayer;
+            internal readonly int AmbientLightLayer;
+            internal readonly int LightObstaclesLayer;
+            internal readonly bool Hdr;
+            internal readonly bool EnableAmbientLight;
+            internal readonly bool ObstacleAntialiasing;
+            internal readonly bool NormalMapping;
+            internal readonly long MaximumTexturePixels;
+
+            internal LightingFrameSettings(float pixelSize, float orthographicSizeAdd, float fieldOfViewAdd,
+                float obstacleDistance, int lightSourcesLayer, int ambientLightLayer, int lightObstaclesLayer,
+                bool hdr, bool enableAmbientLight, bool obstacleAntialiasing, bool normalMapping,
+                long maximumTexturePixels)
+            {
+                PixelSize = pixelSize;
+                OrthographicSizeAdd = orthographicSizeAdd;
+                FieldOfViewAdd = fieldOfViewAdd;
+                ObstacleDistance = obstacleDistance;
+                LightSourcesLayer = lightSourcesLayer;
+                AmbientLightLayer = ambientLightLayer;
+                LightObstaclesLayer = lightObstaclesLayer;
+                Hdr = hdr;
+                EnableAmbientLight = enableAmbientLight;
+                ObstacleAntialiasing = obstacleAntialiasing;
+                NormalMapping = normalMapping;
+                MaximumTexturePixels = maximumTexturePixels;
+            }
+        }
+
         private struct GlobalShaderState
         {
             private readonly bool _xzPlane;
@@ -906,8 +1175,8 @@ namespace Light2D
                 _hdr = Shader.IsKeywordEnabled("HDR");
                 _perspectiveCamera = Shader.IsKeywordEnabled("PERSPECTIVE_CAMERA");
                 _normalMappedLights = Shader.IsKeywordEnabled("NORMAL_MAPPED_LIGHTS");
-                _obstacleTexture = Shader.GetGlobalTexture("_ObstacleTex");
-                _normalsTexture = Shader.GetGlobalTexture("_NormalsBuffer");
+                _obstacleTexture = Shader.GetGlobalTexture(ObstacleTexId);
+                _normalsTexture = Shader.GetGlobalTexture(NormalsBufferId);
             }
 
             internal static GlobalShaderState Capture()
@@ -921,8 +1190,8 @@ namespace Light2D
                 SetKeyword("HDR", _hdr);
                 SetKeyword("PERSPECTIVE_CAMERA", _perspectiveCamera);
                 SetKeyword("NORMAL_MAPPED_LIGHTS", _normalMappedLights);
-                Shader.SetGlobalTexture("_ObstacleTex", _obstacleTexture);
-                Shader.SetGlobalTexture("_NormalsBuffer", _normalsTexture);
+                Shader.SetGlobalTexture(ObstacleTexId, _obstacleTexture);
+                Shader.SetGlobalTexture(NormalsBufferId, _normalsTexture);
             }
         }
     }

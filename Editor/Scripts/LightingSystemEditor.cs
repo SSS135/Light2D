@@ -28,6 +28,7 @@ namespace Light2D
         private SerializedProperty _lightTexturesFilterMode;
         private SerializedProperty _enableNormalMapping;
         private SerializedProperty _affectOnlyThisCamera;
+        private SerializedProperty _xzPlane;
 
         void OnEnable()
         {
@@ -51,6 +52,7 @@ namespace Light2D
             _lightTexturesFilterMode = serializedObject.FindProperty("LightTexturesFilterMode");
             _enableNormalMapping = serializedObject.FindProperty("EnableNormalMapping");
             _affectOnlyThisCamera = serializedObject.FindProperty("AffectOnlyThisCamera");
+            _xzPlane = serializedObject.FindProperty("XZPlane");
         }
 
         public override void OnInspectorGUI()
@@ -63,9 +65,6 @@ namespace Light2D
 
             var lightingSystem = (LightingSystem)target;
             var cam = lightingSystem.GetComponent<Camera>();
-            bool isMobileTarget = EditorUserBuildSettings.activeBuildTarget == BuildTarget.iOS ||
-                                EditorUserBuildSettings.activeBuildTarget == BuildTarget.Android;
-
             if (cam == null)
             {
                 EditorGUILayout.HelpBox("No attached camera found.", MessageType.Error);
@@ -74,47 +73,6 @@ namespace Light2D
             DrawConfigurationWarnings(cam);
 
             EditorGUILayout.PropertyField(_lightPixelSize, new GUIContent("Light Pixel Size"));
-
-            if (cam != null)
-            {
-                float size;
-                if (cam.orthographic)
-                {
-                    size = (cam.orthographicSize + _lightCameraSizeAdd.floatValue)*2f;
-                }
-                else
-                {
-                    var halfFov = (cam.fieldOfView + _lightCameraFovAdd.floatValue)*Mathf.Deg2Rad/2f;
-                    size = Mathf.Tan(halfFov)*_lightObstaclesDistance.floatValue*2;
-                }
-                if (!Application.isPlaying)
-                {
-
-                    int lightTextureHeight = Mathf.RoundToInt(size/_lightPixelSize.floatValue);
-                    var oldSize = lightTextureHeight;
-                    lightTextureHeight = EditorGUILayout.IntField("Light Texture Height", lightTextureHeight);
-                    if (lightTextureHeight%2 != 0)
-                        lightTextureHeight++;
-                    if (lightTextureHeight < 16)
-                    {
-                        if (lightTextureHeight < 8)
-                            lightTextureHeight = 8;
-                        EditorGUILayout.LabelField("WARNING: Light Texture Height is too small.");
-                        EditorGUILayout.LabelField(" 50-200 (mobile) and 200-1000 (pc) is recommended.");
-                    }
-                    if (lightTextureHeight > (isMobileTarget ? 200 : 1000))
-                    {
-                        if (lightTextureHeight > 2048)
-                            lightTextureHeight = 2048;
-                        EditorGUILayout.LabelField("WARNING: Light Texture Height is too big.");
-                        EditorGUILayout.LabelField(" 50-200 (mobile) and 200-1000 (pc) is recommended.");
-                    }
-                    if (oldSize != lightTextureHeight)
-                    {
-                        _lightPixelSize.floatValue = size/lightTextureHeight;
-                    }
-                }
-            }
 
             if (cam == null || cam.orthographic)
             {
@@ -129,10 +87,7 @@ namespace Light2D
             EditorGUILayout.PropertyField(_hdr, new GUIContent("64 Bit Color"));
             EditorGUILayout.PropertyField(_lightObstaclesAntialiasing, new GUIContent("Light Obstacles Antialiasing"));
             EditorGUILayout.PropertyField(_enableNormalMapping, new GUIContent("Normal Mapping"));
-            if (_enableNormalMapping.boolValue && isMobileTarget)
-            {
-                EditorGUILayout.HelpBox("Normal mapping is not supported on mobile targets.", MessageType.Warning);
-            }
+            EditorGUILayout.PropertyField(_xzPlane, new GUIContent("XZ Plane"));
             EditorGUILayout.PropertyField(_affectOnlyThisCamera, new GUIContent("Affect Only This Camera"));
             _lightTexturesFilterMode.enumValueIndex = (int)(FilterMode)EditorGUILayout.EnumPopup(
                 "Texture Filtering", (FilterMode)_lightTexturesFilterMode.enumValueIndex);
@@ -169,8 +124,30 @@ namespace Light2D
             _lightObstaclesLayer.intValue = EditorGUILayout.LayerField(new GUIContent("Light Obstacles Layer"), _lightObstaclesLayer.intValue);
             _ambientLightLayer.intValue = EditorGUILayout.LayerField(new GUIContent("Ambient Light Layer"), _ambientLightLayer.intValue);
 
+            DrawSizeEstimate(cam);
+
             // Apply changes to the serializedProperty - always do this in the end of OnInspectorGUI.
             serializedObject.ApplyModifiedProperties();
+        }
+
+        private void DrawSizeEstimate(Camera camera)
+        {
+            if (!LightingSettingsValidator.TryCalculateSizes(camera, _lightPixelSize.floatValue,
+                    _lightCameraSizeAdd.floatValue, _lightCameraFovAdd.floatValue,
+                    _lightObstaclesDistance.floatValue, _hdr.boolValue, _enableAmbientLight.boolValue,
+                    _lightObstaclesAntialiasing.boolValue, _enableNormalMapping.boolValue,
+                    out var estimate, out var error))
+            {
+                EditorGUILayout.HelpBox(error, MessageType.Error);
+                return;
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Estimated Light Textures", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Camera Coverage", $"{estimate.Small.x} x {estimate.Small.y}");
+            EditorGUILayout.LabelField("Extended Coverage", $"{estimate.Extended.x} x {estimate.Extended.y}");
+            EditorGUILayout.LabelField("Working Texture Memory", EditorUtility.FormatBytes(estimate.EstimatedTextureBytes));
+            EditorGUILayout.HelpBox("Memory excludes camera-sized composition targets and driver overhead.", MessageType.None);
         }
 
         private void DrawConfigurationWarnings(Camera camera)
@@ -191,8 +168,9 @@ namespace Light2D
             var sourceLayer = _lightSourcesLayer.intValue;
             var ambientLayer = _ambientLightLayer.intValue;
             var obstacleLayer = _lightObstaclesLayer.intValue;
-            if (sourceLayer == ambientLayer || sourceLayer == obstacleLayer || ambientLayer == obstacleLayer)
-                EditorGUILayout.HelpBox("Light Sources, Ambient Light, and Light Obstacles must use three different layers.", MessageType.Error);
+            var layerError = LightingSettingsValidator.ValidateLayers(sourceLayer, ambientLayer, obstacleLayer, false);
+            if (layerError != null)
+                EditorGUILayout.HelpBox(layerError, MessageType.Error);
 
             if (camera != null)
             {
@@ -202,6 +180,8 @@ namespace Light2D
 
                 if (_enableNormalMapping.boolValue && !camera.orthographic)
                     EditorGUILayout.HelpBox("Normal mapping requires an orthographic camera; perspective rendering is not supported.", MessageType.Error);
+                if (_enableNormalMapping.boolValue && _xzPlane.boolValue)
+                    EditorGUILayout.HelpBox("Normal mapping supports the XY plane only. Disable XZ Plane to use normal mapping.", MessageType.Error);
 
                 if (_affectOnlyThisCamera.boolValue && urpAsset != null)
                     EditorGUILayout.HelpBox("Affect Only This Camera is supported only by the Built-in Render Pipeline. URP ignores this setting and composites Light2D only for the camera containing this LightingSystem.", MessageType.Warning);
@@ -210,6 +190,19 @@ namespace Light2D
 
                 if (_hdr.boolValue && (!camera.allowHDR || urpAsset != null && !urpAsset.supportsHDR))
                     EditorGUILayout.HelpBox("64 Bit Color is enabled, but HDR is disabled on the camera or current URP asset.", MessageType.Warning);
+
+                if (urpAsset != null && camera.TryGetComponent<UniversalAdditionalCameraData>(out var cameraData))
+                {
+                    if (cameraData.allowXRRendering)
+                        EditorGUILayout.HelpBox("XR cameras are not supported by Light2D. Disable Allow XR Rendering on this camera.", MessageType.Error);
+                    if (cameraData.renderType == CameraRenderType.Overlay)
+                        EditorGUILayout.HelpBox("URP Overlay cameras are not supported. Attach Light2D to an independent Base camera.", MessageType.Error);
+                    else if (cameraData.cameraStack.Count > 0)
+                        EditorGUILayout.HelpBox("URP Base cameras with an Overlay stack are not supported. Use an independent Base camera.", MessageType.Error);
+                }
+
+                if (camera.targetTexture != null && urpAsset != null)
+                    EditorGUILayout.HelpBox("URP target textures are supported for independent Base cameras when the selected renderer contains the Light2D feature.", MessageType.Info);
             }
 
             if (_hdr.boolValue && !SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGBHalf))

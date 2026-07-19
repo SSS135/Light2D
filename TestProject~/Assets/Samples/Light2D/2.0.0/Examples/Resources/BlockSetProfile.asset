@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5085fc8473f8bc647a12fbddd2b7b95e, type: 3}
   m_Name: BlockSetProfile
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier:
   FirstNoiseScale: 0.02
   SecondNoiseScale: 0.2
   SecondNoiseMul: 0.125

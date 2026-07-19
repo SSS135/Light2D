@@ -1,0 +1,30 @@
+# Top-most EditorConfig for the Light2D package repository.
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.cs]
+indent_size = 4
+csharp_new_line_before_open_brace = all
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+dotnet_sort_system_directives_first = true
+
+[*.{json,asmdef,asmref}]
+indent_size = 2
+
+[*.{md,yml,yaml}]
+indent_size = 2
+trim_trailing_whitespace = false
+
+# Unity serialized assets and metas are tool-owned; do not reformat them.
+[*.{meta,unity,prefab,mat,asset,anim,controller,lighting,physicsMaterial2D}]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = false
+insert_final_newline = unset

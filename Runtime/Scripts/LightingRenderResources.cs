@@ -13,6 +13,8 @@ namespace Light2D
         private Material _lightCombiningMaterial;
         private Material _alphaBlendedMaterial;
         private Camera _normalMapCamera;
+        private readonly int _diagnosticsGeneration;
+        private bool _disposed;
 
         internal RenderTexture AmbientEmissionTexture;
         internal RenderTexture AmbientTexture;
@@ -21,7 +23,6 @@ namespace Light2D
         internal RenderTexture ObstaclesUpsampledTexture;
         internal RenderTexture LightSourcesTexture;
         internal RenderTexture ObstaclesTexture;
-        internal RenderTexture ScreenBlitTexture;
         internal RenderTexture NormalMapBuffer;
         internal RenderTexture SingleLightSourceTexture;
         internal RenderTexture CameraTargetTexture;
@@ -34,6 +35,11 @@ namespace Light2D
         internal Material LightCombiningMaterial { get { return _lightCombiningMaterial; } }
         internal Material AlphaBlendedMaterial { get { return _alphaBlendedMaterial; } }
         internal Camera NormalMapCamera { get { return _normalMapCamera; } }
+
+        internal LightingRenderResources()
+        {
+            _diagnosticsGeneration = Light2DDiagnostics.RegisterContext();
+        }
 
         internal void EnsureSerializedMaterials(Material ambientCompute, Material overlay, Material sourceBlur,
             Material ambientBlur)
@@ -86,6 +92,9 @@ namespace Light2D
                 texture.wrapMode = TextureWrapMode.Clamp;
                 texture.hideFlags = HideFlags.DontSave;
                 texture.Create();
+                Light2DDiagnostics.AddOwnedTextureBytes(_diagnosticsGeneration,
+                    Light2DDiagnostics.EstimateTextureBytes(texture.width, texture.height, texture.volumeDepth,
+                        texture.graphicsFormat));
                 return true;
             }
             return false;
@@ -113,14 +122,44 @@ namespace Light2D
             ReleaseTexture(ref ObstaclesUpsampledTexture);
             ReleaseTexture(ref LightSourcesTexture);
             ReleaseTexture(ref ObstaclesTexture);
-            ReleaseTexture(ref ScreenBlitTexture);
             ReleaseTexture(ref NormalMapBuffer);
             ReleaseTexture(ref SingleLightSourceTexture);
             ReleaseTexture(ref CameraTargetTexture);
         }
 
+        internal void ReleaseAmbientTextures()
+        {
+            ReleaseTexture(ref AmbientEmissionTexture);
+            ReleaseTexture(ref AmbientTexture);
+            ReleaseTexture(ref PreviousAmbientTexture);
+        }
+
+        internal void ReleaseBlurTexture()
+        {
+            ReleaseTexture(ref BlurredLightTexture);
+        }
+
+        internal void ReleaseAntialiasingTexture()
+        {
+            ReleaseTexture(ref ObstaclesUpsampledTexture);
+        }
+
+        internal void ReleaseNormalMappingTextures()
+        {
+            ReleaseTexture(ref NormalMapBuffer);
+            ReleaseTexture(ref SingleLightSourceTexture);
+        }
+
+        internal void ReleaseCameraTargetTexture()
+        {
+            ReleaseTexture(ref CameraTargetTexture);
+        }
+
         public void Dispose()
         {
+            if (_disposed)
+                return;
+            _disposed = true;
             ReleaseTextures();
             Destroy(ref _ambientLightComputeMaterial);
             Destroy(ref _lightOverlayMaterial);
@@ -130,8 +169,9 @@ namespace Light2D
             Destroy(ref _lightCombiningMaterial);
             Destroy(ref _alphaBlendedMaterial);
             if (_normalMapCamera != null)
-                Util.Destroy(_normalMapCamera.gameObject);
+                Light2DObjectUtility.Destroy(_normalMapCamera.gameObject);
             _normalMapCamera = null;
+            Light2DDiagnostics.UnregisterContext(_diagnosticsGeneration);
         }
 
         private static void EnsureClone(ref Material clone, Material source, string name)
@@ -172,12 +212,15 @@ namespace Light2D
                    left.memoryless == right.memoryless && left.shadowSamplingMode == right.shadowSamplingMode;
         }
 
-        private static void ReleaseTexture(ref RenderTexture texture)
+        private void ReleaseTexture(ref RenderTexture texture)
         {
             if (texture == null)
                 return;
+            Light2DDiagnostics.RemoveOwnedTextureBytes(_diagnosticsGeneration,
+                Light2DDiagnostics.EstimateTextureBytes(texture.width, texture.height, texture.volumeDepth,
+                    texture.graphicsFormat));
             texture.Release();
-            Util.Destroy(texture);
+            Light2DObjectUtility.Destroy(texture);
             texture = null;
         }
 
@@ -185,7 +228,7 @@ namespace Light2D
         {
             if (material == null)
                 return;
-            Util.Destroy(material);
+            Light2DObjectUtility.Destroy(material);
             material = null;
         }
     }

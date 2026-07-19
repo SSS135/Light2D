@@ -164,8 +164,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 44153eb84052de9478b30108f4aa6fd9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   Lifetime: 5
   Light: {fileID: 11446106}
   AlphaGrowTime: 0.5
@@ -259,8 +259,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 61930e16e81db5c43a4ecc22422a0953, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   Color: {r: 0.50507104, g: 1, b: 0.102941155, a: 0.7607843}
   Sprite: {fileID: 21300000, guid: de67f3bc3c6d41f4f9811ec4e3393c09, type: 3}
   SortingOrder: 0

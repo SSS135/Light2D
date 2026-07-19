@@ -11,7 +11,7 @@ namespace Light2D.Tests
     public class UrpRenderingTests
     {
         [UnityTest, Timeout(30000)]
-        public IEnumerator UniversalRendererProducesNonuniformLightOutput()
+        public IEnumerator UniversalRendererProducesAlignedNonSquareTargetTextureOutput()
         {
             RenderPipelineAsset oldDefault = GraphicsSettings.defaultRenderPipeline;
             RenderPipelineAsset oldQuality = QualitySettings.renderPipeline;
@@ -52,7 +52,7 @@ namespace Light2D.Tests
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = Color.white;
                 camera.cullingMask = 0;
-                target = new RenderTexture(96, 96, 0, RenderTextureFormat.ARGB32);
+                target = new RenderTexture(128, 80, 0, RenderTextureFormat.ARGB32);
                 target.Create();
                 camera.targetTexture = target;
 

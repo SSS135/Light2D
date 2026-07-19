@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.RegularExpressions;
 using UnityEditor;
-using UnityEditor.PackageManager;
 using UnityEditor.Rendering;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -18,8 +16,6 @@ namespace Light2D.TestProject.Editor
         private const string GlobalSettingsTypeName = "UnityEngine.Rendering.Universal.UniversalRenderPipelineGlobalSettings, Unity.RenderPipelines.Universal.Runtime";
         private const string GlobalSettingsAssetName = "UniversalRenderPipelineGlobalSettings";
         private const string ShaderGraphTemplatesPath = "Packages/com.unity.shadergraph/GraphTemplates";
-        private const string UrpPackageName = "com.unity.render-pipelines.universal";
-        private const string UrpPackageVersion = "17.4.0";
         private const int Urp174AssetVersion = 10;
         private const ImportAssetOptions SynchronousForceImport = ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate;
         private static readonly string[] UrpShaderGraphResourcePaths =
@@ -30,7 +26,6 @@ namespace Light2D.TestProject.Editor
             "Packages/com.unity.render-pipelines.universal/Shaders/Nature/SpeedTree8_PBRLit.shadergraph",
             "Packages/com.unity.render-pipelines.universal/Shaders/Nature/SpeedTree9_URP.shadergraph"
         };
-        private static readonly Regex ScriptGuidPattern = new Regex(@"m_Script:\s*\{[^}]*guid:\s*([0-9a-f]{32})", RegexOptions.IgnoreCase);
 
         public static void RegenerateGlobalSettings()
         {
@@ -45,32 +40,14 @@ namespace Light2D.TestProject.Editor
             DeleteCopiedGlobalSettings();
             DeleteAssetIfPresent(DefaultVolumeProfilePath);
 
-            try
-            {
-                var settings = RenderPipelineGlobalSettingsUtils.Create(GetGlobalSettingsType(), GlobalSettingsPath);
-                if (settings == null)
-                    throw new InvalidOperationException($"URP failed to create global settings at '{GlobalSettingsPath}'.");
+            var settings = RenderPipelineGlobalSettingsUtils.Create(GetGlobalSettingsType(), GlobalSettingsPath);
+            if (settings == null)
+                throw new InvalidOperationException(
+                    $"URP failed to create global settings at '{GlobalSettingsPath}'. " +
+                    "This host has no external fallback; resolve the Unity/ShaderGraph import defect described in Documentation~/TESTING.md and rerun.");
 
-                RegisterAndValidate(settings);
-                Debug.Log($"Generated and registered host URP global settings at '{GlobalSettingsPath}'.");
-            }
-            catch (Exception generationFailure)
-            {
-                Debug.LogWarning($"URP local global-settings generation failed; trying the validated {UrpPackageVersion} ColorWars resources.\n{generationFailure}");
-
-                try
-                {
-                    CopyValidatedFallbackAssets();
-                    var settings = (RenderPipelineGlobalSettings)RequireMainAsset(GlobalSettingsPath, GetGlobalSettingsType());
-
-                    RegisterAndValidate(settings);
-                    Debug.Log($"Imported and registered validated URP {UrpPackageVersion} host global settings from ColorWars.");
-                }
-                catch (Exception fallbackFailure)
-                {
-                    throw new AggregateException("URP local generation and the validated ColorWars fallback both failed.", generationFailure, fallbackFailure);
-                }
-            }
+            RegisterAndValidate(settings);
+            Debug.Log($"Generated and registered host URP global settings at '{GlobalSettingsPath}'.");
         }
 
         public static void ValidateGlobalSettings()
@@ -143,96 +120,6 @@ namespace Light2D.TestProject.Editor
 
             foreach (var path in UrpShaderGraphResourcePaths)
                 RequireMainAsset(path, typeof(Shader));
-        }
-
-        private static void CopyValidatedFallbackAssets()
-        {
-            GraphicsSettings.defaultRenderPipeline = null;
-            EditorGraphicsSettings.SetRenderPipelineGlobalSettingsAsset<UniversalRenderPipeline>(null);
-            DeleteCopiedGlobalSettings();
-            DeleteAssetIfPresent(DefaultVolumeProfilePath);
-
-            var sourceAssetsDirectory = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "..", "ColorWars", "Assets"));
-            var sourceManifestPath = Path.GetFullPath(Path.Combine(sourceAssetsDirectory, "..", "Packages", "manifest.json"));
-            var sourceGlobalSettingsPath = Path.Combine(sourceAssetsDirectory, Path.GetFileName(GlobalSettingsPath));
-            var sourceVolumeProfilePath = Path.Combine(sourceAssetsDirectory, Path.GetFileName(DefaultVolumeProfilePath));
-
-            ValidateFallbackVersion(sourceManifestPath);
-            ValidateFallbackAssets(sourceGlobalSettingsPath, sourceVolumeProfilePath);
-
-            CopyAssetAndMeta(sourceGlobalSettingsPath, GlobalSettingsPath);
-            CopyAssetAndMeta(sourceVolumeProfilePath, DefaultVolumeProfilePath);
-            AssetDatabase.Refresh(SynchronousForceImport);
-            AssetDatabase.ImportAsset(GlobalSettingsPath, SynchronousForceImport);
-            AssetDatabase.ImportAsset(DefaultVolumeProfilePath, SynchronousForceImport);
-            RequireMainAsset(GlobalSettingsPath, GetGlobalSettingsType());
-            RequireMainAsset(DefaultVolumeProfilePath, typeof(VolumeProfile));
-        }
-
-        private static void ValidateFallbackVersion(string sourceManifestPath)
-        {
-            var hostPackage = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(UniversalRenderPipeline).Assembly);
-            if (hostPackage == null || hostPackage.name != UrpPackageName || hostPackage.version != UrpPackageVersion)
-                throw new InvalidOperationException($"The host must resolve {UrpPackageName} {UrpPackageVersion} before using fallback resources.");
-
-            if (!File.Exists(sourceManifestPath))
-                throw new FileNotFoundException("ColorWars package manifest was not found.", sourceManifestPath);
-
-            var manifest = File.ReadAllText(sourceManifestPath);
-            var versionMatch = Regex.Match(manifest, $"\"{Regex.Escape(UrpPackageName)}\"\\s*:\\s*\"([^\"]+)\"");
-            if (!versionMatch.Success || versionMatch.Groups[1].Value != UrpPackageVersion)
-                throw new InvalidOperationException($"ColorWars does not declare {UrpPackageName} {UrpPackageVersion}.");
-        }
-
-        private static void ValidateFallbackAssets(string sourceGlobalSettingsPath, string sourceVolumeProfilePath)
-        {
-            RequireFile(sourceGlobalSettingsPath);
-            RequireFile(sourceGlobalSettingsPath + ".meta");
-            RequireFile(sourceVolumeProfilePath);
-            RequireFile(sourceVolumeProfilePath + ".meta");
-
-            var globalSettings = File.ReadAllText(sourceGlobalSettingsPath);
-            var volumeProfile = File.ReadAllText(sourceVolumeProfilePath);
-            var volumeMeta = File.ReadAllText(sourceVolumeProfilePath + ".meta");
-            var volumeGuid = Regex.Match(volumeMeta, @"(?m)^guid:\s*([0-9a-f]{32})\s*$", RegexOptions.IgnoreCase);
-
-            if (!Regex.IsMatch(globalSettings, $@"(?m)^\s*m_AssetVersion:\s*{Urp174AssetVersion}\s*$") ||
-                !volumeGuid.Success ||
-                !Regex.IsMatch(globalSettings, $@"guid:\s*{Regex.Escape(volumeGuid.Groups[1].Value)}\b", RegexOptions.IgnoreCase) ||
-                !Regex.IsMatch(volumeProfile, @"(?m)^\s*m_Name:\s*DefaultVolumeProfile\s*$"))
-                throw new InvalidOperationException("ColorWars fallback assets are not a matching URP 17.4 global-settings/default-volume pair.");
-
-            var scriptGuids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            AddScriptGuids(globalSettings, scriptGuids);
-            AddScriptGuids(volumeProfile, scriptGuids);
-            if (scriptGuids.Count == 0)
-                throw new InvalidOperationException("ColorWars fallback assets contain no script references to validate.");
-
-            foreach (var guid in scriptGuids)
-            {
-                var path = AssetDatabase.GUIDToAssetPath(guid);
-                if (string.IsNullOrEmpty(path) || AssetDatabase.LoadAssetAtPath<MonoScript>(path) == null)
-                    throw new InvalidOperationException($"ColorWars fallback script GUID '{guid}' does not resolve in this host.");
-            }
-        }
-
-        private static void AddScriptGuids(string assetText, HashSet<string> scriptGuids)
-        {
-            foreach (Match match in ScriptGuidPattern.Matches(assetText))
-                scriptGuids.Add(match.Groups[1].Value);
-        }
-
-        private static void RequireFile(string path)
-        {
-            if (!File.Exists(path))
-                throw new FileNotFoundException("Required ColorWars fallback file was not found.", path);
-        }
-
-        private static void CopyAssetAndMeta(string sourcePath, string destinationAssetPath)
-        {
-            var destinationPath = Path.GetFullPath(Path.Combine(Application.dataPath, "..", destinationAssetPath));
-            FileUtil.CopyFileOrDirectory(sourcePath, destinationPath);
-            FileUtil.CopyFileOrDirectory(sourcePath + ".meta", destinationPath + ".meta");
         }
 
         private static UnityEngine.Object RequireMainAsset(string path, Type expectedType)

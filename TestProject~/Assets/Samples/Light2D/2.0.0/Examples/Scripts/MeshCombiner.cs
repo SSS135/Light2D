@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using UnityEngine;
 
 namespace Light2D.Examples
@@ -13,30 +11,48 @@ namespace Light2D.Examples
     /// </summary>
     public class MeshCombiner : MonoBehaviour
     {
-        private bool _isDone = false;
+        private Coroutine _combineRoutine;
+        private bool _isDone;
 
-        void OnEnable()
+        private void OnEnable()
         {
-            if (!_isDone)
-            {
-                StopCoroutine("Combine");
-                StartCoroutine(Combine());
-            }
+            if (!_isDone && _combineRoutine == null)
+                _combineRoutine = StartCoroutine(Combine());
+        }
+
+        private void OnDisable()
+        {
+            if (_combineRoutine == null)
+                return;
+
+            StopCoroutine(_combineRoutine);
+            _combineRoutine = null;
         }
 
         private IEnumerator Combine()
         {
             yield return null;
-            var groups = GetComponentsInChildren<Renderer>()
-                .Where(r => r.GetComponent<MeshRenderer>() != null && r.GetComponent<MeshFilter>() != null &&
-                     r.GetComponent<MeshFilter>().sharedMesh != null)
-                .GroupBy(r => new GroupKey
+
+            var groups = new Dictionary<GroupKey, List<MeshPart>>();
+            foreach (var renderer in GetComponentsInChildren<MeshRenderer>())
+            {
+                if (!renderer.TryGetComponent(out MeshFilter filter) || filter.sharedMesh == null)
+                    continue;
+
+                var key = new GroupKey
                 {
-                    Material = r.sharedMaterial,
-                    SortingOrder = r.sortingOrder,
-                    Layer = r.gameObject.layer
-                })
-                .ToList();
+                    Material = renderer.sharedMaterial,
+                    SortingOrder = renderer.sortingOrder,
+                    Layer = renderer.gameObject.layer
+                };
+                if (!groups.TryGetValue(key, out var group))
+                {
+                    group = new List<MeshPart>();
+                    groups.Add(key, group);
+                }
+
+                group.Add(new MeshPart(renderer, filter));
+            }
 
             var vertices = new List<Vector3>(1024);
             var triangles = new List<int>(1024);
@@ -45,20 +61,17 @@ namespace Light2D.Examples
             var colors = new List<Color>(1024);
             var tangents = new List<Vector4>(1024);
 
-            foreach (var group in groups)
+            foreach (var groupEntry in groups)
             {
                 var obj = new GameObject("Combined Mesh");
-                obj.transform.parent = transform;
-                obj.transform.localPosition = Vector3.zero;
-                obj.transform.localRotation = Quaternion.identity;
-                obj.transform.localScale = Vector3.one;
-                obj.layer = group.Key.Layer;
+                obj.transform.SetParent(transform, false);
+                obj.layer = groupEntry.Key.Layer;
 
                 var meshRenderer = obj.AddComponent<MeshRenderer>();
-                meshRenderer.material = (Material)Instantiate(group.Key.Material);
-                meshRenderer.sortingOrder = group.Key.SortingOrder;
+                meshRenderer.sharedMaterial = groupEntry.Key.Material;
+                meshRenderer.sortingOrder = groupEntry.Key.SortingOrder;
 
-                var firstMesh = group.First().GetComponent<MeshFilter>().mesh;
+                var firstMesh = groupEntry.Value[0].Filter.sharedMesh;
 
                 bool useUv0 = firstMesh.uv != null && firstMesh.uv.Length != 0;
                 bool useUv1 = firstMesh.uv2 != null && firstMesh.uv2.Length != 0;
@@ -72,32 +85,47 @@ namespace Light2D.Examples
                 if (useUv1) uv1.Clear();
                 if (useColors) colors.Clear();
 
-                foreach (var meshPart in group)
+                foreach (var meshPart in groupEntry.Value)
                 {
-                    var filter = meshPart.GetComponent<MeshFilter>();
-                    var smallMesh = filter.mesh;
+                    var filter = meshPart.Filter;
+                    var smallMesh = filter.sharedMesh;
                     var startVertexIndex = vertices.Count;
-                    vertices.AddRange(smallMesh.vertices.Select(v => filter.transform.TransformPoint(v)));
-                    triangles.AddRange(smallMesh.triangles.Select(t => t + startVertexIndex));
+                    foreach (var vertex in smallMesh.vertices)
+                        vertices.Add(transform.InverseTransformPoint(filter.transform.TransformPoint(vertex)));
+                    foreach (var triangle in smallMesh.triangles)
+                        triangles.Add(triangle + startVertexIndex);
 
-                    var localTangents = smallMesh.tangents == null || smallMesh.tangents.Length == 0
-                        ? Enumerable.Repeat(new Vector4(1, 0), smallMesh.vertexCount)
-                        : smallMesh.tangents;
-                    tangents.AddRange(localTangents.Select(t => (Vector4)filter.transform.TransformVector(t)));
+                    var localTangents = smallMesh.tangents;
+                    if (localTangents.Length == 0)
+                    {
+                        for (var index = 0; index < smallMesh.vertexCount; index++)
+                            tangents.Add(new Vector4(1, 0, 0, 1));
+                    }
+                    else
+                    {
+                        foreach (var tangent in localTangents)
+                        {
+                            var transformed = transform.InverseTransformVector(filter.transform.TransformVector(tangent));
+                            tangents.Add(new Vector4(transformed.x, transformed.y, transformed.z, tangent.w));
+                        }
+                    }
 
                     if (useUv0) uv0.AddRange(smallMesh.uv);
                     if (useUv1) uv1.AddRange(smallMesh.uv2);
                     if (useColors) colors.AddRange(smallMesh.colors);
 
-                    Destroy(meshPart);
+                    var customSprite = meshPart.Renderer.GetComponent<CustomSprite>();
+                    Destroy(meshPart.Renderer);
                     Destroy(filter);
-                    var customSprite = meshPart.GetComponent<CustomSprite>();
                     if (customSprite != null)
                         Destroy(customSprite);
                 }
 
                 var meshFilter = obj.AddComponent<MeshFilter>();
-                var mesh = meshFilter.mesh = new Mesh();
+                var mesh = new Mesh { name = $"{name} Combined Mesh" };
+                meshFilter.sharedMesh = mesh;
+                // GeneratedMeshOwner destroys the generated mesh together with the combined-mesh object.
+                obj.AddComponent<GeneratedMeshOwner>().Mesh = mesh;
 
                 mesh.vertices = vertices.ToArray();
                 mesh.triangles = triangles.ToArray();
@@ -105,9 +133,23 @@ namespace Light2D.Examples
                 if (useUv0) mesh.uv = uv0.ToArray();
                 if (useUv1) mesh.uv2 = uv1.ToArray();
                 if (useColors) mesh.colors = colors.ToArray();
+                mesh.RecalculateBounds();
             }
 
             _isDone = true;
+            _combineRoutine = null;
+        }
+
+        private readonly struct MeshPart
+        {
+            public readonly MeshRenderer Renderer;
+            public readonly MeshFilter Filter;
+
+            public MeshPart(MeshRenderer renderer, MeshFilter filter)
+            {
+                Renderer = renderer;
+                Filter = filter;
+            }
         }
 
         struct GroupKey : IEquatable<GroupKey>
@@ -121,36 +163,9 @@ namespace Light2D.Examples
                 return Equals(Material, other.Material) && SortingOrder == other.SortingOrder && Layer == other.Layer;
             }
 
-            private sealed class MaterialSortingOrderLayerEqualityComparer : IEqualityComparer<GroupKey>
-            {
-                public bool Equals(GroupKey x, GroupKey y)
-                {
-                    return Equals(x.Material, y.Material) && x.SortingOrder == y.SortingOrder && x.Layer == y.Layer;
-                }
-
-                public int GetHashCode(GroupKey obj)
-                {
-                    unchecked
-                    {
-                        int hashCode = (obj.Material != null ? obj.Material.GetHashCode() : 0);
-                        hashCode = (hashCode*397) ^ obj.SortingOrder;
-                        hashCode = (hashCode*397) ^ obj.Layer;
-                        return hashCode;
-                    }
-                }
-            }
-
-            private static readonly IEqualityComparer<GroupKey> MaterialSortingOrderLayerComparerInstance = new MaterialSortingOrderLayerEqualityComparer();
-
-            public static IEqualityComparer<GroupKey> MaterialSortingOrderLayerComparer
-            {
-                get { return MaterialSortingOrderLayerComparerInstance; }
-            }
-
             public override bool Equals(object obj)
             {
-                if (ReferenceEquals(null, obj)) return false;
-                return obj is GroupKey && Equals((GroupKey) obj);
+                return obj is GroupKey other && Equals(other);
             }
 
             public override int GetHashCode()

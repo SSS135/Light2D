@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
-using UnityEditor.Build;
 using UnityEngine;
 
 namespace Light2D
@@ -18,10 +16,11 @@ namespace Light2D
         [MenuItem("GameObject/Light2D/Light Obstacle", false, 6)]
         public static void CreateLightObstacle()
         {
-            var baseObjects = Selection.gameObjects.Select(o => o.GetComponent<Renderer>()).Where(r => r != null).ToList();
+            var baseObjects = Selection.gameObjects.Select(o => o.GetComponent<Renderer>())
+                .Where(IsSupportedObstacleRenderer).ToList();
             if (baseObjects.Count == 0)
             {
-                Debug.LogError("Can't create light obstacle from selected object. You need to select any object with renderer attached to it to create light obstacle.");
+                Debug.LogError("Can't create a light obstacle. Select an object with a SpriteRenderer, or a MeshRenderer with a MeshFilter.");
                 return;
             }
 
@@ -39,6 +38,8 @@ namespace Light2D
 
                 foreach (var obstacleSprite in obstacleObj.GetComponents<LightObstacleSprite>())
                     Undo.DestroyObjectImmediate(obstacleSprite);
+                foreach (var obstacleMesh in obstacleObj.GetComponents<LightObstacleMesh>())
+                    Undo.DestroyObjectImmediate(obstacleMesh);
 
                 Undo.SetTransformParent(obstacleObj.transform, renderer.transform, "Parent Light Obstacle");
                 Undo.RecordObject(obstacleObj.transform, "Reset Light Obstacle Transform");
@@ -46,7 +47,22 @@ namespace Light2D
                 obstacleObj.transform.localRotation = Quaternion.identity;
                 obstacleObj.transform.localScale = Vector3.one;
 
-                Undo.AddComponent<LightObstacleSprite>(obstacleObj);
+                if (renderer is SpriteRenderer)
+                {
+                    var obstacle = Undo.AddComponent<LightObstacleSprite>(obstacleObj);
+                    obstacle.GameSpriteRenderer = renderer;
+                }
+                else
+                {
+                    var obstacle = Undo.AddComponent<LightObstacleMesh>(obstacleObj);
+                    // Parity with the sprite path: CustomSprite.Color defaults to white, while the
+                    // runtime LightObstacleMesh default stays (0,0,0,0) for serialized-scene compatibility.
+                    obstacle.MultiplicativeColor = new Color32(255, 255, 255, 255);
+                }
+
+                var systems = LightingSystem.Instances;
+                if (systems.Count == 1)
+                    obstacleObj.layer = systems[0].LightObstaclesLayer;
                 createdObjects.Add(obstacleObj);
             }
 
@@ -57,7 +73,7 @@ namespace Light2D
         [MenuItem("GameObject/Light2D/Light Obstacle", true)]
         private static bool CanCreateLightObstacle()
         {
-            return Selection.gameObjects.Any(o => o.GetComponent<Renderer>() != null);
+            return Selection.gameObjects.Any(o => IsSupportedObstacleRenderer(o.GetComponent<Renderer>()));
         }
 
         [MenuItem("GameObject/Light2D/Light Source", false, 6)]
@@ -70,37 +86,16 @@ namespace Light2D
             var light = Undo.AddComponent<LightSprite>(obj);
             var materialPath = AssetDatabase.GUIDToAssetPath("5d8645bc2e5501a4ebd138db5aa609bd");
             light.Material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
-            light.Sprite = Resources.Load<Sprite>("DefaultLight");
+            light.Sprite = AssetDatabase.LoadAssetAtPath<Sprite>(
+                "Packages/com.sss13594.light2d/Runtime/Resources/DefaultLight.psd");
             light.Color = new Color(1, 1, 1, 0.5f);
             Selection.activeGameObject = obj;
         }
 
-        [MenuItem("GameObject/Light2D/Remove Obsolete 2DTK Support", false, 6)]
-        public static void Disable2DToolkitSupport()
+        private static bool IsSupportedObstacleRenderer(Renderer renderer)
         {
-            foreach (var target in GetNamedBuildTargets())
-                UndefineSymbol("LIGHT2D_2DTK", target);
-        }
-
-        private static IEnumerable<NamedBuildTarget> GetNamedBuildTargets()
-        {
-            var targets = new HashSet<NamedBuildTarget>();
-            foreach (BuildTargetGroup group in Enum.GetValues(typeof(BuildTargetGroup)))
-            {
-                var target = NamedBuildTarget.FromBuildTargetGroup(group);
-                if (target != NamedBuildTarget.Unknown)
-                    targets.Add(target);
-            }
-
-            return targets;
-        }
-
-        private static void UndefineSymbol(string symbol, NamedBuildTarget target)
-        {
-            PlayerSettings.GetScriptingDefineSymbols(target, out var defines);
-            var updatedDefines = defines.Where(define => define != symbol).ToArray();
-            if (updatedDefines.Length != defines.Length)
-                PlayerSettings.SetScriptingDefineSymbols(target, updatedDefines);
+            return renderer is SpriteRenderer ||
+                   renderer is MeshRenderer && renderer.GetComponent<MeshFilter>() != null;
         }
     }
 }

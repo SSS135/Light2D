@@ -13,7 +13,8 @@ Version 2.0.0 targets **Unity 6000.4** and is developed with **Unity 6000.4.7f1*
 - [Legacy `Assets/Light2D` migration](Documentation~/MIGRATION.md)
 - [Troubleshooting](Documentation~/TROUBLESHOOTING.md)
 - [Development and testing](Documentation~/TESTING.md)
-- [Changelog](Documentation~/CHANGELOG.md)
+- [Diagnostics and benchmarking](Documentation~/BENCHMARKING.md)
+- [Changelog](CHANGELOG.md)
 - [License](LICENSE.md)
 
 ## Install
@@ -84,7 +85,8 @@ Current limitations include:
 - `Affect Only This Camera` is a Built-in-only composition mode and is incompatible with a source camera target texture. In URP, the feature already runs per camera.
 - URP skips preview cameras, reflection cameras, and frames rendering directly to the active back buffer. The feature requests an intermediate color texture.
 - Very small obstacles can disappear at low light-texture resolutions. Off-screen lights can clip if the lighting camera margin is too small.
-- The package has 17 EditMode tests, two Built-in behavioral PlayMode tests, and a URP PlayMode test. The EditMode and Built-in PlayMode coverage has been exercised on the development host. URP behavior remains unverified because a Unity 6000.4.7f1/ShaderGraph 17.4 global-settings import defect prevents a clean URP validation environment.
+- XR rendering and URP camera stacks (Overlay cameras, or Base cameras with an active Overlay stack) are not supported and are skipped safely with one warning per camera. Independent URP Base cameras, including split screen, are supported.
+- The package ships EditMode suites for contracts, lifecycle and resource release, components, diagnostics, editor workflows, package integrity, shader import, and URP feature setup, plus two Built-in behavioral PlayMode tests and a URP PlayMode test. EditMode and Built-in PlayMode coverage has been exercised on the development host. URP behavior remains unverified because a Unity 6000.4.7f1/ShaderGraph 17.4 global-settings import defect prevents a clean URP validation environment.
 
 ## Package Layout
 
@@ -93,11 +95,16 @@ Current limitations include:
 | `Runtime/` | Components, materials, resources, shaders, and the URP renderer feature |
 | `Editor/` | Creation tools, inspectors, renderer-feature installer, and migration utility |
 | `Samples~/Examples/` | Importable demonstration scenes and assets |
-| `Documentation~/` | Package documentation, changelog, and illustrations |
+| `Documentation~/` | Package documentation and illustrations |
+| `CHANGELOG.md` | Canonical package changelog |
 | `Tests/` | EditMode and PlayMode test assemblies |
 | `TestProject~/` | Development host, test automation, and URP sentinel; excluded from the UPM payload by its trailing `~` |
 
 The package name is `com.sss13594.light2d`. Runtime types are in the `Light2D` namespace and compile into `Light2D.Runtime`; editor tooling compiles into `Light2D.Editor`.
+
+## Public API Policy
+
+The supported public runtime API is limited to the scene components (`LightingSystem`, `LightSprite`, `CustomSprite`, `LightObstacleSprite`, `LightObstacleMesh`, `LightObstacleGenerator`, `LightingSystemPrefabConfig`), the `Light2DUniversalRendererFeature`, the diagnostics surface (`Light2DProfiling`, `Light2DDiagnostics`, `Light2DFrameMetrics`), and the `Light2DPipeline` readiness classification exposed through `LightingSystem.ActivePipeline` and `LightingSystem.IsRenderingReady`. Serialized field names on these components are compatibility contracts and are preserved across releases. Everything else is internal implementation and may change without notice; a contract test enforces the exported type list. The legacy `Util` and `Point2` helpers were removed in 2.0.0.
 
 ## License
 

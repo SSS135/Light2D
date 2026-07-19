@@ -87,20 +87,22 @@ namespace Light2D
             if (!TryGetRendererData(camera, out var rendererData))
                 throw new InvalidOperationException("The camera must use a Universal Renderer or 2D Renderer from the current URP asset.");
 
-            var assetPath = AssetDatabase.GetAssetPath(rendererData);
-            if (string.IsNullOrEmpty(assetPath) || !EditorUtility.IsPersistent(rendererData))
-                throw new InvalidOperationException("The camera's renderer data must be a persistent asset before a renderer feature can be installed.");
-            if (!AssetDatabase.IsOpenForEdit(rendererData, StatusQueryOptions.UseCachedIfPossible))
-                throw new InvalidOperationException($"Renderer data '{assetPath}' is read-only. Make it editable before installing Light2D.");
+            return Install(rendererData);
+        }
+
+        internal static Light2DUniversalRendererFeature Install(ScriptableRendererData rendererData)
+        {
+            ValidateEditableRendererData(rendererData, "installed");
 
             var serializedRenderer = new SerializedObject(rendererData);
             serializedRenderer.Update();
-            var features = serializedRenderer.FindProperty(FeatureListProperty);
-            var featureMap = serializedRenderer.FindProperty(FeatureMapProperty);
+            GetFeatureProperties(serializedRenderer, out var features, out var featureMap);
+            RemoveNullEntries(features);
             var matches = FindFeatureIndices(features);
             var removedFeatures = new List<Light2DUniversalRendererFeature>();
 
             Undo.SetCurrentGroupName("Install Light2D Renderer Feature");
+            Undo.RecordObject(rendererData, "Install Light2D Renderer Feature");
             Light2DUniversalRendererFeature installedFeature;
             if (matches.Count == 0)
             {
@@ -108,12 +110,9 @@ namespace Light2D
                 installedFeature.name = nameof(Light2DUniversalRendererFeature);
                 Undo.RegisterCreatedObjectUndo(installedFeature, "Install Light2D Renderer Feature");
                 AssetDatabase.AddObjectToAsset(installedFeature, rendererData);
-                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(installedFeature, out _, out long localId);
 
                 features.arraySize++;
                 features.GetArrayElementAtIndex(features.arraySize - 1).objectReferenceValue = installedFeature;
-                featureMap.arraySize++;
-                featureMap.GetArrayElementAtIndex(featureMap.arraySize - 1).longValue = localId;
             }
             else
             {
@@ -124,10 +123,11 @@ namespace Light2D
                     var featureIndex = matches[index];
                     removedFeatures.Add((Light2DUniversalRendererFeature)features
                         .GetArrayElementAtIndex(featureIndex).objectReferenceValue);
-                    DeleteFeatureAt(features, featureMap, featureIndex);
+                    DeleteFeatureAt(features, featureIndex);
                 }
             }
 
+            RebuildFeatureMap(features, featureMap);
             serializedRenderer.ApplyModifiedProperties();
             foreach (var removedFeature in removedFeatures)
                 Undo.DestroyObjectImmediate(removedFeature);
@@ -141,28 +141,35 @@ namespace Light2D
             if (!TryGetRendererData(camera, out var rendererData))
                 return 0;
 
+            return Remove(rendererData);
+        }
+
+        internal static int Remove(ScriptableRendererData rendererData)
+        {
+            ValidateEditableRendererData(rendererData, "removed");
             var serializedRenderer = new SerializedObject(rendererData);
             serializedRenderer.Update();
-            var features = serializedRenderer.FindProperty(FeatureListProperty);
-            var featureMap = serializedRenderer.FindProperty(FeatureMapProperty);
+            GetFeatureProperties(serializedRenderer, out var features, out var featureMap);
+            RemoveNullEntries(features);
             var matches = FindFeatureIndices(features);
             var removedFeatures = new List<Light2DUniversalRendererFeature>();
 
             Undo.SetCurrentGroupName("Remove Light2D Renderer Feature");
+            Undo.RecordObject(rendererData, "Remove Light2D Renderer Feature");
             for (var index = matches.Count - 1; index >= 0; index--)
             {
                 var featureIndex = matches[index];
                 removedFeatures.Add((Light2DUniversalRendererFeature)features
                     .GetArrayElementAtIndex(featureIndex).objectReferenceValue);
-                DeleteFeatureAt(features, featureMap, featureIndex);
+                DeleteFeatureAt(features, featureIndex);
             }
 
+            RebuildFeatureMap(features, featureMap);
             serializedRenderer.ApplyModifiedProperties();
             foreach (var removedFeature in removedFeatures)
                 Undo.DestroyObjectImmediate(removedFeature);
 
-            if (removedFeatures.Count > 0)
-                SaveRendererData(rendererData);
+            SaveRendererData(rendererData);
             return removedFeatures.Count;
         }
 
@@ -234,11 +241,51 @@ namespace Light2D
             return indices;
         }
 
-        private static void DeleteFeatureAt(SerializedProperty features, SerializedProperty featureMap, int index)
+        private static void DeleteFeatureAt(SerializedProperty features, int index)
         {
             features.GetArrayElementAtIndex(index).objectReferenceValue = null;
             features.DeleteArrayElementAtIndex(index);
-            featureMap.DeleteArrayElementAtIndex(index);
+        }
+
+        private static void RemoveNullEntries(SerializedProperty features)
+        {
+            for (var index = features.arraySize - 1; index >= 0; index--)
+            {
+                if (features.GetArrayElementAtIndex(index).objectReferenceValue == null)
+                    features.DeleteArrayElementAtIndex(index);
+            }
+        }
+
+        private static void RebuildFeatureMap(SerializedProperty features, SerializedProperty featureMap)
+        {
+            featureMap.arraySize = features.arraySize;
+            for (var index = 0; index < features.arraySize; index++)
+            {
+                var feature = features.GetArrayElementAtIndex(index).objectReferenceValue;
+                if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature, out _, out long localId))
+                    throw new InvalidOperationException($"Renderer feature '{feature.name}' is not a persistent sub-asset.");
+                featureMap.GetArrayElementAtIndex(index).longValue = localId;
+            }
+        }
+
+        private static void GetFeatureProperties(SerializedObject serializedRenderer,
+            out SerializedProperty features, out SerializedProperty featureMap)
+        {
+            features = serializedRenderer.FindProperty(FeatureListProperty);
+            featureMap = serializedRenderer.FindProperty(FeatureMapProperty);
+            if (features == null || !features.isArray || featureMap == null || !featureMap.isArray)
+                throw new InvalidOperationException("This URP version does not expose compatible renderer-feature serialization properties.");
+        }
+
+        private static void ValidateEditableRendererData(ScriptableRendererData rendererData, string operation)
+        {
+            if (!IsSupportedRenderer(rendererData))
+                throw new InvalidOperationException("Renderer data must be a Universal Renderer or 2D Renderer.");
+            var assetPath = AssetDatabase.GetAssetPath(rendererData);
+            if (string.IsNullOrEmpty(assetPath) || !EditorUtility.IsPersistent(rendererData))
+                throw new InvalidOperationException($"Renderer data must be a persistent asset before a feature can be {operation}.");
+            if (!AssetDatabase.IsOpenForEdit(rendererData, StatusQueryOptions.UseCachedIfPossible))
+                throw new InvalidOperationException($"Renderer data '{assetPath}' is read-only. Make it editable before changing Light2D.");
         }
 
         private static void SaveRendererData(ScriptableRendererData rendererData)

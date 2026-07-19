@@ -51,6 +51,8 @@ Assets/Data/FMOD/.cache/
 /TestProject~/ProjectSettings/*.meta
 /TestProject~/*.log
 /TestProject~/*.log.meta
+/TestProject~/*-results.xml
+/TestProject~/*-results.xml.meta
 /TestProject~/*.csproj
 /TestProject~/*.csproj.meta
 /TestProject~/*.unityproj
@@ -65,3 +67,6 @@ Assets/Data/FMOD/.cache/
 /TestProject~/Builds.meta
 /TestProject~/Assets/InitTestScene*
 /TestProject~/Assets/Plugins/NuGet/
+
+# Local planning scratch
+/.codex/

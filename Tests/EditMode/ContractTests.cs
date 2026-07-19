@@ -1,66 +1,122 @@
 using System;
-using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
+using Object = UnityEngine.Object;
 
 namespace Light2D.Tests
 {
     public class ContractTests
     {
         [Test]
-        public void Point2_EqualityArithmeticAndConversionsAreStable()
+        public void PipelineClassificationDistinguishesBuiltInUrpAndUnsupportedPipelines()
         {
-            var point = new Point2(3, -2);
+            Assert.That(LightingSystem.ClassifyPipeline(null), Is.EqualTo(Light2DPipeline.BuiltIn));
 
-            Assert.That(point, Is.EqualTo(new Point2(3, -2)));
-            Assert.That(point.GetHashCode(), Is.EqualTo(new Point2(3, -2).GetHashCode()));
-            Assert.That(point + new Point2(2, 5), Is.EqualTo(new Point2(5, 3)));
-            Assert.That(point - new Point2(1, 1), Is.EqualTo(new Point2(2, -3)));
-            Assert.That(point * 2, Is.EqualTo(new Point2(6, -4)));
-            Assert.That(point / 2, Is.EqualTo(new Point2(1, -1)));
-            Assert.That((Vector2)point, Is.EqualTo(new Vector2(3, -2)));
-            Assert.That((Vector3)point, Is.EqualTo(new Vector3(3, -2, 0)));
-            Assert.That(point.ToString(), Is.EqualTo("(3, -2)"));
-        }
-
-        [Test]
-        public void Point2_FloorPreservesLegacyTruncationAndRoundUsesUnityRounding()
-        {
-            Assert.That(Point2.Floor(new Vector2(-1.9f, 2.9f)), Is.EqualTo(new Point2(-1, 2)));
-            Assert.That(Point2.Round(-1.6f, 2.6f), Is.EqualTo(new Point2(-2, 3)));
-            Assert.That(Point2.zero, Is.EqualTo(new Point2(0, 0)));
-            Assert.That(Point2.one, Is.EqualTo(new Point2(1, 1)));
-        }
-
-        [Test]
-        public void Util_VectorAngleAndCollectionContractsAreStable()
-        {
-            Assert.That(Util.ClampAngle(270), Is.EqualTo(-90).Within(0.0001f));
-            Assert.That(Util.Cross(Vector2.right, Vector2.up), Is.EqualTo(1).Within(0.0001f));
-            Assert.That(Vector2.right.Rotate90(), Is.EqualTo(Vector2.up));
-            Assert.That(Vector2.up.AngleZ(), Is.EqualTo(0).Within(0.0001f));
-            Assert.That(Vector2.right.AngleZ(), Is.EqualTo(-90).Within(0.0001f));
-            Assert.That(new Vector2(4, 6).Div(new Vector2(2, 3)), Is.EqualTo(new Vector2(2, 2)));
-
-            var values = new List<int> { 3, 1, 2 };
-            Assert.That(values.IndexOfMin(value => value), Is.EqualTo(1));
-            Assert.That(values.MinBy(value => value), Is.EqualTo(1));
-            Assert.That(Array.Empty<int>().MinByOrDefault(value => value), Is.EqualTo(0));
-            Assert.Throws<ArgumentException>(() => Array.Empty<int>().MinBy(value => value));
-        }
-
-        [Test]
-        public void Util_SafeBackwardIterationAllowsRemoval()
-        {
-            var values = new List<int> { 0, 1, 2, 3 };
-
-            values.SafeIterateBackward((value, index) =>
+            var urpAsset = ScriptableObject.CreateInstance<UniversalRenderPipelineAsset>();
+            var unsupportedAsset = ScriptableObject.CreateInstance<UnsupportedPipelineAsset>();
+            try
             {
-                if ((value & 1) == 0)
-                    values.RemoveAt(index);
-            });
+                Assert.That(LightingSystem.ClassifyPipeline(urpAsset),
+                    Is.EqualTo(Light2DPipeline.UniversalRenderPipeline));
+                Assert.That(LightingSystem.ClassifyPipeline(unsupportedAsset),
+                    Is.EqualTo(Light2DPipeline.UnsupportedScriptableRenderPipeline));
+                Assert.That(LightingSystem.ActivePipeline,
+                    Is.EqualTo(LightingSystem.ClassifyPipeline(GraphicsSettings.currentRenderPipeline)));
+            }
+            finally
+            {
+                Object.DestroyImmediate(urpAsset);
+                Object.DestroyImmediate(unsupportedAsset);
+            }
+        }
 
-            Assert.That(values, Is.EqualTo(new[] { 1, 3 }));
+        [Test]
+        public void LegacyUtilityTypesAreRemovedFromTheRuntimeAssembly()
+        {
+            var runtimeAssembly = typeof(LightingSystem).Assembly;
+            Assert.That(runtimeAssembly.GetType("Light2D.Util"), Is.Null);
+            Assert.That(runtimeAssembly.GetType("Light2D.Point2"), Is.Null);
+            Assert.That(runtimeAssembly.GetType("Light2D.ReadOnlyAttribute"), Is.Null);
+        }
+
+        [Test]
+        public void RuntimeAssemblyExposesOnlyApprovedPublicTypes()
+        {
+            string[] approvedPublicTypes =
+            {
+                "Light2D.CustomSprite",
+                "Light2D.Light2DDiagnostics",
+                "Light2D.Light2DFrameMetrics",
+                "Light2D.Light2DPipeline",
+                "Light2D.Light2DProfiling",
+                "Light2D.Light2DUniversalRendererFeature",
+                "Light2D.LightObstacleGenerator",
+                "Light2D.LightObstacleMesh",
+                "Light2D.LightObstacleSprite",
+                "Light2D.LightSprite",
+                "Light2D.LightingSystem",
+                "Light2D.LightingSystemPrefabConfig"
+            };
+
+            var exportedTypes = typeof(LightingSystem).Assembly.GetExportedTypes()
+                .Where(type => !type.IsNested)
+                .Select(type => type.FullName)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+
+            Assert.That(exportedTypes, Is.EquivalentTo(approvedPublicTypes));
+        }
+
+        [Test]
+        public void RuntimeAssemblyDefinitionHasNoEditorDependency()
+        {
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(
+                "Packages/com.sss13594.light2d/package.json");
+            Assert.That(package, Is.Not.Null);
+
+            string json = System.IO.File.ReadAllText(
+                System.IO.Path.Combine(package.resolvedPath, "Runtime", "Light2D.Runtime.asmdef"));
+            var asmdef = JsonUtility.FromJson<AsmdefData>(json);
+
+            Assert.That(asmdef.name, Is.EqualTo("Light2D.Runtime"));
+            Assert.That(asmdef.includePlatforms ?? Array.Empty<string>(), Is.Empty,
+                "The runtime assembly must not be platform-restricted to the editor.");
+            Assert.That(asmdef.references ?? Array.Empty<string>(),
+                Has.None.Contains("Editor"), "The runtime assembly must not reference editor assemblies.");
+        }
+
+        [Test]
+        public void AdditiveColorUvEncodingPreservesLegacyPacking()
+        {
+            var opaqueWhite = Light2DColorEncoding.EncodeAdditiveColorToUv(Color.white);
+            Assert.That(opaqueWhite.x, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(opaqueWhite.y, Is.EqualTo(254f / 255f).Within(0.0001f));
+
+            var transparentBlack = Light2DColorEncoding.EncodeAdditiveColorToUv(Color.clear);
+            Assert.That(transparentBlack, Is.EqualTo(Vector2.zero));
+
+            var halfRed = Light2DColorEncoding.EncodeAdditiveColorToUv(new Color(0.5f, 0f, 0f, 0f));
+            Assert.That(halfRed.x, Is.EqualTo(127f / 255f).Within(0.0001f));
+            Assert.That(halfRed.y, Is.Zero);
+        }
+
+        private sealed class UnsupportedPipelineAsset : RenderPipelineAsset
+        {
+            protected override RenderPipeline CreatePipeline()
+            {
+                return null;
+            }
+        }
+
+        [Serializable]
+        private sealed class AsmdefData
+        {
+            public string name;
+            public string[] references;
+            public string[] includePlatforms;
         }
     }
 }

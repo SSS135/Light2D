@@ -291,8 +291,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 0.5588235
@@ -305,7 +305,19 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_FontData: {m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}, m_FontSize: 40, m_FontStyle: 0, m_BestFit: 0, m_MinSize: 10, m_MaxSize: 40, m_Alignment: 4, m_AlignByGeometry: 0, m_RichText: 1, m_HorizontalOverflow: 0, m_VerticalOverflow: 0, m_LineSpacing: 1}
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 40
+    m_FontStyle: 0
+    m_BestFit: 0
+    m_MinSize: 10
+    m_MaxSize: 40
+    m_Alignment: 4
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 0
+    m_VerticalOverflow: 0
+    m_LineSpacing: 1
   m_Text: Right
 --- !u!222 &15136098
 CanvasRenderer:
@@ -366,7 +378,7 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: 
+  m_LockedProperties:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -590,8 +602,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 59451df4957e46d439b9178acd107fbd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   TargetAngle: 15
   WorldAngle: 0
   Speed: 8
@@ -607,8 +619,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dd1304f9e1d2f034cb637031e6ed60cc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   Release: 0
   ReleasedAngle: 50
   HiddenAngle: -20
@@ -737,8 +749,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2d9b6871d3cdbba478825c4b041a7f90, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   LightPixelSize: 0.5
   LightCameraSizeAdd: 8
   LightCameraFovAdd: 30
@@ -770,8 +782,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7bad1791fef3def4ab5c2bc85cbf4ee2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   Followed: {fileID: 542800322}
   CameraPositionLerp: 20
   VelocityMul: 0.8
@@ -826,8 +838,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 0.5588235
@@ -840,7 +852,19 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_FontData: {m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}, m_FontSize: 40, m_FontStyle: 0, m_BestFit: 0, m_MinSize: 10, m_MaxSize: 40, m_Alignment: 4, m_AlignByGeometry: 0, m_RichText: 1, m_HorizontalOverflow: 0, m_VerticalOverflow: 0, m_LineSpacing: 1}
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 40
+    m_FontStyle: 0
+    m_BestFit: 0
+    m_MinSize: 10
+    m_MaxSize: 40
+    m_Alignment: 4
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 0
+    m_VerticalOverflow: 0
+    m_LineSpacing: 1
   m_Text: Down
 --- !u!222 &276890150
 CanvasRenderer:
@@ -953,8 +977,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e9e2c2a2cf5d95b4292b49c5229659c6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   ForcePercent: 0
   MaxForce: 9000
   Particles: {fileID: 1086818606}
@@ -1074,8 +1098,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e9e2c2a2cf5d95b4292b49c5229659c6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   ForcePercent: 0
   MaxForce: 2000
   Particles: {fileID: 1096892231}
@@ -1131,8 +1155,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Navigation:
     m_Mode: 3
     m_WrapAround: 0
@@ -1192,8 +1216,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 1
@@ -1327,8 +1351,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e9e2c2a2cf5d95b4292b49c5229659c6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   ForcePercent: 0
   MaxForce: 2000
   Particles: {fileID: 1068106605}
@@ -1363,8 +1387,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 09aa3b0517bbf354792c80998fb75c16, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   ControlledSpacecraft: {fileID: 2137864238}
   TouchControls: {fileID: 3046806}
   UpButton: {fileID: 2073128769}
@@ -1396,8 +1420,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8976fabb1dae9b449984361d9dfd06f0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   BlockSet: {fileID: 11400000, guid: 99b2aa50cb51ad9409451b6056775bd6, type: 2}
   RandomSeed: 1
   Seed: 326295
@@ -1411,7 +1435,7 @@ Mesh:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: 
+  m_Name:
   serializedVersion: 12
   m_SubMeshes:
   - serializedVersion: 2
@@ -1430,11 +1454,11 @@ Mesh:
     channels: []
     fullWeights: []
   m_BindPose: []
-  m_BoneNameHashes: 
+  m_BoneNameHashes:
   m_RootBoneNameHash: 0
   m_BonesAABB: []
   m_VariableBoneCountWeights:
-    m_Data: 
+    m_Data:
   m_MeshCompression: 0
   m_IsReadable: 1
   m_KeepVertices: 1
@@ -1508,51 +1532,51 @@ Mesh:
       m_NumItems: 0
       m_Range: 0
       m_Start: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_UV:
       m_NumItems: 0
       m_Range: 0
       m_Start: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_Normals:
       m_NumItems: 0
       m_Range: 0
       m_Start: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_Tangents:
       m_NumItems: 0
       m_Range: 0
       m_Start: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_Weights:
       m_NumItems: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_NormalSigns:
       m_NumItems: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_TangentSigns:
       m_NumItems: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_FloatColors:
       m_NumItems: 0
       m_Range: 0
       m_Start: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_BoneIndices:
       m_NumItems: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_Triangles:
       m_NumItems: 0
-      m_Data: 
+      m_Data:
       m_BitSize: 0
     m_UVInfo: 0
   m_LocalAABB:
@@ -1560,8 +1584,8 @@ Mesh:
     m_Extent: {x: 13.125, y: 13.125, z: 0}
   m_MeshUsageFlags: 0
   m_CookingOptions: 30
-  m_BakedConvexCollisionMesh: 
-  m_BakedTriangleCollisionMesh: 
+  m_BakedConvexCollisionMesh:
+  m_BakedTriangleCollisionMesh:
   'm_MeshMetrics[0]': 1
   'm_MeshMetrics[1]': 1
   m_MeshOptimizationFlags: -1
@@ -1569,7 +1593,7 @@ Mesh:
     serializedVersion: 2
     offset: 0
     size: 0
-    path: 
+    path:
   m_MeshLodInfo:
     serializedVersion: 2
     m_LodSelectionCurve:
@@ -1826,8 +1850,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 59451df4957e46d439b9178acd107fbd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   TargetAngle: -60
   WorldAngle: 0
   Speed: 8
@@ -1843,8 +1867,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 59451df4957e46d439b9178acd107fbd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   TargetAngle: 60
   WorldAngle: 0
   Speed: 8
@@ -1860,8 +1884,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dd1304f9e1d2f034cb637031e6ed60cc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   Release: 0
   ReleasedAngle: -60
   HiddenAngle: -180
@@ -1876,8 +1900,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dd1304f9e1d2f034cb637031e6ed60cc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   Release: 0
   ReleasedAngle: 60
   HiddenAngle: 180
@@ -1924,15 +1948,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 19900000, guid: 0690d25f211d68343a5fb217f26eaed9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 921d964d19d979041a434eacd23ac218, type: 2}
     - target: {fileID: 19900002, guid: 0690d25f211d68343a5fb217f26eaed9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 8dddb2790501bce4d8c7381ee43ebff5, type: 2}
     - target: {fileID: 19900004, guid: 0690d25f211d68343a5fb217f26eaed9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: d00ce5aec28c14948b128714ea164ead, type: 2}
     m_RemovedComponents:
     - {fileID: 0}
@@ -1983,15 +2007,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 19900000, guid: 0690d25f211d68343a5fb217f26eaed9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 921d964d19d979041a434eacd23ac218, type: 2}
     - target: {fileID: 19900002, guid: 0690d25f211d68343a5fb217f26eaed9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 8dddb2790501bce4d8c7381ee43ebff5, type: 2}
     - target: {fileID: 19900004, guid: 0690d25f211d68343a5fb217f26eaed9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: d00ce5aec28c14948b128714ea164ead, type: 2}
     m_RemovedComponents:
     - {fileID: 0}
@@ -2047,8 +2071,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 0.5588235
@@ -2061,7 +2085,19 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_FontData: {m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}, m_FontSize: 40, m_FontStyle: 0, m_BestFit: 0, m_MinSize: 10, m_MaxSize: 40, m_Alignment: 4, m_AlignByGeometry: 0, m_RichText: 1, m_HorizontalOverflow: 0, m_VerticalOverflow: 0, m_LineSpacing: 1}
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 40
+    m_FontStyle: 0
+    m_BestFit: 0
+    m_MinSize: 10
+    m_MaxSize: 40
+    m_Alignment: 4
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 0
+    m_VerticalOverflow: 0
+    m_LineSpacing: 1
   m_Text: Up
 --- !u!222 &746104102
 CanvasRenderer:
@@ -2121,8 +2157,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Navigation:
     m_Mode: 3
     m_WrapAround: 0
@@ -2181,8 +2217,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 1
@@ -2223,8 +2259,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4dca10cf8541346439f836a8a081c711, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!1 &924150281
 GameObject:
   m_ObjectHideFlags: 0
@@ -2272,8 +2308,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 0.5588235
@@ -2286,7 +2322,19 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_FontData: {m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}, m_FontSize: 40, m_FontStyle: 0, m_BestFit: 0, m_MinSize: 10, m_MaxSize: 40, m_Alignment: 4, m_AlignByGeometry: 0, m_RichText: 1, m_HorizontalOverflow: 0, m_VerticalOverflow: 0, m_LineSpacing: 1}
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 40
+    m_FontStyle: 0
+    m_BestFit: 0
+    m_MinSize: 10
+    m_MaxSize: 40
+    m_Alignment: 4
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 0
+    m_VerticalOverflow: 0
+    m_LineSpacing: 1
   m_Text: Restart
 --- !u!222 &924150284
 CanvasRenderer:
@@ -2338,15 +2386,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 19900000, guid: 0690d25f211d68343a5fb217f26eaed9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 921d964d19d979041a434eacd23ac218, type: 2}
     - target: {fileID: 19900002, guid: 0690d25f211d68343a5fb217f26eaed9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 8dddb2790501bce4d8c7381ee43ebff5, type: 2}
     - target: {fileID: 19900004, guid: 0690d25f211d68343a5fb217f26eaed9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: d00ce5aec28c14948b128714ea164ead, type: 2}
     m_RemovedComponents:
     - {fileID: 0}
@@ -2566,8 +2614,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 59451df4957e46d439b9178acd107fbd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   TargetAngle: -15
   WorldAngle: 0
   Speed: 8
@@ -2583,8 +2631,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dd1304f9e1d2f034cb637031e6ed60cc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   Release: 0
   ReleasedAngle: -50
   HiddenAngle: 20
@@ -2637,8 +2685,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 0
@@ -2772,8 +2820,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e9e2c2a2cf5d95b4292b49c5229659c6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   ForcePercent: 0
   MaxForce: 2000
   Particles: {fileID: 1269608081}
@@ -2847,8 +2895,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 0.5588235
@@ -2861,7 +2909,19 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_FontData: {m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}, m_FontSize: 40, m_FontStyle: 0, m_BestFit: 0, m_MinSize: 10, m_MaxSize: 40, m_Alignment: 4, m_AlignByGeometry: 0, m_RichText: 1, m_HorizontalOverflow: 0, m_VerticalOverflow: 0, m_LineSpacing: 1}
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 40
+    m_FontStyle: 0
+    m_BestFit: 0
+    m_MinSize: 10
+    m_MaxSize: 40
+    m_Alignment: 4
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 0
+    m_VerticalOverflow: 0
+    m_LineSpacing: 1
   m_Text: Flare
 --- !u!222 &1088698060
 CanvasRenderer:
@@ -2923,15 +2983,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 19900000, guid: 5e7492a78061d594892ba74b4ddf75af, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 921d964d19d979041a434eacd23ac218, type: 2}
     - target: {fileID: 19900002, guid: 5e7492a78061d594892ba74b4ddf75af, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 8dddb2790501bce4d8c7381ee43ebff5, type: 2}
     - target: {fileID: 19900004, guid: 5e7492a78061d594892ba74b4ddf75af, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: d00ce5aec28c14948b128714ea164ead, type: 2}
     m_RemovedComponents:
     - {fileID: 0}
@@ -3163,8 +3223,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Navigation:
     m_Mode: 3
     m_WrapAround: 0
@@ -3223,8 +3283,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 1
@@ -3265,8 +3325,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4dca10cf8541346439f836a8a081c711, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!4 &1204832924 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 400002, guid: 5e7492a78061d594892ba74b4ddf75af, type: 3}
@@ -3383,8 +3443,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2d49b7c1bcd2e07499844da127be038d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_SendPointerHoverToParent: 1
   m_ForceModuleActive: 0
 --- !u!114 &1271612143
@@ -3397,8 +3457,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4f231c4fb786f3946a6b90b886c48677, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_SendPointerHoverToParent: 1
   m_HorizontalAxis: Horizontal
   m_VerticalAxis: Vertical
@@ -3417,8 +3477,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 76c392e42b5098c458856cdf6ecaaaa1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_FirstSelected: {fileID: 0}
   m_sendNavigationEvents: 1
   m_DragThreshold: 5
@@ -3660,8 +3720,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Navigation:
     m_Mode: 3
     m_WrapAround: 0
@@ -3720,8 +3780,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 1
@@ -3762,8 +3822,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4dca10cf8541346439f836a8a081c711, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!1 &1311118757
 GameObject:
   m_ObjectHideFlags: 0
@@ -3887,8 +3947,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 0.38235295
@@ -3901,7 +3961,19 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_FontData: {m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}, m_FontSize: 14, m_FontStyle: 0, m_BestFit: 0, m_MinSize: 10, m_MaxSize: 40, m_Alignment: 0, m_AlignByGeometry: 0, m_RichText: 1, m_HorizontalOverflow: 0, m_VerticalOverflow: 0, m_LineSpacing: 1}
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 14
+    m_FontStyle: 0
+    m_BestFit: 0
+    m_MinSize: 10
+    m_MaxSize: 40
+    m_Alignment: 0
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 0
+    m_VerticalOverflow: 0
+    m_LineSpacing: 1
   m_Text: '<b>Arrows</b> - thrusters
 
     <b>C</b> - drop flares
@@ -3965,8 +4037,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 0.5588235
@@ -3979,7 +4051,19 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_FontData: {m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}, m_FontSize: 40, m_FontStyle: 0, m_BestFit: 0, m_MinSize: 10, m_MaxSize: 40, m_Alignment: 4, m_AlignByGeometry: 0, m_RichText: 1, m_HorizontalOverflow: 0, m_VerticalOverflow: 0, m_LineSpacing: 1}
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 40
+    m_FontStyle: 0
+    m_BestFit: 0
+    m_MinSize: 10
+    m_MaxSize: 40
+    m_Alignment: 4
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 0
+    m_VerticalOverflow: 0
+    m_LineSpacing: 1
   m_Text: Legs
 --- !u!222 &1438529311
 CanvasRenderer:
@@ -4078,8 +4162,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e9e2c2a2cf5d95b4292b49c5229659c6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   ForcePercent: 0
   MaxForce: 9000
   Particles: {fileID: 1204832927}
@@ -4192,8 +4276,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 0.5588235
@@ -4206,7 +4290,19 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_FontData: {m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}, m_FontSize: 40, m_FontStyle: 0, m_BestFit: 0, m_MinSize: 10, m_MaxSize: 40, m_Alignment: 4, m_AlignByGeometry: 0, m_RichText: 1, m_HorizontalOverflow: 0, m_VerticalOverflow: 0, m_LineSpacing: 1}
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 40
+    m_FontStyle: 0
+    m_BestFit: 0
+    m_MinSize: 10
+    m_MaxSize: 40
+    m_Alignment: 4
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 0
+    m_VerticalOverflow: 0
+    m_LineSpacing: 1
   m_Text: Left
 --- !u!222 &1586386823
 CanvasRenderer:
@@ -4266,8 +4362,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_IgnoreReversedGraphics: 1
   m_BlockingObjects: 0
   m_BlockingMask:
@@ -4282,8 +4378,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0cd44c1031e13a943bb63640046fad76, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_UiScaleMode: 1
   m_ReferencePixelsPerUnit: 100
   m_ScaleFactor: 1
@@ -4449,19 +4545,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: Sprite
-      value: 
+      value:
       objectReference: {fileID: 21300000, guid: de67f3bc3c6d41f4f9811ec4e3393c09, type: 3}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: Material
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: ab37f3042fbc56e4b9288c3ba9cd32d8, type: 2}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: _editorDrawingMesh
-      value: 
+      value:
       objectReference: {fileID: 518214664}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: _editorDrawingMaterial
-      value: 
+      value:
       objectReference: {fileID: 78019870}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -4523,8 +4619,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Navigation:
     m_Mode: 3
     m_WrapAround: 0
@@ -4584,8 +4680,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 1
@@ -4697,8 +4793,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Navigation:
     m_Mode: 3
     m_WrapAround: 0
@@ -4758,8 +4854,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 1
@@ -4840,8 +4936,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Navigation:
     m_Mode: 3
     m_WrapAround: 0
@@ -4900,8 +4996,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color:
     r: 1
@@ -4942,8 +5038,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4dca10cf8541346439f836a8a081c711, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!1 &2131897208
 GameObject:
   m_ObjectHideFlags: 0
@@ -5047,8 +5143,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e9e2c2a2cf5d95b4292b49c5229659c6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   ForcePercent: 0
   MaxForce: 2000
   Particles: {fileID: 335553715}
@@ -5098,8 +5194,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c42ce20fbaeeba2468fa8b8cbf47b339, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   ReleaseLandingGear: 1
   BottomLeftEngine: {fileID: 1454741716}
   BottomRightEngine: {fileID: 299852697}

@@ -1,27 +1,16 @@
-﻿using UnityEngine;
 using UnityEditor;
 
-public class EditorCameraWindow : EditorWindow
+namespace Light2D.Examples
 {
-    string myString = "Hello World";
-    bool groupEnabled;
-    bool myBool = true;
-    float myFloat = 1.23f;
-
-    [MenuItem("Window/Editor Camera Settings")]
-    static void Init()
+    [CustomEditor(typeof(InputManager))]
+    internal sealed class InputManagerEditor : Editor
     {
-        var window = GetWindow<EditorCameraWindow>();
-    }
-
-    void OnGUI()
-    {
-        GUILayout.Label("Base Settings", EditorStyles.boldLabel);
-        myString = EditorGUILayout.TextField("Text Field", myString);
-
-        groupEnabled = EditorGUILayout.BeginToggleGroup("Optional Settings", groupEnabled);
-        myBool = EditorGUILayout.Toggle("Toggle", myBool);
-        myFloat = EditorGUILayout.Slider("Slider", myFloat, -3, 3);
-        EditorGUILayout.EndToggleGroup();
+        public override void OnInspectorGUI()
+        {
+            EditorGUILayout.HelpBox(
+                "Keyboard: arrows move, Space toggles landing gear, C drops flares, R restarts, and F1 pauses. Touch controls are enabled on mobile devices.",
+                MessageType.Info);
+            DrawDefaultInspector();
+        }
     }
 }

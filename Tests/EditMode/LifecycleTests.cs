@@ -7,6 +7,29 @@ namespace Light2D.Tests
     public class LifecycleTests
     {
         [Test]
+        public void LightingSettingsValidationRejectsInvalidAndOversizedDimensions()
+        {
+            var gameObject = new GameObject("Validation Camera");
+            var camera = gameObject.AddComponent<Camera>();
+            camera.orthographic = true;
+            camera.orthographicSize = 5f;
+            try
+            {
+                Assert.That(LightingSettingsValidator.TryCalculateSizes(camera, float.NaN, 3f, 30f, 10f,
+                    false, false, false, false, out _, out var invalidError), Is.False);
+                Assert.That(invalidError, Does.Contain("finite"));
+                Assert.That(LightingSettingsValidator.TryCalculateSizes(camera, 0.000001f, 3f, 30f, 10f,
+                    false, false, true, false, out _, out var oversizedError), Is.False);
+                Assert.That(oversizedError, Does.Contain("texture-size limit"));
+                Assert.That(LightingSettingsValidator.ValidateLayers(8, 8, 9, false), Does.Contain("different"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(gameObject);
+            }
+        }
+
+        [Test]
         public void LightSpriteRegistryTracksEnableDisableAndDestroy()
         {
             var gameObject = new GameObject("Registry Light");
@@ -82,6 +105,13 @@ namespace Light2D.Tests
                 Assert.That(lighting.ConsumePendingAmbientLightCycles(), Is.EqualTo(5));
                 Assert.That(lighting.ConsumePendingAmbientLightCycles(), Is.Zero);
                 lighting.LoopAmbientLight(-1);
+                Assert.That(lighting.ConsumePendingAmbientLightCycles(), Is.Zero);
+
+                lighting.LoopAmbientLight(int.MaxValue);
+                Assert.That(lighting.ConsumePendingAmbientLightCycles(), Is.EqualTo(8));
+                Assert.That(lighting.ConsumePendingAmbientLightCycles(), Is.EqualTo(8));
+                lighting.EnableAmbientLight = false;
+                lighting.LoopAmbientLight(5);
                 Assert.That(lighting.ConsumePendingAmbientLightCycles(), Is.Zero);
 
                 lighting.enabled = false;

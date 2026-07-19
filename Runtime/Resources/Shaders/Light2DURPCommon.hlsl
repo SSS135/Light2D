@@ -23,6 +23,7 @@ SAMPLER(sampler_Light2DURPNormalsBuffer);
 float4 _MainTex_ST;
 float4 _NormalTex_ST;
 float4 _Light2DURPGameTex_TexelSize;
+float4 _Light2DURPMainTex_TexelSize;
 float2 _Scale;
 float2 _Offset;
 float2 _ExtendedToSmallTextureScale;

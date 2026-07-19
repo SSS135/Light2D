@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Light2D
 {
@@ -9,13 +10,14 @@ namespace Light2D
     /// It is drawing one pixel wide white border on light obstacles texture.
     /// Whithout it light sources with off screen origin may not work.
     /// </summary>
-    public sealed class ObstacleCameraPostPorcessor : IDisposable
+    internal sealed class ObstacleCameraPostPorcessor : IDisposable
     {
         private Mesh _mesh;
         private Material _material;
-        private Point2 _oldCameraSize;
+        private Vector2Int _oldCameraSize;
         private float _oldPixelWidth = -1;
         private bool _disposed;
+        private CommandBuffer _commandBuffer;
         private readonly List<Color32> _colors32 = new List<Color32>();
         private readonly List<Vector3> _vertices = new List<Vector3>();
         private readonly List<int> _indices = new List<int>();
@@ -36,12 +38,12 @@ namespace Light2D
             }
         }
 
-        public void DrawMesh(Camera camera, float pixelWidth, int obstacleLayer)
+        public CommandBuffer GetDrawCommand(Camera camera, float pixelWidth)
         {
             if (_disposed || camera == null || _material == null || camera.pixelWidth <= 0 || camera.pixelHeight <= 0)
-                return;
+                return null;
 
-            var camSize = new Point2(Mathf.RoundToInt(camera.pixelWidth), Mathf.RoundToInt(camera.pixelHeight));
+            var camSize = new Vector2Int(Mathf.RoundToInt(camera.pixelWidth), Mathf.RoundToInt(camera.pixelHeight));
             if (_oldCameraSize != camSize || !Mathf.Approximately(_oldPixelWidth, pixelWidth) || _mesh == null)
             {
                 _oldCameraSize = camSize;
@@ -49,8 +51,14 @@ namespace Light2D
                 CreateMesh(camera, pixelWidth);
             }
 
-            Graphics.DrawMesh(_mesh, camera.transform.position, camera.transform.rotation, _material,
-                obstacleLayer, camera);
+            if (_commandBuffer == null)
+            {
+                _commandBuffer = new CommandBuffer();
+                _commandBuffer.name = "Light2D Obstacle Border";
+            }
+            _commandBuffer.Clear();
+            _commandBuffer.DrawMesh(_mesh, Matrix4x4.identity, _material);
+            return _commandBuffer;
         }
 
         /// <summary>
@@ -112,10 +120,13 @@ namespace Light2D
                 return;
 
             _disposed = true;
-            Util.Destroy(_mesh);
-            Util.Destroy(_material);
+            Light2DObjectUtility.Destroy(_mesh);
+            Light2DObjectUtility.Destroy(_material);
+            if (_commandBuffer != null)
+                _commandBuffer.Dispose();
             _mesh = null;
             _material = null;
+            _commandBuffer = null;
         }
     }
 }

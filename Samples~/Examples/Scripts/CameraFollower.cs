@@ -24,12 +24,12 @@ namespace Light2D.Examples
         {
             _camera = Camera.main;
             _cameraTransform = _camera.transform;
-            _cameraTransform.position = _cameraTransform.position.WithXY(Followed.position);
+            _cameraTransform.position = SampleUtilities.WithXY(_cameraTransform.position, Followed.position);
         }
 
         private void Start()
         {
-            _cameraTransform.position = _cameraTransform.position.WithXY(Followed.position);
+            _cameraTransform.position = SampleUtilities.WithXY(_cameraTransform.position, Followed.position);
         }
 
         private void Update()
@@ -62,7 +62,7 @@ namespace Light2D.Examples
                     ? Vector2.Lerp(camPos, camTargetPos, CameraPositionLerp*Time.deltaTime)
                     : followedPos;
 
-                _cameraTransform.position = camPos.WithXY(pos);
+                _cameraTransform.position = SampleUtilities.WithXY(camPos, pos);
             }
         }
     }
