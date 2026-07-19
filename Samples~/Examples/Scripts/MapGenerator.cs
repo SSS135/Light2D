@@ -45,6 +45,10 @@ namespace Light2D.Examples
         private readonly List<Color> _lightAbsorptionColors = new List<Color>();
         private readonly List<Color> _lightEmissionColors = new List<Color>();
         private readonly List<Color> _colors = new List<Color>();
+        // The block sprites live in separate source textures (no legacy sprite packer to
+        // merge them), so the chunk mesh needs one submesh and texture binding per texture.
+        private readonly Dictionary<Texture, List<int>> _textureTriangles = new Dictionary<Texture, List<int>>();
+        private readonly List<Texture> _chunkTextures = new List<Texture>();
         // Created in Awake: MaterialPropertyBlock wraps a native object, and Unity forbids
         // creating those from a field initializer during scene deserialization.
         private MaterialPropertyBlock _propertyBlock;
@@ -176,9 +180,11 @@ namespace Light2D.Examples
 
             _vertices.Clear();
             _uvs.Clear();
-            _triangles.Clear();
             _lightAbsorptionColors.Clear();
             _lightEmissionColors.Clear();
+            foreach (var perTextureTriangles in _textureTriangles.Values)
+                perTextureTriangles.Clear();
+            _chunkTextures.Clear();
 
             var meshObj = Instantiate(MeshObjectPrefab);
             meshObj.name = "Block Mesh { X = " + xOffest/ChunkSize + "; Y = " + yOffest/ChunkSize + " }";
@@ -224,7 +230,19 @@ namespace Light2D.Examples
             var blockMesh = new Mesh();
             blockMesh.SetVertices(_vertices);
             blockMesh.SetUVs(0, _uvs);
-            blockMesh.SetTriangles(_triangles, 0);
+            // Sprites/Default multiplies by vertex color, and a missing color attribute reads
+            // as zero on modern graphics platforms, which would make every tile invisible.
+            _colors.Clear();
+            for (int i = 0; i < _vertices.Count; i++)
+                _colors.Add(Color.white);
+            blockMesh.SetColors(_colors);
+            // Without the legacy sprite packer the block sprites no longer share one atlas
+            // texture, so a single submesh bound to the first sprite's texture (the fully
+            // transparent "Empty" tile) would render nothing. Emit one submesh per source
+            // texture and bind that texture to the matching material slot below.
+            blockMesh.subMeshCount = _chunkTextures.Count;
+            for (int i = 0; i < _chunkTextures.Count; i++)
+                blockMesh.SetTriangles(_textureTriangles[_chunkTextures[i]], i);
             blockMesh.RecalculateBounds();
 
             var meshFilter = meshObj.GetComponent<MeshFilter>();
@@ -232,9 +250,16 @@ namespace Light2D.Examples
             meshObj.AddComponent<GeneratedMeshOwner>().Mesh = blockMesh;
 
             var meshRenderer = meshObj.GetComponent<MeshRenderer>();
-            var texture = FindBlockTexture();
-            _propertyBlock.SetTexture("_MainTex", texture);
-            meshRenderer.SetPropertyBlock(_propertyBlock);
+            var baseMaterial = meshRenderer.sharedMaterial;
+            var materials = new Material[_chunkTextures.Count];
+            for (int i = 0; i < materials.Length; i++)
+                materials[i] = baseMaterial;
+            meshRenderer.sharedMaterials = materials;
+            for (int i = 0; i < _chunkTextures.Count; i++)
+            {
+                _propertyBlock.SetTexture("_MainTex", _chunkTextures[i]);
+                meshRenderer.SetPropertyBlock(_propertyBlock, i);
+            }
 
             for (int x = 0; x < ChunkSize; x++)
             {
@@ -287,20 +312,6 @@ namespace Light2D.Examples
             ambientLightObject.AddComponent<GeneratedMeshOwner>().Mesh = ambientMesh;
 
             return meshObj;
-        }
-
-        private Texture FindBlockTexture()
-        {
-            foreach (var blockInfo in BlockSet.BlockInfos)
-            {
-                foreach (var sprite in blockInfo.SpriteInfo)
-                {
-                    if (sprite != null)
-                        return sprite.texture;
-                }
-            }
-
-            throw new InvalidOperationException("The block set must contain at least one sprite.");
         }
 
         private Mesh ChunkMeshFromColors(List<Color> colors)
@@ -393,6 +404,15 @@ namespace Light2D.Examples
             var textureSize = new Vector2(sprite.texture.width, sprite.texture.height);
             var uvRect = sprite.textureRect;
 
+            if (!_textureTriangles.TryGetValue(sprite.texture, out var triangles))
+            {
+                triangles = new List<int>();
+                _textureTriangles.Add(sprite.texture, triangles);
+            }
+
+            if (triangles.Count == 0)
+                _chunkTextures.Add(sprite.texture);
+
             var startVert = _vertices.Count;
             const float add = 0.01f;
             float z = isColliding == BlockSetProfile.BlockType.CollidingWall ? 0 : 5;
@@ -406,12 +426,12 @@ namespace Light2D.Examples
             _uvs.Add(new Vector2(uvRect.xMin/textureSize.x, uvRect.yMax/textureSize.y)); // 0, 1
             _uvs.Add(new Vector2(uvRect.xMax/textureSize.x, uvRect.yMax/textureSize.y)); // 1, 1
 
-            _triangles.Add(startVert + 2);
-            _triangles.Add(startVert + 1);
-            _triangles.Add(startVert);
-            _triangles.Add(startVert + 1);
-            _triangles.Add(startVert + 2);
-            _triangles.Add(startVert + 3);
+            triangles.Add(startVert + 2);
+            triangles.Add(startVert + 1);
+            triangles.Add(startVert);
+            triangles.Add(startVert + 1);
+            triangles.Add(startVert + 2);
+            triangles.Add(startVert + 3);
 
             _lightAbsorptionColors.Add(noLightEffect ? new Color() : blockInfo.LightAbsorption);
             _lightEmissionColors.Add(noLightEffect ? new Color() : blockInfo.LightEmission);
