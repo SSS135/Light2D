@@ -45,10 +45,13 @@ namespace Light2D.Examples
         private readonly List<Color> _lightAbsorptionColors = new List<Color>();
         private readonly List<Color> _lightEmissionColors = new List<Color>();
         private readonly List<Color> _colors = new List<Color>();
-        private readonly MaterialPropertyBlock _propertyBlock = new MaterialPropertyBlock();
+        // Created in Awake: MaterialPropertyBlock wraps a native object, and Unity forbids
+        // creating those from a field initializer during scene deserialization.
+        private MaterialPropertyBlock _propertyBlock;
 
         private void Awake()
         {
+            _propertyBlock = new MaterialPropertyBlock();
             _mainCamera = Camera.main;
 
             if (RandomSeed)
