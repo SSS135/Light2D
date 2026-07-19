@@ -140,7 +140,7 @@ namespace Light2D.Tests
                 LightSprite.PrepareSnapshot(snapshot, false);
                 Assert.That(snapshot, Does.Contain(first));
                 Assert.That(snapshot, Does.Contain(second));
-                Assert.That(snapshot.Select(light => light.GetInstanceID()), Is.Ordered);
+                Assert.That(snapshot.Select(light => light.GetEntityId()), Is.Ordered);
 
                 first.enabled = false;
                 LightSprite.PrepareSnapshot(snapshot, false);

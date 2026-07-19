@@ -378,26 +378,16 @@ namespace Light2D
             public readonly Texture2D Texture;
             public readonly Material Material;
             public readonly bool NormalTexcoord;
-#if UNITY_6000_0_OR_NEWER
             private readonly EntityId _textureId;
             private readonly EntityId _materialId;
-#else
-            private readonly int _textureId;
-            private readonly int _materialId;
-#endif
 
             public MaterialKey(Material material, Texture2D texture, bool normalTexcoord)
             {
                 Material = material;
                 Texture = texture;
                 NormalTexcoord = normalTexcoord;
-#if UNITY_6000_0_OR_NEWER
                 _materialId = material.GetEntityId();
                 _textureId = texture.GetEntityId();
-#else
-                _materialId = material.GetInstanceID();
-                _textureId = texture.GetInstanceID();
-#endif
             }
 
             public bool Equals(MaterialKey other)

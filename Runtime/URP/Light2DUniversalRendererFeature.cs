@@ -37,7 +37,7 @@ namespace Light2D
         private readonly Dictionary<LightingSystem, Light2DPass> _passes =
             new Dictionary<LightingSystem, Light2DPass>();
         private readonly List<LightingSystem> _deadContexts = new List<LightingSystem>();
-        private readonly HashSet<int> _cameraWarnings = new HashSet<int>();
+        private readonly HashSet<EntityId> _cameraWarnings = new HashSet<EntityId>();
 
         public override void Create()
         {
@@ -155,7 +155,7 @@ namespace Light2D
 
         internal void WarnOnce(Camera camera, LightingSystem lighting, string message)
         {
-            if (_cameraWarnings.Add(camera.GetInstanceID()))
+            if (_cameraWarnings.Add(camera.GetEntityId()))
                 Debug.LogWarning(message + " Rendering was skipped for camera '" + camera.name + "'.", lighting);
         }
 

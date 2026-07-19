@@ -11,7 +11,7 @@ namespace Light2D
     {
         private static readonly HashSet<LightSprite> LightSprites = new HashSet<LightSprite>();
         private static readonly Plane[] FrustumPlanes = new Plane[6];
-        private static readonly Comparison<LightSprite> CompareByInstanceId = CompareLights;
+        private static readonly Comparison<LightSprite> CompareByEntityId = CompareLights;
         private static readonly Predicate<LightSprite> IsMissing = light => light == null;
 
         public Vector3 LightOrigin = new Vector3(0, 0, 1);
@@ -66,7 +66,7 @@ namespace Light2D
                 if (IsRenderable(light))
                     snapshot.Add(light);
             }
-            snapshot.Sort(CompareByInstanceId);
+            snapshot.Sort(CompareByEntityId);
             for (var i = 0; i < snapshot.Count; i++)
                 snapshot[i].PrepareForLighting(xzPlane);
         }
@@ -91,7 +91,7 @@ namespace Light2D
                 snapshot.Add(light);
             }
 
-            snapshot.Sort(CompareByInstanceId);
+            snapshot.Sort(CompareByEntityId);
             for (var i = 0; i < snapshot.Count; i++)
                 snapshot[i].PrepareForLighting(xzPlane);
         }
@@ -113,7 +113,7 @@ namespace Light2D
                 if (IsRenderable(light))
                     list.Add(light);
             }
-            list.Sort(CompareByInstanceId);
+            list.Sort(CompareByEntityId);
             return list.ToArray();
         }
 
@@ -124,7 +124,7 @@ namespace Light2D
 
         private static int CompareLights(LightSprite left, LightSprite right)
         {
-            return left.GetInstanceID().CompareTo(right.GetInstanceID());
+            return left.GetEntityId().CompareTo(right.GetEntityId());
         }
 
         private static LightingSystem ResolveCameraOwner(Camera camera)

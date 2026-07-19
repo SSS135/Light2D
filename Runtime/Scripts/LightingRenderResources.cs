@@ -195,11 +195,7 @@ namespace Light2D
 
         private static string CloneName(Material source, string name)
         {
-#if UNITY_6000_0_OR_NEWER
             return "Generated Light2D " + name + " (" + source.GetEntityId() + ")";
-#else
-            return "Generated Light2D " + name + " (" + source.GetInstanceID() + ")";
-#endif
         }
 
         private static bool DescriptorsEqual(RenderTextureDescriptor left, RenderTextureDescriptor right)
