@@ -1,0 +1,15 @@
+{
+  "name": "Light2D.TestProject.SampleTests",
+  "rootNamespace": "Light2D.TestProject.Tests",
+  "references": [
+    "Light2D.Runtime",
+    "Light2D.Samples.Runtime",
+    "Light2D.TestProject.Editor"
+  ],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

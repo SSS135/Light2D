@@ -113,7 +113,7 @@ namespace Light2D.TestProject.Editor
             return errors;
         }
 
-        private static bool IsUrpGlobalSettingsPostprocessorError(string message)
+        internal static bool IsUrpGlobalSettingsPostprocessorError(string message)
         {
             if (string.IsNullOrEmpty(message) ||
                 message.IndexOf("error CS", StringComparison.OrdinalIgnoreCase) >= 0 ||

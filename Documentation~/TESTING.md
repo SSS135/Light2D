@@ -68,11 +68,13 @@ if (-not $unity.WaitForExit(900000)) {
 if ($unity.ExitCode -ne 0) { throw "PlayMode test runner exited with code $($unity.ExitCode)." }
 ```
 
-To run only the sample suite as a fast path, add these two entries to the same `$arguments` list:
+To run a single test as a fast path, add a `-testFilter` entry to the same `$arguments` list with the fully qualified test name (a regex; separate multiple names with semicolons):
 
 ```powershell
-    '-assemblyNames', 'Light2D.TestProject.SampleTests',
+    '-testFilter', 'Light2D.TestProject.Tests.RocketVisualSmokeTest.RocketSceneRendersDarkCaveWithColoredLights',
 ```
+
+On this host (Unity 6000.4.7f1, Test Framework 1.6) `-testFilter` reliably starts the matched tests, whereas `-assemblyNames Light2D.TestProject.SampleTests` registers the filter in the run settings but never starts a test, so the batch job hangs until the watchdog kills it. Use `-testFilter` for filtered fast paths, or run unfiltered.
 
 Do not add `-quit` to either `-runTests` command; Unity Test Framework owns shutdown for a test run. On this host, a PlayMode run can produce its result and still leave the editor process alive, so the external watchdog prevents an indefinite batch job. The sample suite advances several minutes of captured game frames, which is why the watchdog allows 15 minutes. Logs and result XML files under `TestProject~` are generated artifacts and must not be committed.
 

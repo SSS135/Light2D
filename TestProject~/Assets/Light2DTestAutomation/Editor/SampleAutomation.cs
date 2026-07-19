@@ -2,12 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using UnityEditor;
 using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.UI;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+
+// The sample PlayMode test assembly reuses internal automation helpers: the sample scene-name
+// constants and the known URP global-settings error fingerprint in WindowsBuildAutomation.
+[assembly: InternalsVisibleTo("Light2D.TestProject.SampleTests")]
 
 namespace Light2D.TestProject.Editor
 {
@@ -28,6 +33,25 @@ namespace Light2D.TestProject.Editor
 
             ValidateScenes(sample.importPath);
             Debug.Log($"Validated Light2D sample at '{sample.importPath}'.");
+        }
+
+        // Non-importing lookup used by the sample PlayMode tests; returns project-relative
+        // (Assets/...) paths for the already-imported sample scenes.
+        public static string[] GetImportedScenePaths()
+        {
+            var sample = FindExamplesSample();
+            var scenePaths = GetScenePaths(sample.importPath);
+            foreach (var scenePath in scenePaths)
+            {
+                if (!File.Exists(scenePath))
+                {
+                    throw new InvalidOperationException(
+                        $"Imported sample scene is missing: '{scenePath}'. " +
+                        "Run SampleAutomation.ImportExamples outside play mode to import the package sample first.");
+                }
+            }
+
+            return scenePaths.Select(ToAssetDatabasePath).ToArray();
         }
 
         public static void ReserializeExamplesSource()
