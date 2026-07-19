@@ -23,6 +23,8 @@ All notable package changes are documented here. This file at the package root i
 - Added `TestProject~` as the package development host and an editor-automation MCP endpoint on port 17777. Host automation is self-contained and has no external sibling-project fallback.
 - Added EditMode suites covering contracts, lifecycle and resource release, components, diagnostics, editor workflows, package integrity, shader import, and URP feature setup, plus Built-in behavioral PlayMode coverage and a URP PlayMode test. URP behavioral execution remains blocked on the Unity 6000.4.7f1/ShaderGraph 17.4 global-settings import defect.
 - Validated a Built-in Windows x64 sample-player build with a successful `BuildReport`, zero reported errors, and zero actionable step errors.
+- Fixed Built-in ambient light computation, light blur, and single-camera overlay rendering: `Graphics.Blit` uses a material's first SubShader and ignores the `RenderPipeline` tag, so shaders listing their URP SubShader first executed the wrong pass under Built-in. The ambient texture converged to a flat constant and obstacle rock never darkened. `AmbientLightComputer`, `FastBlur`, and `LightOverlaySingleCamera` now list the Built-in SubShader first, matching `LightOverlay`; all shader names, properties, tags, and keywords are unchanged.
+- Fixed Rocket sample terrain rendering on Unity 6: generated chunk meshes now use per-source-texture submeshes with per-slot texture binding (the legacy Sprite Packer atlas assumption no longer holds) and explicit white vertex colors, restoring visible tiles.
 
 ### Migration notes
 

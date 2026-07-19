@@ -10,20 +10,6 @@ Properties {
 }
 
 SubShader {
-	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
-	ZWrite Off
-	Pass {
-		Name "FastBlur"
-		Tags { "LightMode"="Light2DFullscreen" }
-		HLSLPROGRAM
-		#pragma vertex Light2DFullscreenVert
-		#pragma fragment Light2DFastBlurFrag
-		#include "Light2DURPFullscreen.hlsl"
-		ENDHLSL
-	}
-}
-
-SubShader {
 	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
 	LOD 100
 	
@@ -87,6 +73,20 @@ SubShader {
 				return tex;
 			}
 		ENDCG
+	}
+}
+
+SubShader {
+	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
+	ZWrite Off
+	Pass {
+		Name "FastBlur"
+		Tags { "LightMode"="Light2DFullscreen" }
+		HLSLPROGRAM
+		#pragma vertex Light2DFullscreenVert
+		#pragma fragment Light2DFastBlurFrag
+		#include "Light2DURPFullscreen.hlsl"
+		ENDHLSL
 	}
 }
 

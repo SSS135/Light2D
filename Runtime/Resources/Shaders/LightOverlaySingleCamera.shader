@@ -17,22 +17,6 @@ Properties {
 }
 
 SubShader {
-	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
-	ZWrite Off
-	Pass {
-		Name "LightOverlaySingleCamera"
-		Tags { "LightMode"="Light2DFullscreen" }
-		HLSLPROGRAM
-		#pragma vertex Light2DOverlayVert
-		#pragma fragment Light2DOverlayFrag
-		#pragma multi_compile DUMMY HDR
-		#pragma multi_compile BLOOM_ON BLOOM_OFF
-		#include "Light2DURPFullscreen.hlsl"
-		ENDHLSL
-	}
-}
-
-SubShader {
 	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
 	LOD 100
 	
@@ -99,6 +83,22 @@ SubShader {
 				return half4(game.rgb*light.rgb*_LightMul + bloom, game.a);
 			}
 		ENDCG
+	}
+}
+
+SubShader {
+	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
+	ZWrite Off
+	Pass {
+		Name "LightOverlaySingleCamera"
+		Tags { "LightMode"="Light2DFullscreen" }
+		HLSLPROGRAM
+		#pragma vertex Light2DOverlayVert
+		#pragma fragment Light2DOverlayFrag
+		#pragma multi_compile DUMMY HDR
+		#pragma multi_compile BLOOM_ON BLOOM_OFF
+		#include "Light2DURPFullscreen.hlsl"
+		ENDHLSL
 	}
 }
 

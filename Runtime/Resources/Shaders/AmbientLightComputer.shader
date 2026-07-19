@@ -14,19 +14,6 @@ Properties {
 	_EmissionColorMul ("Emission color mul", Float) = 0.1
 	_SamplingDist ("Average sampling distance", Float) = 0.01
 }
-SubShader {
-	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
-	ZWrite Off
-	Pass {
-		Name "AmbientLight"
-		Tags { "LightMode"="Light2DFullscreen" }
-		HLSLPROGRAM
-		#pragma vertex Light2DFullscreenVert
-		#pragma fragment Light2DAmbientFrag
-		#include "Light2DURPFullscreen.hlsl"
-		ENDHLSL
-	}
-}
 SubShader {	
 	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
 
@@ -100,6 +87,19 @@ SubShader {
 				return lerp(oldLight, col, 0.2);
 			}
 		ENDCG
+	}
+}
+SubShader {
+	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
+	ZWrite Off
+	Pass {
+		Name "AmbientLight"
+		Tags { "LightMode"="Light2DFullscreen" }
+		HLSLPROGRAM
+		#pragma vertex Light2DFullscreenVert
+		#pragma fragment Light2DAmbientFrag
+		#include "Light2DURPFullscreen.hlsl"
+		ENDHLSL
 	}
 }
 
