@@ -16,7 +16,9 @@ namespace Light2D
     public class LightAmbientEmitter : MonoBehaviour, ILight2DAmbientEmitter
     {
         [Tooltip("Emissive color drawn into the ambient emission texture. In sprite mode it is baked " +
-                 "into the owned mesh's vertex colors; in self-mesh mode the external mesh keeps its own colors.")]
+                 "into the owned mesh's vertex colors and tints the mirrored source renderer's live color " +
+                 "(default white passes the source color through unchanged); in self-mesh mode the " +
+                 "external mesh keeps its own colors.")]
         public Color EmissionColor = Color.white;
 
         [Tooltip("Optional sprite whose geometry is mirrored into the owned emission mesh. Leave empty " +
@@ -50,7 +52,7 @@ namespace Light2D
         private CustomSprite.MaterialKey _materialKey;
 
         private Sprite _oldSprite;
-        private Color _oldEmissionColor;
+        private Color _oldEffectiveColor;
         private Material _oldBaseMaterial;
         private Texture2D _oldTexture;
         private bool _meshDirty;
@@ -136,11 +138,12 @@ namespace Light2D
         private void RefreshSpriteMode(Sprite source)
         {
             EnsureOwnedMesh();
-            if (source != _oldSprite || EmissionColor != _oldEmissionColor || _meshDirty)
+            var effectiveColor = ResolveEffectiveColor();
+            if (source != _oldSprite || effectiveColor != _oldEffectiveColor || _meshDirty)
             {
-                BuildSpriteMesh(source);
+                BuildSpriteMesh(source, effectiveColor);
                 _oldSprite = source;
-                _oldEmissionColor = EmissionColor;
+                _oldEffectiveColor = effectiveColor;
                 _meshDirty = false;
             }
 
@@ -181,7 +184,7 @@ namespace Light2D
                 _meshRenderer.sharedMaterial = Material != null ? Material : GetRuntimeDefaultMaterial();
         }
 
-        private void BuildSpriteMesh(Sprite sprite)
+        private void BuildSpriteMesh(Sprite sprite, Color color)
         {
             var spriteVertices = sprite.vertices;
             var spriteTriangles = sprite.triangles;
@@ -196,7 +199,7 @@ namespace Light2D
 
             var colors = new Color[vertices.Length];
             for (var i = 0; i < colors.Length; i++)
-                colors[i] = EmissionColor;
+                colors[i] = color;
 
             _mesh.Clear();
             _mesh.vertices = vertices;
@@ -228,6 +231,19 @@ namespace Light2D
             _sourceCustomSprite = null;
             _sourceSpriteRenderer = null;
             return Sprite;
+        }
+
+        // Effective emission color = the mirrored source renderer's current color tinted by EmissionColor,
+        // so a script animating the source's .color drives the baked vertex colors live each frame. With
+        // no live source (Sprite-field-only or self-mesh mode) it stays EmissionColor, preserving the old
+        // behavior. Must run after ResolveSourceSprite so the cached source references are current.
+        private Color ResolveEffectiveColor()
+        {
+            if (_sourceSpriteRenderer != null)
+                return _sourceSpriteRenderer.color * EmissionColor;
+            if (_sourceCustomSprite != null)
+                return _sourceCustomSprite.Color * EmissionColor;
+            return EmissionColor;
         }
 
         private void EnsureOwnedMesh()
