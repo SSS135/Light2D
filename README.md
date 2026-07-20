@@ -1,6 +1,6 @@
 # Light2D
 
-Light2D is a GPU-based dynamic 2D lighting package for Unity. It renders light obstacles, direct lights, and optional ambient propagation into low-resolution textures, then composites the result over a camera. Lights and obstacles can move at runtime and do not require physics colliders. Version 2.0.0 targets **Unity 6000.4** (developed with **Unity 6000.5.4f1**) and supports the Built-in Render Pipeline and URP 17.4.
+Light2D is a GPU-based dynamic 2D lighting package for Unity with a distinctive look: colored per-channel light transmission through obstacles, soft ambient bounce, and collider-free occlusion authored straight from your sprites, meshes, and tiles. It renders light obstacles, direct lights, and optional ambient propagation into low-resolution textures, then composites the result over a camera. Lights and obstacles move at runtime and require no physics colliders. Light2D targets **Unity 6000.4** (minimum, developed with **Unity 6000.5.4f1**) and supports the Built-in Render Pipeline and URP 17.4.
 
 ## Repository layout
 
@@ -43,7 +43,8 @@ Full setup, architecture, migration, and testing guides live with the package:
 - [Package README](Packages/com.sss13594.light2d/README.md)
 - [Installation and setup](Packages/com.sss13594.light2d/Documentation~/INSTALLATION.md)
 - [Components, settings, and render architecture](Packages/com.sss13594.light2d/Documentation~/ARCHITECTURE.md)
-- [Legacy `Assets/Light2D` migration](Packages/com.sss13594.light2d/Documentation~/MIGRATION.md)
+- [Frequently asked questions](Packages/com.sss13594.light2d/Documentation~/FAQ.md)
+- [Migration and upgrade notes](Packages/com.sss13594.light2d/Documentation~/MIGRATION.md)
 - [Troubleshooting](Packages/com.sss13594.light2d/Documentation~/TROUBLESHOOTING.md)
 - [Development and testing](Packages/com.sss13594.light2d/Documentation~/TESTING.md)
 - [Diagnostics and benchmarking](Packages/com.sss13594.light2d/Documentation~/BENCHMARKING.md)

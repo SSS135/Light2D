@@ -2,26 +2,20 @@
 
 ## Black or Unlit Output
 
-- Add at least one direct light or ambient emitter; a scene with no lighting input can composite to black.
-- Confirm the source camera has `LightingSystem` and the required material references.
-- Confirm all three layer fields are distinct and objects use the matching layers.
-- Exclude the three input layers from the source camera culling mask.
-- In Built-in, assign a disabled helper `Lighting Camera`.
-- In URP, install the feature on the renderer actually selected by the source camera. Leave `LightCamera` unassigned.
+- Add at least one `LightSprite` or `LightAmbientEmitter`; a scene with no lighting input can composite to black.
+- Confirm the receiving camera has an enabled `LightingSystem` and its material references are assigned.
+- Confirm each obstacle, light, and ambient emitter carries its Light2D component and the component is enabled — an input participates in lighting only if it does.
+- In URP, confirm `Light2DUniversalRendererFeature` is installed on the renderer actually selected by the camera (see below).
 
 ## URP Feature Missing or on the Wrong Renderer
 
-The `LightingSystem` inspector reports missing, duplicate, wrong-renderer, and unsupported-renderer states. Select the source camera and use **Install / Repair Renderer Feature**, or run **Tools > Light2D > Universal Render Pipeline > Install Renderer Feature**.
+If a camera has an enabled `LightingSystem` under URP but no `Light2DUniversalRendererFeature` is installed on its renderer, lighting is a silent no-op; `LightingSystem` logs a warning pointing here. The `LightingSystem` inspector reports missing, duplicate, wrong-renderer, and unsupported-renderer states. Select the source camera and use **Install / Repair Renderer Feature**, or run **Tools > Light2D > Universal Render Pipeline > Install Renderer Feature**.
 
 The renderer data must be a persistent writable asset. A camera can override the URP asset’s default renderer through Universal Additional Camera Data; the feature must be installed on that selected renderer. Only Universal Renderer Data and 2D Renderer Data are supported.
 
-## URP Validation Fails During Import
-
-Unity 6000.4.7f1 with ShaderGraph/URP 17.4 can import required package ShaderGraphs as the wrong asset type while URP creates or populates global settings. Errors such as `Host type is not matching any asset type`, followed by global-settings postprocessor exceptions, are the known development-host defect described in [TESTING.md](TESTING.md#current-urp-validation-blocker), not evidence that URP needs a helper camera.
-
 ## Light Inputs Are Visible as Ordinary Sprites
 
-Remove the light-source, ambient, and obstacle layers from the source camera culling mask. Light2D performs separate culling and rendering for those layers.
+This does not happen in Light2D 3.0. Each input component keeps its own `MeshRenderer` disabled and is drawn only into Light2D's textures, so lighting-input geometry never leaks into the game image — there are no layers to exclude. If an obstacle or light source is visibly rendering as an ordinary sprite, the visible renderer is a separate, still-enabled component on the object (for example the original `SpriteRenderer` you want the obstacle to mirror). Disable or remove that renderer if it should not appear.
 
 ## Small Obstacles or Edge Lights Disappear
 
@@ -65,4 +59,8 @@ Stop before deleting missing components. Confirm the package imported without co
 
 ## Sample Scene Is Misconfigured
 
-Samples are copied into the project but cannot carry project layer definitions, camera renderer assignments, or the active pipeline asset. Reassign the three layers and camera culling mask. For Built-in, assign the helper camera; for URP, install the renderer feature selected by the source camera and leave `LightCamera` unassigned.
+Samples are copied into the project and register their lights, obstacles, and ambient emitters automatically — there are no layers or helper camera to reassign. The active pipeline asset and renderer data are project settings, so for URP install the renderer feature on the renderer selected by the sample camera after import.
+
+## More Questions
+
+See the [FAQ](FAQ.md) for common questions about using lights on moving objects, runtime-instantiated lights and obstacles, Tilemap occlusion, fog-of-war/visibility, and project status.

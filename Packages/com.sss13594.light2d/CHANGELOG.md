@@ -2,6 +2,70 @@
 
 All notable package changes are documented here. This file at the package root is the canonical changelog location.
 
+## [Unreleased]
+
+The upcoming 3.0 major release (version bump pending) is a breaking rewrite of the
+render architecture. Existing scenes must re-add Light2D components after upgrading;
+there is no automatic upgrade. See the "Upgrading from 2.x to 3.0" section in
+[MIGRATION.md](Documentation~/MIGRATION.md#upgrading-from-2x-to-30). The minimum
+supported Unity editor line is 6000.4.
+
+### Breaking changes
+
+- Removed the three-layer model. The serialized `LightingSystem` fields
+  `LightSourcesLayer`, `AmbientLightLayer`, and `LightObstaclesLayer` are gone, and
+  Light2D no longer creates layers or edits the source-camera culling mask. Scenes
+  that relied on those serialized layer indices must re-add components.
+- Removed the Built-in helper camera. `LightingSystem.LightCamera`, the
+  `Lighting Camera.prefab`, and the `LightingSystemPrefabConfig` public type are
+  retired. Built-in composition materials now come from an internal
+  `Light2DDefaultResources` asset assigned by the creation window.
+
+### Added
+
+- Register-and-draw render core: light sources, ambient emitters, and obstacles
+  self-register when enabled and are drawn into the lighting textures via
+  `CommandBuffer.DrawMesh` on both backends — no layers, no helper camera, no
+  child cameras. Component `MeshRenderer`s are kept disabled so lighting-input
+  geometry never leaks into the game image.
+- `LightAmbientEmitter` component, replacing the old "any renderer on the ambient
+  layer" convention. Add it with **GameObject > Light2D > Ambient Emitter**.
+- `LightObstacleTilemap` component (#8): a texture-aware Tilemap obstacle that maps
+  each cell to its tile sprite so transparent tile pixels pass light, rebuilt on
+  tile change. Requires `com.unity.2d.tilemap`; compiled under `LIGHT2D_TILEMAP`.
+- **Project Settings > Light2D** panel and a texture-conditional default obstacle
+  color (#1): textured obstacles default to white (the texture shapes the shadow);
+  solid, untextured obstacles default to opaque black. The obstacle menu and
+  component defaults read these values.
+- **Rocket Tilemap** sample scene: a baked, deterministic Tilemap cave with a
+  matching visual-regression guard.
+
+### Fixed
+
+- Built-in XZ-plane ambient reprojection used the Y delta instead of Z, smearing
+  ambient history when panning on the XZ plane.
+- URP HDR keyword now keys off the resolved light-texture format, not the requested
+  `HDR` bool, correcting composition on platforms without FP16 render targets.
+- Built-in ambient history now resets on camera rotation/aspect change (mirroring
+  URP), reducing smear on resolution and aspect changes.
+- Build-safe default obstacle material: obstacle components now resolve the obstacle
+  shader in player builds, not only in the editor — `LightObstacleTilemap`
+  previously produced no obstacle geometry in a build.
+- Sample scripts hardened against hangs and null-reference errors (`Bat`,
+  `MapGenerator`, `Flare`, `Wisp`).
+- Per-frame allocation and redundant-work guards in the Built-in and URP render
+  loops (material-clone gating, border-mesh rebuild guard, cached obstacle-mesh
+  parent lookup, de-duplicated resource reconciliation).
+
+### Changed
+
+- Development host migrated to Unity 6000.5.4f1. The external
+  Unity 6000.4.7f1 / ShaderGraph 17.4.0 URP importer defect is resolved on the new
+  host; the only remaining limitation is that a runtime-created URP pipeline does
+  not activate under batchmode PlayMode, so the URP PlayMode tests `Assert.Ignore`
+  via a pipeline-activation guard.
+- Added tooltips and `[AddComponentMenu]` entries across the runtime components.
+
 ## [2.0.0]
 
 - Converted the repository from a legacy Unity project with `Assets/Light2D` into the root UPM package `com.sss13594.light2d`.
