@@ -11,7 +11,7 @@ namespace Light2D.Tests
     /// Positive detection of the known Unity 6000.4.7f1 / URP 17.4.0 host defect that breaks URP
     /// initialization in the pinned test host. The canonical sibling implementation is the private
     /// helper in <c>Tests/EditMode/EditorWorkflowTests.cs</c> (private by design there). Keep the
-    /// four detection conditions in sync between both files.
+    /// three detection conditions in sync between both files.
     /// </summary>
     internal static class UrpHostDefectDetection
     {
@@ -21,11 +21,15 @@ namespace Light2D.Tests
         private const string KnownDefectShaderGraphPath =
             "Packages/com.unity.render-pipelines.universal/Shaders/AutodeskInteractive/AutodeskInteractive.shadergraph";
 
-        // Skips only when ALL four conditions positively identify the defective host:
+        // Skips only when ALL three robust conditions positively identify the defective host:
         // 1. the editor version is exactly the known-defect version,
         // 2. the URP package version is exactly the known-defect version,
-        // 3. the required URP ShaderGraph imported as a non-Shader main asset,
-        // 4. the UniversalRendererData MonoScript is unresolvable.
+        // 3. the required URP ShaderGraph imported as a non-Shader main asset (that DefaultAsset
+        //    import IS the load-bearing defect).
+        // A former fourth condition (MonoScript.FromScriptableObject on a probe UniversalRendererData
+        // resolving to null) was dropped because MonoScript resolution is Library-state-dependent: it
+        // was proven to resolve on a fresh Library while the defect persists, so it is a Library
+        // artifact rather than a reliable defect signal.
         internal static void IgnoreIfKnownUrpHostDefect()
         {
             if (Application.unityVersion != KnownDefectUnityVersion)
@@ -34,19 +38,8 @@ namespace Light2D.Tests
             var urpPackage = UnityEditor.PackageManager.PackageInfo.FindForAssembly(
                 typeof(UniversalRenderPipeline).Assembly);
             var shaderGraphAsset = AssetDatabase.LoadMainAssetAtPath(KnownDefectShaderGraphPath);
-            var probe = ScriptableObject.CreateInstance<UniversalRendererData>();
-            bool rendererScriptUnresolvable;
-            try
-            {
-                rendererScriptUnresolvable = MonoScript.FromScriptableObject(probe) == null;
-            }
-            finally
-            {
-                Object.DestroyImmediate(probe);
-            }
-
             if (urpPackage?.version != KnownDefectUrpVersion || shaderGraphAsset == null ||
-                shaderGraphAsset is Shader || !rendererScriptUnresolvable)
+                shaderGraphAsset is Shader)
                 return;
 
             Assert.Ignore($"Unity {KnownDefectUnityVersion} with URP {KnownDefectUrpVersion} imported " +

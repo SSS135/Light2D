@@ -2,6 +2,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.TestTools;
 
 namespace Light2D.Tests
 {
@@ -115,6 +116,13 @@ namespace Light2D.Tests
             var rendererData = ScriptableObject.CreateInstance<UniversalRendererData>();
             IgnoreKnownUrpHostFixtureDefect(rendererData);
             AssetDatabase.CreateAsset(rendererData, UniversalPath);
+            // URP's ScriptableRendererData.OnValidate logs this error exactly once when the fixture
+            // plants a null feature entry (features[0]=null) to simulate corruption. Observed on
+            // healthy-guard hosts where the test actually executes; this expectation is unreachable
+            // when the skip guard above fires.
+            LogAssert.Expect(LogType.Error,
+                "Light2D-UniversalRendererData-Test is missing RendererFeatures\n" +
+                "This could be due to missing scripts or compile error.");
             VerifyPersistentInstaller(rendererData);
         }
 
@@ -124,6 +132,13 @@ namespace Light2D.Tests
             var rendererData = ScriptableObject.CreateInstance<Renderer2DData>();
             IgnoreKnownUrpHostFixtureDefect(rendererData);
             AssetDatabase.CreateAsset(rendererData, Renderer2DPath);
+            // As in InstallerRepairsUniversalRendererFeatureListAndMap, OnValidate logs this error
+            // exactly once for the planted null feature entry. Observed on healthy-guard hosts where
+            // the test actually executes; this expectation is unreachable when the skip guard above
+            // fires.
+            LogAssert.Expect(LogType.Error,
+                "Light2D-Renderer2DData-Test is missing RendererFeatures\n" +
+                "This could be due to missing scripts or compile error.");
             VerifyPersistentInstaller(rendererData);
         }
 
@@ -169,6 +184,13 @@ namespace Light2D.Tests
             Assert.That(featureMap.arraySize, Is.Zero);
         }
 
+        // Skips the persistent-renderer fixtures only when three robust conditions positively identify
+        // the known-defect host: the editor version is exactly 6000.4.7f1, the URP package version is
+        // exactly 17.4.0, and AutodeskInteractive.shadergraph loads as a non-Shader main asset. That
+        // DefaultAsset import IS the load-bearing defect. The former fourth condition
+        // (MonoScript.FromScriptableObject(rendererData) resolving to null) was dropped because
+        // MonoScript resolution is Library-state-dependent: it was proven to resolve on a fresh Library
+        // while the defect persists, so it is a Library artifact rather than a reliable defect signal.
         private static void IgnoreKnownUrpHostFixtureDefect(ScriptableRendererData rendererData)
         {
             if (Application.unityVersion != KnownDefectUnityVersion)
@@ -178,7 +200,7 @@ namespace Light2D.Tests
                 typeof(UniversalRenderPipeline).Assembly);
             var shaderGraphAsset = AssetDatabase.LoadMainAssetAtPath(KnownDefectShaderGraphPath);
             if (urpPackage?.version != KnownDefectUrpVersion || shaderGraphAsset == null ||
-                shaderGraphAsset is Shader || MonoScript.FromScriptableObject(rendererData) != null)
+                shaderGraphAsset is Shader)
                 return;
 
             Object.DestroyImmediate(rendererData);
