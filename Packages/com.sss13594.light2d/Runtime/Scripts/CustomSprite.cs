@@ -12,9 +12,19 @@ namespace Light2D
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class CustomSprite : MonoBehaviour
     {
+        [Tooltip("Tint multiplied into the sprite's vertex colors (default white draws the sprite " +
+                 "unmodified).")]
         public Color Color = Color.white;
+
+        [Tooltip("Sprite whose geometry and texture are drawn through the owned mesh. Leave empty to " +
+                 "draw nothing.")]
         public Sprite Sprite;
+
+        [Tooltip("Draw order for the owned renderer; lower values draw first (default 0).")]
         public int SortingOrder;
+
+        [Tooltip("Material used to draw the sprite. Leave empty to fall back to a generated " +
+                 "Sprites/Default material.")]
         public Material Material;
 
         protected Color[] _colors = Array.Empty<Color>();
@@ -37,6 +47,7 @@ namespace Light2D
             new Dictionary<MaterialKey, MaterialValue>();
         private static readonly HashSet<CustomSprite> LiveSprites = new HashSet<CustomSprite>();
         private static Material _defaultSpriteMaterial;
+        private static Material _runtimeDefaultObstacleMaterial;
 
         private const string DefaultSpriteMaterialName = "Generated Default Sprite Material (DONT change it)";
         private const string GeneratedMaterialName = "Generated Material (DONT change it)";
@@ -144,6 +155,27 @@ namespace Light2D
                 hideFlags = HideFlags.HideAndDontSave
             };
             return _defaultSpriteMaterial;
+        }
+
+        // Build-safe last-resort obstacle material. Modeled on LightAmbientEmitter.GetRuntimeDefaultMaterial
+        // but with the obstacle shader (not Sprites/Default), so obstacle components draw with correct light
+        // absorption in player builds where the editor-only DualColor.mat asset load is unavailable. The
+        // shader lives under Runtime/Resources/Shaders, so it is build-included and Shader.Find-able.
+        internal static Material GetRuntimeDefaultObstacleMaterial()
+        {
+            if (_runtimeDefaultObstacleMaterial != null)
+                return _runtimeDefaultObstacleMaterial;
+
+            var shader = Shader.Find("Light2D/Transparent Dual Color Normal Mapped");
+            if (shader == null)
+                return null;
+
+            _runtimeDefaultObstacleMaterial = new Material(shader)
+            {
+                name = "Generated Obstacle Default Material",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            return _runtimeDefaultObstacleMaterial;
         }
 
         internal static Material AcquireMaterial(Material baseMaterial, Texture2D texture, bool normalTexcoord,

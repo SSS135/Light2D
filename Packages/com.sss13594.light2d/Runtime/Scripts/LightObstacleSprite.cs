@@ -8,10 +8,19 @@ namespace Light2D
     /// <summary>
     /// Mirrors sprite geometry into the obstacle layer and stores additive color in UV1.
     /// </summary>
+    [AddComponentMenu("Light2D/Light Obstacle Sprite")]
     public class LightObstacleSprite : CustomSprite, ILight2DObstacle
     {
+        [Tooltip("Renderer whose sprite geometry is mirrored into this obstacle. Auto-filled from the " +
+                 "parent renderer when left empty.")]
         public Renderer GameSpriteRenderer;
+
+        [Tooltip("Additive obstacle color encoded into UV1; brightens light passing through the obstacle " +
+                 "(default transparent black adds nothing).")]
         public Color AdditiveColor;
+
+        [Tooltip("LightingSystem that owns this obstacle. Leave empty to draw for any system, or set it to " +
+                 "scope the obstacle to one system when several exist.")]
         public LightingSystem Owner;
 
         private Color _oldSecondaryColor;
@@ -30,6 +39,11 @@ namespace Light2D
                 Material = AssetDatabase.LoadAssetAtPath<Material>(path);
             }
 #endif
+            // B.4: builds compile out the editor asset load, so fall back to the obstacle shader here
+            // instead of inheriting CustomSprite's Sprites/Default fallback (wrong light absorption).
+            if (Material == null)
+                Material = CustomSprite.GetRuntimeDefaultObstacleMaterial();
+
             if (GameSpriteRenderer == null && transform.parent != null)
                 GameSpriteRenderer = transform.parent.GetComponent<Renderer>();
 

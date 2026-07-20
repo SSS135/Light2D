@@ -166,6 +166,12 @@ namespace Light2D
             internal Material OverlayMaterial;
             internal Material SourceBlurMaterial;
             internal Material AmbientBlurMaterial;
+            // Last serialized-source CRC per cloned material, parallel to the four fields above; gates the
+            // per-frame CopyPropertiesFromMaterial in CloneMaterial (mirrors CustomSprite.RefreshMaterial).
+            internal int AmbientMaterialCrc;
+            internal int OverlayMaterialCrc;
+            internal int SourceBlurMaterialCrc;
+            internal int AmbientBlurMaterialCrc;
             internal Material NormalLightMaterial;
             internal Mesh BorderMesh;
             internal Material BorderMaterial;
@@ -185,6 +191,8 @@ namespace Light2D
             private readonly int _diagnosticsGeneration;
             private long _ownedTextureBytes;
             private bool _disposed;
+            private int _borderWidth = -1;
+            private int _borderHeight = -1;
 
             internal CameraContext(LightingSystem lighting)
             {
@@ -226,10 +234,10 @@ namespace Light2D
                     return false;
                 }
 
-                CloneMaterial(ref AmbientMaterial, Lighting.AmbientLightComputeMaterial, "Ambient");
-                CloneMaterial(ref OverlayMaterial, Lighting.LightOverlayMaterial, "Overlay");
-                CloneMaterial(ref SourceBlurMaterial, Lighting.LightSourcesBlurMaterial, "Source Blur");
-                CloneMaterial(ref AmbientBlurMaterial, Lighting.AmbientLightBlurMaterial, "Ambient Blur");
+                CloneMaterial(ref AmbientMaterial, ref AmbientMaterialCrc, Lighting.AmbientLightComputeMaterial, "Ambient");
+                CloneMaterial(ref OverlayMaterial, ref OverlayMaterialCrc, Lighting.LightOverlayMaterial, "Overlay");
+                CloneMaterial(ref SourceBlurMaterial, ref SourceBlurMaterialCrc, Lighting.LightSourcesBlurMaterial, "Source Blur");
+                CloneMaterial(ref AmbientBlurMaterial, ref AmbientBlurMaterialCrc, Lighting.AmbientLightBlurMaterial, "Ambient Blur");
 
                 if (Lighting.EnableNormalMapping)
                 {
@@ -256,6 +264,9 @@ namespace Light2D
                     }
                     EnsureMaterial(ref BorderMaterial, shader, "Obstacle Border");
                     BorderMesh = CreateBorderMesh();
+                    // Fresh mesh carries full-quad vertices; force the next UpdateBorderMesh to rebuild it.
+                    _borderWidth = -1;
+                    _borderHeight = -1;
                 }
 
                 ValidationErrorIssued = false;
@@ -314,6 +325,12 @@ namespace Light2D
 
             internal void UpdateBorderMesh(int width, int height)
             {
+                // The border geometry depends only on the target size, so rebuild only on a resize; the
+                // per-frame AddBorderPass draw still runs. Avoids a per-frame Vector3[16] alloc + mesh upload.
+                if (width == _borderWidth && height == _borderHeight)
+                    return;
+                _borderWidth = width;
+                _borderHeight = height;
                 float x = 2f / Mathf.Max(1, width);
                 float y = 2f / Mathf.Max(1, height);
                 var vertices = BorderMesh.vertices;
@@ -363,11 +380,12 @@ namespace Light2D
                 }
             }
 
-            private static void CloneMaterial(ref Material clone, Material source, string name)
+            private static void CloneMaterial(ref Material clone, ref int lastSourceCrc, Material source, string name)
             {
                 if (source == null)
                 {
                     Destroy(ref clone);
+                    lastSourceCrc = 0;
                     return;
                 }
 
@@ -376,11 +394,17 @@ namespace Light2D
                     Destroy(ref clone);
                     clone = new Material(source) { hideFlags = HideFlags.DontSave };
                     clone.name = "Generated Light2D URP " + name;
+                    lastSourceCrc = source.ComputeCRC();
+                    return;
                 }
-                else
-                {
-                    clone.CopyPropertiesFromMaterial(source);
-                }
+
+                // Change-detected live mirroring (mirrors CustomSprite.RefreshMaterial): skip the per-frame
+                // property copy unless the serialized source material actually changed since last frame.
+                var sourceCrc = source.ComputeCRC();
+                if (sourceCrc == lastSourceCrc)
+                    return;
+                lastSourceCrc = sourceCrc;
+                clone.CopyPropertiesFromMaterial(source);
             }
 
             private static void EnsureMaterial(ref Material material, Shader shader, string name)
@@ -546,6 +570,9 @@ namespace Light2D
                 }
                 if (!contextIsReady)
                     return;
+                // B.3 handshake: tell the LightingSystem a URP feature pass served this camera so it can
+                // warn if it is ever active under URP with no Light2DUniversalRendererFeature installed.
+                _lighting.NotifyUrpServed();
 
                 Vector3 lightPosition = Light2DCameraGeometry.CalculateSnappedPosition(camera,
                     _lighting.LightPixelsPerUnityMeter);
@@ -556,6 +583,9 @@ namespace Light2D
                     GraphicsFormatUsage.Render)
                     ? GraphicsFormat.R16G16B16A16_SFloat
                     : GraphicsFormat.R8G8B8A8_UNorm;
+                // HDR composition keys off the ACTUAL light-RT format, not the requested HDR bool: on a
+                // platform without FP16 render targets the RTs fall back to LDR, so the overlay must too.
+                bool hdrActive = lightFormat == GraphicsFormat.R16G16B16A16_SFloat;
                 int aa = _lighting.LightObstaclesAntialiasing ? 2 : 1;
                 TextureHandle obstaclesAA = CreateTexture(renderGraph, sizes.Extended.x * aa, sizes.Extended.y * aa,
                     lightFormat, _lighting.LightTexturesFilterMode, "Light2D Obstacles AA");
@@ -670,7 +700,7 @@ namespace Light2D
                         Color.clear, context, false, default(TextureHandle), default(TextureHandle), black);
                     context.ResetHistoryForUnsupportedTransform(camera, _settings.AmbientWarmupCycles);
                     ambient = RecordAmbient(renderGraph, context, obstacles, ambientEmission, sizes, black,
-                        extendedCamera.Position, out ambientCycles);
+                        extendedCamera.Position, extendedCamera.OrthographicSize, out ambientCycles);
                 }
                 TextureHandle cameraSource = resourceData.activeColorTexture;
                 TextureDesc outputDesc = renderGraph.GetTextureDesc(cameraSource);
@@ -679,7 +709,7 @@ namespace Light2D
                 outputDesc.msaaSamples = MSAASamples.None;
                 TextureHandle output = renderGraph.CreateTexture(outputDesc);
                 AddOverlayPass(renderGraph, context, camera, cameraSource, output, ambient, finalSources, sizes,
-                    smallCamera, black);
+                    smallCamera, black, hdrActive);
                 resourceData.cameraColor = output;
 
                 var metrics = new Light2DFrameMetrics(sizes.Extended.x, sizes.Extended.y,
@@ -690,7 +720,7 @@ namespace Light2D
 
             private TextureHandle RecordAmbient(RenderGraph renderGraph, CameraContext context,
                 TextureHandle obstacles, TextureHandle emission, Sizes sizes, TextureHandle black,
-                Vector3 lightPosition, out int cyclesRun)
+                Vector3 lightPosition, float extendedOrthographicSize, out int cyclesRun)
             {
                 cyclesRun = 0;
                 TextureHandle ambientA = renderGraph.ImportTexture(context.AmbientA);
@@ -716,9 +746,20 @@ namespace Light2D
                 if (context.HasPreviousPosition)
                 {
                     Vector3 delta = current - context.PreviousLightPosition;
-                    shift = new Vector2(delta.x, _lighting.XZPlane ? delta.z : delta.y) /
-                            Mathf.Max(_lighting.LightPixelSize, 0.00001f);
-                    shift = Vector2.Scale(shift, new Vector2(1f / sizes.Extended.x, 1f / sizes.Extended.y));
+                    Vector2 planarDelta = new Vector2(delta.x, _lighting.XZPlane ? delta.z : delta.y);
+                    // Teleport guard: a single-frame jump beyond one extended-view height cannot be
+                    // reprojected without smearing the history across the screen. Hold it in place this frame
+                    // (zero shift) and clear + re-warm instead of hard-scrolling the history to the border.
+                    if (planarDelta.magnitude > 2f * extendedOrthographicSize)
+                    {
+                        context.HistoryNeedsClear = true;
+                        context.WarmupCycles = Mathf.Max(context.WarmupCycles, _settings.AmbientWarmupCycles);
+                    }
+                    else
+                    {
+                        shift = planarDelta / Mathf.Max(_lighting.LightPixelSize, 0.00001f);
+                        shift = Vector2.Scale(shift, new Vector2(1f / sizes.Extended.x, 1f / sizes.Extended.y));
+                    }
                 }
                 context.PreviousLightPosition = current;
                 context.HasPreviousPosition = true;
@@ -1009,7 +1050,7 @@ namespace Light2D
 
             private void AddOverlayPass(RenderGraph graph, CameraContext context, Camera camera,
                 TextureHandle source, TextureHandle destination, TextureHandle ambient, TextureHandle sources,
-                Sizes sizes, Light2DCameraGeometry lightCamera, TextureHandle black)
+                Sizes sizes, Light2DCameraGeometry lightCamera, TextureHandle black, bool hdrActive)
             {
                 using (var builder = graph.AddRasterRenderPass<OverlayPassData>("Light2D Composite", out var data,
                            profilingSampler))
@@ -1018,7 +1059,7 @@ namespace Light2D
                     data.Ambient = ambient;
                     data.Sources = sources;
                     data.Material = context.OverlayMaterial;
-                    data.Hdr = _lighting.HDR;
+                    data.Hdr = hdrActive;
                     data.ExtendedScale = new Vector2(sizes.Small.x / (float)sizes.Extended.x,
                         sizes.Small.y / (float)sizes.Extended.y);
                     float sourceSize = camera.orthographic

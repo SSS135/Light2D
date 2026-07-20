@@ -21,28 +21,77 @@ namespace Light2D
     /// </summary>
     [ExecuteInEditMode]
     [RequireComponent(typeof(Camera))]
+    [AddComponentMenu("Light2D/Light 2D System")]
     public class LightingSystem : MonoBehaviour
     {
         private const int MaximumAmbientCyclesPerFrame = 8;
         private const int MaximumQueuedAmbientCycles = 64;
         private const long MaximumOwnedTexturePixels = 16L * 1024L * 1024L;
+        // Warmup cycles queued when the ambient history is invalidated by a rotation/zoom/aspect change or a
+        // teleport; mirrors the resource-change warmup so the history re-propagates from the cleared state.
+        private const int AmbientHistoryResetWarmupCycles = 100;
 
+        [Tooltip("World size of one lighting-texture pixel; larger values lower the lighting resolution " +
+                 "and cost (default 0.05).")]
         public float LightPixelSize = 0.05f;
+
+        [Tooltip("Extra orthographic half-size added to the light camera so obstacles and lights just " +
+                 "off-screen still affect the visible area (default 3).")]
         public float LightCameraSizeAdd = 3;
+
+        [Tooltip("Extra field of view added to the light camera in perspective mode so off-screen casters " +
+                 "still contribute (default 30).")]
         public float LightCameraFovAdd = 30;
+
+        [Tooltip("Enables the temporal ambient-light propagation pass (default on).")]
         public bool EnableAmbientLight = true;
+
+        [Tooltip("Blurs the light-sources texture for softer light edges (default on).")]
         public bool BlurLightSources = true;
+
+        [Tooltip("Blurs the ambient-light texture each propagation cycle for smoother ambient (default on).")]
         public bool BlurAmbientLight = true;
+
+        [Tooltip("Uses a half-float (ARGBHalf) light buffer for higher dynamic range when the platform " +
+                 "supports it (default on).")]
         public bool HDR = true;
+
+        [Tooltip("Renders obstacles at double resolution and downsamples for smoother obstacle edges " +
+                 "(default on).")]
         public bool LightObstaclesAntialiasing = true;
+
+        [Tooltip("Distance from the camera to the obstacle/light plane, used to project casters in " +
+                 "perspective mode (default 10).")]
         public float LightObstaclesDistance = 10;
+
+        [Tooltip("Filter mode of the internal light textures; Bilinear softens, Point keeps hard pixels " +
+                 "(default Bilinear).")]
         public FilterMode LightTexturesFilterMode = FilterMode.Bilinear;
+
+        [Tooltip("Enables normal-mapped light sources; supported on the XY plane with an orthographic " +
+                 "camera only (default off).")]
         public bool EnableNormalMapping;
+
+        [Tooltip("Confines the lighting result to this camera through an intermediate target instead of " +
+                 "compositing to the screen (default off).")]
         public bool AffectOnlyThisCamera;
+
+        [Tooltip("Material running the ambient-light propagation pass; leave empty to use the packaged " +
+                 "ambient compute material.")]
         public Material AmbientLightComputeMaterial;
+
+        [Tooltip("Material compositing light sources and ambient over the game image. Required: Light2D " +
+                 "does not render without it.")]
         public Material LightOverlayMaterial;
+
+        [Tooltip("Material used to blur the light-sources texture when Blur Light Sources is enabled.")]
         public Material LightSourcesBlurMaterial;
+
+        [Tooltip("Material used to blur the ambient-light texture when Blur Ambient Light is enabled.")]
         public Material AmbientLightBlurMaterial;
+
+        [Tooltip("Treats the world XZ plane as the lighting plane for top-down games instead of the XY " +
+                 "plane (default off).")]
         public bool XZPlane;
 
         private static readonly HashSet<LightingSystem> ActiveInstances = new HashSet<LightingSystem>();
@@ -62,6 +111,10 @@ namespace Light2D
         private Vector2Int _smallLightTextureSize;
         private Vector3 _oldPos;
         private Vector3 _currPos;
+        private Quaternion _prevRotation;
+        private float _prevProjectionSize;
+        private float _prevAspect;
+        private bool _hasPrevTransform;
         private RenderTextureFormat _texFormat;
         private int _aditionalAmbientLightCycles;
         private bool _initialized;
@@ -78,6 +131,8 @@ namespace Light2D
         private bool _flareLayerEnabled;
         private bool _xzNormalMappingWarningIssued;
         private bool _unsupportedPipelineWarningIssued;
+        private int _lastUrpServedFrame = -1000;
+        private bool _urpNoFeatureWarningIssued;
         private int _validationDiagnosticHash;
         private int _frameReallocations;
 
@@ -178,6 +233,10 @@ namespace Light2D
         {
             ActiveInstances.Add(this);
             _camera = GetComponent<Camera>();
+            // Seed the URP-served grace window from enable time so the missing-feature warning cannot fire
+            // during the feature's first-frame warmup (the -1000 field initializer is the pre-enable sentinel).
+            _lastUrpServedFrame = Time.frameCount;
+            _urpNoFeatureWarningIssued = false;
             if (ActivePipeline == Light2DPipeline.UnsupportedScriptableRenderPipeline &&
                 !_unsupportedPipelineWarningIssued)
             {
@@ -237,8 +296,6 @@ namespace Light2D
                     return;
                 }
 
-                EnsureFrameResources(src.descriptor);
-
                 // Derive the light-camera geometry directly (no helper camera): a snapped position plus
                 // an extended (obstacle/ambient) and small (light-source) view/projection, and the frustum
                 // planes the registry snapshots cull against. Mirrors the URP feature's per-frame geometry.
@@ -269,6 +326,7 @@ namespace Light2D
                 RenderNormalBuffer(smallGeom);
                 RenderLightSources(smallGeom);
                 RenderLightSourcesBlur();
+                ResetAmbientHistoryForUnsupportedTransform(extendedGeom);
                 int ambientCyclesConsumed = RenderAmbientLight(extendedGeom);
                 RenderLightOverlay(src, dest, smallGeom);
                 ReportBuiltInFrame(ambientCyclesConsumed);
@@ -797,6 +855,41 @@ namespace Light2D
             }
         }
 
+        // Built-in mirror of the URP feature's CameraContext.ResetHistoryForUnsupportedTransform plus the
+        // teleport guard. The temporal ambient history is only reprojected by translation (see the shift in
+        // RenderAmbientLight), so a camera rotation, zoom (orthographic-size / field-of-view) or aspect
+        // change, or a single-frame jump larger than the view cannot be reprojected and would smear. When any
+        // of those is detected, clear the history, zero this frame's shift, and re-warm from the cleared
+        // state. Zoom usually also changes the size hash and triggers a resource-change reset, but pure
+        // rotation at constant size does not, which is the gap this closes.
+        private void ResetAmbientHistoryForUnsupportedTransform(in Light2DCameraGeometry geometry)
+        {
+            float projectionSize = _camera.orthographic ? _camera.orthographicSize : _camera.fieldOfView;
+            bool transformChanged = _hasPrevTransform &&
+                (Quaternion.Angle(_prevRotation, _camera.transform.rotation) > 0.001f ||
+                 !Mathf.Approximately(_prevProjectionSize, projectionSize) ||
+                 !Mathf.Approximately(_prevAspect, _camera.aspect));
+            // Teleport: a single-frame position jump larger than one full extended-view height cannot be
+            // reprojected by scrolling the history, so treat it as a full history invalidation instead.
+            bool teleported = (_currPos - _oldPos).magnitude > 2f * geometry.OrthographicSize;
+
+            _prevRotation = _camera.transform.rotation;
+            _prevProjectionSize = projectionSize;
+            _prevAspect = _camera.aspect;
+            _hasPrevTransform = true;
+
+            if (!transformChanged && !teleported)
+                return;
+            if (!EnableAmbientLight || _resources == null || _resources.AmbientTexture == null)
+                return;
+
+            ClearTexture(_resources.AmbientTexture);
+            if (_resources.PreviousAmbientTexture != null)
+                ClearTexture(_resources.PreviousAmbientTexture);
+            _oldPos = _currPos; // zero this frame's reprojection shift
+            LoopAmbientLight(AmbientHistoryResetWarmupCycles);
+        }
+
         private int RenderAmbientLight(in Light2DCameraGeometry geometry)
         {
             var computeMaterial = _resources.AmbientLightComputeMaterial;
@@ -811,7 +904,12 @@ namespace Light2D
                 {
                     Swap(ref _resources.PreviousAmbientTexture, ref _resources.AmbientTexture);
                     var textureSize = new Vector2(_resources.AmbientTexture.width, _resources.AmbientTexture.height);
-                    var pixelShift = (Vector2)(_currPos - _oldPos) / LightPixelSize;
+                    // Reproject the ambient history along the lighting plane's two axes. On the XZ plane the
+                    // vertical scroll axis is world z, so the delta must branch z (not y, which the old
+                    // (Vector2) cast silently kept). Guard the divisor against a zero LightPixelSize.
+                    var delta = _currPos - _oldPos;
+                    var pixelShift = new Vector2(delta.x, XZPlane ? delta.z : delta.y) /
+                                     Mathf.Max(LightPixelSize, 0.00001f);
                     var positionShift = new Vector2(pixelShift.x / textureSize.x, pixelShift.y / textureSize.y);
                     _oldPos = _currPos;
                     computeMaterial.SetTexture(LightSourcesTexId, _resources.AmbientEmissionTexture);
@@ -1074,6 +1172,36 @@ namespace Light2D
             var temporary = left;
             left = right;
             right = temporary;
+        }
+
+        private void Update()
+        {
+            WarnIfUrpFeatureMissing();
+        }
+
+        // Called by Light2DUniversalRendererFeature each frame it renders this system's camera, so the
+        // Update-time missing-feature warning stays silent while URP is actually serving Light2D.
+        internal void NotifyUrpServed()
+        {
+            _lastUrpServedFrame = Time.frameCount;
+            _urpNoFeatureWarningIssued = false;
+        }
+
+        // Under URP the drawing happens in Light2DUniversalRendererFeature, which calls NotifyUrpServed each
+        // frame it renders this system. If the feature was never added to the active URP Renderer nothing
+        // draws and nothing else complains, so warn once. The frame grace (seeded from OnEnable) avoids a
+        // false positive during the feature's first-frame warmup.
+        private void WarnIfUrpFeatureMissing()
+        {
+            if (!Application.isPlaying || !isActiveAndEnabled || LightOverlayMaterial == null ||
+                ActivePipeline != Light2DPipeline.UniversalRenderPipeline)
+                return;
+            if (_urpNoFeatureWarningIssued || Time.frameCount - _lastUrpServedFrame <= 4)
+                return;
+            _urpNoFeatureWarningIssued = true;
+            Debug.LogWarning("A LightingSystem is active under URP but no Light2DUniversalRendererFeature " +
+                             "rendered this camera. Add the Light2D renderer feature to the active URP " +
+                             "Renderer, or Light2D will not render.", this);
         }
 
         private void LateUpdate()

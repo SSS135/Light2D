@@ -7,6 +7,7 @@ namespace Light2D
     /// <summary>
     /// Draws a point or line light and stores its world-space origin in UV1.
     /// </summary>
+    [AddComponentMenu("Light2D/Light Sprite")]
     public class LightSprite : CustomSprite
     {
         private static readonly HashSet<LightSprite> LightSprites = new HashSet<LightSprite>();
@@ -14,8 +15,16 @@ namespace Light2D
         private static readonly Comparison<LightSprite> CompareByEntityId = CompareLights;
         private static readonly Predicate<LightSprite> IsMissing = light => light == null;
 
+        [Tooltip("Light emission origin in sprite-local space; Z is the light's height above the plane " +
+                 "used for normal mapping (default (0, 0, 1)).")]
         public Vector3 LightOrigin = new Vector3(0, 0, 1);
+
+        [Tooltip("Point emits radially from LightOrigin; Line emits along the sprite's horizontal extent " +
+                 "(default Point).")]
         public LightShape Shape = LightShape.Point;
+
+        [Tooltip("LightingSystem that draws this light. Leave empty to draw for any system, or set it to " +
+                 "scope the light to one system when several exist.")]
         public LightingSystem Owner;
 
         private Matrix4x4 _modelMatrix;

@@ -22,10 +22,23 @@ namespace Light2D
     {
         // Default white: tiles are always textured, so the tile sprite alpha shapes the shadow and white
         // passes it through untinted (the textured-obstacle rule).
+        [Tooltip("Per-vertex multiplicative color for every tile-group mesh; darkens light passing through " +
+                 "(default white passes the tile sprite alpha through untinted).")]
         public Color32 MultiplicativeColor = new Color32(255, 255, 255, 255);
+
+        [Tooltip("Additive obstacle color encoded into UV1; brightens light passing through the tiles " +
+                 "(default transparent black adds nothing).")]
         public Color AdditiveColor;
+
+        [Tooltip("Base obstacle material for the generated tile-group meshes. Leave empty to use the " +
+                 "Light2D obstacle material.")]
         public Material Material;
+
+        [Tooltip("LightingSystem that owns this occluder. Leave empty to draw for any system, or set it to " +
+                 "scope the occluder to one system when several exist.")]
         public LightingSystem Owner;
+
+        [Tooltip("Draw order within the obstacle pass; lower values draw first.")]
         public int SortingOrder;
 
         private Tilemap _tilemap;
@@ -237,7 +250,9 @@ namespace Light2D
 #if UNITY_EDITOR
             return LoadDefaultObstacleMaterial();
 #else
-            return null;
+            // B.4: without this, a player build returned null here, AcquireMaterial(null, ...) yielded null,
+            // every tile group was skipped, and the tilemap produced NO obstacle geometry in builds.
+            return CustomSprite.GetRuntimeDefaultObstacleMaterial();
 #endif
         }
 

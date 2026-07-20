@@ -6,12 +6,27 @@ namespace Light2D
     /// Creates the matching sprite or mesh obstacle for this renderer at runtime.
     /// </summary>
     [DisallowMultipleComponent]
+    [AddComponentMenu("Light2D/Light Obstacle Generator")]
     public class LightObstacleGenerator : MonoBehaviour
     {
+        [Tooltip("Multiplicative obstacle color forwarded to the generated obstacle; darkens light passing " +
+                 "through (opaque black casts a full shadow, white passes light untinted).")]
         public Color MultiplicativeColor = new Color(0, 0, 0, 1);
+
+        [Tooltip("Additive obstacle color forwarded to the generated obstacle; brightens light passing " +
+                 "through (default transparent black adds nothing).")]
         public Color AdditiveColor;
+
+        [Tooltip("Base obstacle material forwarded to the generated obstacle. Leave empty to use the " +
+                 "Light2D obstacle material.")]
         public Material Material;
+
+        [Tooltip("Uniform scale applied to the generated obstacle relative to the source (default 1 " +
+                 "matches the source size).")]
         public float LightObstacleScale = 1;
+
+        [Tooltip("LightingSystem that owns the generated obstacle. Leave empty when exactly one " +
+                 "LightingSystem is active, or set it to scope the obstacle to one system.")]
         public LightingSystem Owner;
 
 #if UNITY_EDITOR
@@ -49,6 +64,11 @@ namespace Light2D
                 Material = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(path);
             }
 #endif
+            // B.4: builds compile out the editor asset load, so forward the runtime obstacle-shader
+            // fallback to the spawned child instead of a null Material (which would degrade to Sprites/Default).
+            if (Material == null)
+                Material = CustomSprite.GetRuntimeDefaultObstacleMaterial();
+
             if (!Application.isPlaying || Light2DObjectUtility.IsInPrefabStage(gameObject))
                 return;
 

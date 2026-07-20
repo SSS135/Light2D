@@ -8,12 +8,26 @@ namespace Light2D
     [ExecuteAlways]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
+    [AddComponentMenu("Light2D/Light Obstacle Mesh")]
     public class LightObstacleMesh : MonoBehaviour, ILight2DObstacle
     {
+        [Tooltip("Per-vertex multiplicative obstacle color; darkens light passing through (opaque black " +
+                 "casts a full shadow, white passes light untinted).")]
         public Color32 MultiplicativeColor;
+
+        [Tooltip("Additive obstacle color encoded into UV1; brightens light passing through the obstacle " +
+                 "(default transparent black adds nothing).")]
         public Color AdditiveColor;
+
+        [Tooltip("Optional base obstacle material for the mirrored mesh. Leave empty to reuse the mirrored " +
+                 "parent renderer's material.")]
         public Material Material;
+
+        [Tooltip("LightingSystem that owns this obstacle. Leave empty to draw for any system, or set it to " +
+                 "scope the obstacle to one system when several exist.")]
         public LightingSystem Owner;
+
+        [Tooltip("Draw order within the obstacle pass; lower values draw first.")]
         public int SortingOrder;
 
         [Tooltip("Draw this object's own MeshFilter/MeshRenderer directly instead of mirroring a parent " +
@@ -24,6 +38,11 @@ namespace Light2D
 
         private MeshRenderer _parentMeshRenderer;
         private MeshFilter _parentMeshFilter;
+        // D.2: parent-component lookup cache. Refresh() runs every frame, so the parent MeshRenderer/
+        // MeshFilter are resolved only when transform.parent or SelfMesh actually changes; their
+        // sharedMesh/sharedMaterial are still read live (LightObstacleSprite.ResolveSourceSprite pattern).
+        private Transform _cachedParent;
+        private bool _cachedSelfMesh;
         private MeshRenderer _meshRenderer;
         private MeshFilter _meshFilter;
         private Mesh _mesh;
@@ -116,9 +135,17 @@ namespace Light2D
 
             // SelfMesh forces the self-mesh path even when a mirror-able parent exists: MapGenerator parents
             // the obstacle mesh under the block-visual mesh, whose geometry must never be mirrored.
-            var parent = SelfMesh ? null : transform.parent;
-            _parentMeshRenderer = parent != null ? parent.GetComponent<MeshRenderer>() : null;
-            _parentMeshFilter = parent != null ? parent.GetComponent<MeshFilter>() : null;
+            // D.2: only re-GetComponent when the parent transform changes or SelfMesh toggles; otherwise the
+            // cached components are reused and their sharedMesh/sharedMaterial read live below.
+            var rawParent = transform.parent;
+            if (rawParent != _cachedParent || SelfMesh != _cachedSelfMesh)
+            {
+                _cachedParent = rawParent;
+                _cachedSelfMesh = SelfMesh;
+                var parent = SelfMesh ? null : rawParent;
+                _parentMeshRenderer = parent != null ? parent.GetComponent<MeshRenderer>() : null;
+                _parentMeshFilter = parent != null ? parent.GetComponent<MeshFilter>() : null;
+            }
 
             var hasParentMirror = _parentMeshFilter != null && _parentMeshRenderer != null &&
                 _parentMeshFilter.sharedMesh != null && _parentMeshRenderer.sharedMaterial != null;

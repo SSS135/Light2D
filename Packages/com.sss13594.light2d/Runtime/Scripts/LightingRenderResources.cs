@@ -5,10 +5,10 @@ namespace Light2D
 {
     internal sealed class LightingRenderResources : IDisposable
     {
-        private Material _ambientLightComputeMaterial;
-        private Material _lightOverlayMaterial;
-        private Material _lightSourcesBlurMaterial;
-        private Material _ambientLightBlurMaterial;
+        private MaterialClone _ambientLightComputeClone;
+        private MaterialClone _lightOverlayClone;
+        private MaterialClone _lightSourcesBlurClone;
+        private MaterialClone _ambientLightBlurClone;
         private Material _normalMappedLightMaterial;
         private Material _normalMapDrawerMaterial;
         private Material _alphaBlendedMaterial;
@@ -26,10 +26,10 @@ namespace Light2D
         internal RenderTexture SingleLightSourceTexture;
         internal RenderTexture CameraTargetTexture;
 
-        internal Material AmbientLightComputeMaterial { get { return _ambientLightComputeMaterial; } }
-        internal Material LightOverlayMaterial { get { return _lightOverlayMaterial; } }
-        internal Material LightSourcesBlurMaterial { get { return _lightSourcesBlurMaterial; } }
-        internal Material AmbientLightBlurMaterial { get { return _ambientLightBlurMaterial; } }
+        internal Material AmbientLightComputeMaterial { get { return _ambientLightComputeClone.Clone; } }
+        internal Material LightOverlayMaterial { get { return _lightOverlayClone.Clone; } }
+        internal Material LightSourcesBlurMaterial { get { return _lightSourcesBlurClone.Clone; } }
+        internal Material AmbientLightBlurMaterial { get { return _ambientLightBlurClone.Clone; } }
         internal Material NormalMappedLightMaterial { get { return _normalMappedLightMaterial; } }
         internal Material NormalMapDrawerMaterial { get { return _normalMapDrawerMaterial; } }
         internal Material AlphaBlendedMaterial { get { return _alphaBlendedMaterial; } }
@@ -42,10 +42,10 @@ namespace Light2D
         internal void EnsureSerializedMaterials(Material ambientCompute, Material overlay, Material sourceBlur,
             Material ambientBlur)
         {
-            EnsureClone(ref _ambientLightComputeMaterial, ambientCompute, "Ambient Light Compute");
-            EnsureClone(ref _lightOverlayMaterial, overlay, "Light Overlay");
-            EnsureClone(ref _lightSourcesBlurMaterial, sourceBlur, "Light Sources Blur");
-            EnsureClone(ref _ambientLightBlurMaterial, ambientBlur, "Ambient Light Blur");
+            EnsureClone(ref _ambientLightComputeClone, ambientCompute, "Ambient Light Compute");
+            EnsureClone(ref _lightOverlayClone, overlay, "Light Overlay");
+            EnsureClone(ref _lightSourcesBlurClone, sourceBlur, "Light Sources Blur");
+            EnsureClone(ref _ambientLightBlurClone, ambientBlur, "Ambient Light Blur");
         }
 
         internal Material EnsureInternalMaterial(ref Material material, Shader shader, string name)
@@ -146,38 +146,56 @@ namespace Light2D
                 return;
             _disposed = true;
             ReleaseTextures();
-            Destroy(ref _ambientLightComputeMaterial);
-            Destroy(ref _lightOverlayMaterial);
-            Destroy(ref _lightSourcesBlurMaterial);
-            Destroy(ref _ambientLightBlurMaterial);
+            DestroyClone(ref _ambientLightComputeClone);
+            DestroyClone(ref _lightOverlayClone);
+            DestroyClone(ref _lightSourcesBlurClone);
+            DestroyClone(ref _ambientLightBlurClone);
             Destroy(ref _normalMappedLightMaterial);
             Destroy(ref _normalMapDrawerMaterial);
             Destroy(ref _alphaBlendedMaterial);
             Light2DDiagnostics.UnregisterContext(_diagnosticsGeneration);
         }
 
-        private static void EnsureClone(ref Material clone, Material source, string name)
+        private static void EnsureClone(ref MaterialClone entry, Material source, string name)
         {
             if (source == null)
             {
-                Destroy(ref clone);
-                return;
-            }
-            if (clone != null && clone.shader == source.shader && clone.name == CloneName(source, name))
-            {
-                clone.CopyPropertiesFromMaterial(source);
+                DestroyClone(ref entry);
                 return;
             }
 
-            Destroy(ref clone);
-            clone = new Material(source);
-            clone.name = CloneName(source, name);
-            clone.hideFlags = HideFlags.DontSave;
+            // Track clone identity via non-string fields (source shader + EntityId) so the per-frame
+            // staleness check allocates nothing (the old CloneName concat ran every frame just to compare).
+            var sourceId = source.GetEntityId();
+            if (entry.Clone != null && entry.SourceShader == source.shader && entry.SourceId == sourceId)
+            {
+                // Change-detected live mirroring, mirroring CustomSprite.RefreshMaterial exactly: skip the
+                // per-frame CopyPropertiesFromMaterial unless the serialized source material actually changed.
+                var sourceCrc = source.ComputeCRC();
+                if (sourceCrc == entry.SourceCrc)
+                    return;
+                entry.Clone.CopyPropertiesFromMaterial(source);
+                entry.SourceCrc = sourceCrc;
+                return;
+            }
+
+            DestroyClone(ref entry);
+            // Frozen contract: the clone name MUST start with "Generated Light2D " (pinned by
+            // CustomSprite.IsGeneratedMaterial and BuiltInRenderingTests' owned-material filter).
+            entry.Clone = new Material(source);
+            entry.Clone.name = "Generated Light2D " + name;
+            entry.Clone.hideFlags = HideFlags.DontSave;
+            entry.SourceShader = source.shader;
+            entry.SourceId = sourceId;
+            entry.SourceCrc = source.ComputeCRC();
         }
 
-        private static string CloneName(Material source, string name)
+        private static void DestroyClone(ref MaterialClone entry)
         {
-            return "Generated Light2D " + name + " (" + source.GetEntityId() + ")";
+            Destroy(ref entry.Clone);
+            entry.SourceShader = null;
+            entry.SourceId = default;
+            entry.SourceCrc = 0;
         }
 
         private static bool DescriptorsEqual(RenderTextureDescriptor left, RenderTextureDescriptor right)
@@ -208,6 +226,16 @@ namespace Light2D
                 return;
             Light2DObjectUtility.Destroy(material);
             material = null;
+        }
+
+        // Per-clone bookkeeping for a serialized-material clone: the clone plus the source identity
+        // (shader + EntityId) and CRC used to detect swaps and gate the per-frame property copy.
+        private struct MaterialClone
+        {
+            public Material Clone;
+            public Shader SourceShader;
+            public EntityId SourceId;
+            public int SourceCrc;
         }
     }
 }
