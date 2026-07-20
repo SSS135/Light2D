@@ -15,10 +15,10 @@ Generated host directories and user state are ignored by Git; the project settin
 The exact editor used by the host is:
 
 ```text
-C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe
+C:\Program Files\Unity\Hub\Editor\6000.5.4f1\Editor\Unity.exe
 ```
 
-Open the repository root directly. It is a Unity 6000.4.7f1 project whose `Assets/` and `ProjectSettings/` are the development host, and it embeds the package under `Packages/`.
+Open the repository root directly. It is a Unity 6000.5.4f1 project whose `Assets/` and `ProjectSettings/` are the development host, and it embeds the package under `Packages/`.
 
 ## Validation Order
 
@@ -42,13 +42,13 @@ Do not run these while the same project is open in another Unity process. Quote 
 Compile/import and write a log:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe" -batchmode -quit -projectPath "X:\src\unity\Light2D" -logFile "X:\src\unity\Light2D\unity-import.log"
+& "C:\Program Files\Unity\Hub\Editor\6000.5.4f1\Editor\Unity.exe" -batchmode -quit -projectPath "X:\src\unity\Light2D" -logFile "X:\src\unity\Light2D\unity-import.log"
 ```
 
 Run Edit Mode tests:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe" -batchmode -projectPath "X:\src\unity\Light2D" -runTests -testPlatform EditMode -testResults "X:\src\unity\Light2D\editmode-results.xml" -logFile "X:\src\unity\Light2D\unity-editmode-tests.log"
+& "C:\Program Files\Unity\Hub\Editor\6000.5.4f1\Editor\Unity.exe" -batchmode -projectPath "X:\src\unity\Light2D" -runTests -testPlatform EditMode -testResults "X:\src\unity\Light2D\editmode-results.xml" -logFile "X:\src\unity\Light2D\unity-editmode-tests.log"
 ```
 
 Run Play Mode tests:
@@ -62,7 +62,7 @@ $arguments = @(
     '-testResults', '"X:\src\unity\Light2D\playmode-results.xml"',
     '-logFile', '"X:\src\unity\Light2D\unity-playmode-tests.log"'
 )
-$unity = Start-Process -FilePath 'C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe' -ArgumentList $arguments -PassThru
+$unity = Start-Process -FilePath 'C:\Program Files\Unity\Hub\Editor\6000.5.4f1\Editor\Unity.exe' -ArgumentList $arguments -PassThru
 if (-not $unity.WaitForExit(900000)) {
     Stop-Process -Id $unity.Id -Force
     throw 'PlayMode test runner exceeded the 15-minute watchdog timeout.'
@@ -76,7 +76,7 @@ To run a single test as a fast path, add a `-testFilter` entry to the same `$arg
     '-testFilter', 'Light2D.TestProject.Tests.RocketVisualSmokeTest.RocketSceneRendersDarkCaveWithColoredLights',
 ```
 
-On this host (Unity 6000.4.7f1, Test Framework 1.6) `-testFilter` reliably starts the matched tests, whereas `-assemblyNames Light2D.TestProject.SampleTests` registers the filter in the run settings but never starts a test, so the batch job hangs until the watchdog kills it. Use `-testFilter` for filtered fast paths, or run unfiltered.
+On this host (Unity 6000.5.4f1, Test Framework 1.7) `-testFilter` reliably starts the matched tests, whereas `-assemblyNames Light2D.TestProject.SampleTests` registers the filter in the run settings but never starts a test, so the batch job hangs until the watchdog kills it. Use `-testFilter` for filtered fast paths, or run unfiltered.
 
 Do not add `-quit` to either `-runTests` command; Unity Test Framework owns shutdown for a test run. On this host, a PlayMode run can produce its result and still leave the editor process alive, so the external watchdog prevents an indefinite batch job. The sample suite advances several minutes of captured game frames, which is why the watchdog allows 15 minutes. Logs and result XML files written to the repository root are generated artifacts and must not be committed.
 

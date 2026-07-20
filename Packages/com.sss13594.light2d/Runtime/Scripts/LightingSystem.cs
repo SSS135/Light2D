@@ -73,7 +73,9 @@ namespace Light2D
         private RenderTexture _mainCameraTarget;
         private CameraClearFlags _mainCameraClearFlags;
         private Color _mainCameraBackground;
+#pragma warning disable CS0618 // FlareLayer is obsolete from Unity 6000.5 (Built-in Render Pipeline deprecation); Light2D still supports the Built-in backend and hides lens flares from the helper-camera render.
         private FlareLayer _flareLayer;
+#pragma warning restore CS0618
         private bool _flareLayerEnabled;
         private bool _xzNormalMappingWarningIssued;
         private bool _unsupportedPipelineWarningIssued;
@@ -837,7 +839,9 @@ namespace Light2D
             _mainCameraTarget = _camera.targetTexture;
             _mainCameraClearFlags = _camera.clearFlags;
             _mainCameraBackground = _camera.backgroundColor;
+#pragma warning disable CS0618 // FlareLayer is obsolete from Unity 6000.5; see the _flareLayer field declaration.
             _flareLayer = GetComponent<FlareLayer>();
+#pragma warning restore CS0618
             _flareLayerEnabled = _flareLayer != null && _flareLayer.enabled;
             _camera.clearFlags = CameraClearFlags.SolidColor;
             _camera.backgroundColor = Color.clear;

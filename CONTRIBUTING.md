@@ -6,7 +6,7 @@ Thanks for your interest in improving Light2D. Bug reports, feature requests, an
 
 Light2D is developed as an embedded UPM package inside this repository: the repository root is a Unity project, and the package lives in [`Packages/com.sss13594.light2d/`](Packages/com.sss13594.light2d/).
 
-1. Open the **repository root** in Unity **6000.4.7f1** — not a subfolder. The package is auto-discovered under `Packages/`.
+1. Open the **repository root** in Unity **6000.5.4f1** — not a subfolder. The package is auto-discovered under `Packages/`.
 2. The package's own EditMode/PlayMode suites run through the Unity Test Runner (the project manifest lists it under `testables`).
 3. See [`Packages/com.sss13594.light2d/Documentation~/TESTING.md`](Packages/com.sss13594.light2d/Documentation~/TESTING.md) for the full test and host protocol.
 

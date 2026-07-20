@@ -2,9 +2,9 @@
 
 ## Repository Shape
 
-- This repository root **is** the Unity `6000.4.7f1` development/test project. The UPM package `com.sss13594.light2d` is embedded at `Packages/com.sss13594.light2d/` and is auto-discovered by Unity from there.
+- This repository root **is** the Unity `6000.5.4f1` development/test project. The UPM package `com.sss13594.light2d` is embedded at `Packages/com.sss13594.light2d/` and is auto-discovered by Unity from there.
 - The repo-root project's generated directories (`Library/`, `Temp/`, `Obj/`, `Logs/`, `Builds/`, `UserSettings/`, `TestResults/`) are git-ignored. Consumer-facing package payload excludes `Documentation~/` and `Samples~/` staging by trailing `~` and `.npmignore`.
-- Open `X:\src\unity\Light2D` (the repo root) with Unity `6000.4.7f1` at `C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe`. Do not open a subfolder.
+- Open `X:\src\unity\Light2D` (the repo root) with Unity `6000.5.4f1` at `C:\Program Files\Unity\Hub\Editor\6000.5.4f1\Editor\Unity.exe`. Do not open a subfolder.
 - `Packages/manifest.json` does NOT reference the package via a `file:` path — an embedded package under `Packages/` is auto-discovered. `manifest.json` keeps `"testables": ["com.sss13594.light2d"]`, which runs the package's own EditMode/PlayMode suites, and `"com.sss135.editor-automation-mcp": "file:com.sss135.editor-automation-mcp"` (the embedded MCP host, resolved relative to `Packages/`).
 - `Packages/com.sss13594.light2d/Documentation~/` holds the reference guides (`ARCHITECTURE.md`, `INSTALLATION.md`, `MIGRATION.md`, `BENCHMARKING.md`, `TROUBLESHOOTING.md`, and `TESTING.md`). `Documentation~/TESTING.md` is the authoritative long-form of the test and host protocol summarized below.
 - Use subagents for independent investigation or implementation work when available. Other agents and users may edit this checkout concurrently: re-read files immediately before editing, preserve unrelated changes, and never revert or overwrite work you did not author.
@@ -65,19 +65,19 @@ PlayMode environmental protocol: before every PlayMode invocation, and only when
 Compile/import example:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe" -batchmode -quit -projectPath "X:\src\unity\Light2D" -logFile "X:\src\unity\Light2D\unity-import.log"
+& "C:\Program Files\Unity\Hub\Editor\6000.5.4f1\Editor\Unity.exe" -batchmode -quit -projectPath "X:\src\unity\Light2D" -logFile "X:\src\unity\Light2D\unity-import.log"
 ```
 
 Edit Mode test example:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe" -batchmode -projectPath "X:\src\unity\Light2D" -runTests -testPlatform EditMode -testResults "X:\src\unity\Light2D\editmode-results.xml" -logFile "X:\src\unity\Light2D\unity-editmode-tests.log"
+& "C:\Program Files\Unity\Hub\Editor\6000.5.4f1\Editor\Unity.exe" -batchmode -projectPath "X:\src\unity\Light2D" -runTests -testPlatform EditMode -testResults "X:\src\unity\Light2D\editmode-results.xml" -logFile "X:\src\unity\Light2D\unity-editmode-tests.log"
 ```
 
 Play Mode per-test fast path example:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe" -batchmode -projectPath "X:\src\unity\Light2D" -runTests -testPlatform PlayMode -testFilter "Light2D.Tests.BuiltInRenderingTests.ProceduralRenderIsNonuniformAndObstacleAttenuatesLight" -testResults "X:\src\unity\Light2D\playmode-results.xml" -logFile "X:\src\unity\Light2D\unity-playmode-tests.log"
+& "C:\Program Files\Unity\Hub\Editor\6000.5.4f1\Editor\Unity.exe" -batchmode -projectPath "X:\src\unity\Light2D" -runTests -testPlatform PlayMode -testFilter "Light2D.Tests.BuiltInRenderingTests.ProceduralRenderIsNonuniformAndObstacleAttenuatesLight" -testResults "X:\src\unity\Light2D\playmode-results.xml" -logFile "X:\src\unity\Light2D\unity-playmode-tests.log"
 ```
 
 ## Never Edit or Commit Generated State

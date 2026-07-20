@@ -14,7 +14,7 @@ Light2D 2.0 is a UPM package, not a folder to copy under `Assets`. Package asset
 
 1. Remove `Assets/Light2D` and `Assets/Light2D.meta` from the consuming project while Unity is closed. Preserve a backup outside the project.
 2. Install the 2.0 package by Git URL or local disk.
-3. Reopen the project in Unity 6000.4.7f1 and allow package import and script compilation to finish.
+3. Reopen the project in Unity 6000.5.4f1 and allow package import and script compilation to finish.
 4. Resolve compilation errors before opening and saving production scenes.
 5. Verify that `LightingSystem`, `LightSprite`, obstacle components, materials, and shader references resolve. Do not remove missing components until you have checked whether the package failed to import.
 6. Recreate the three layers if needed and restore their serialized indices on every `LightingSystem` and relevant child object.

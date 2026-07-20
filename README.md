@@ -1,10 +1,10 @@
 # Light2D
 
-Light2D is a GPU-based dynamic 2D lighting package for Unity. It renders light obstacles, direct lights, and optional ambient propagation into low-resolution textures, then composites the result over a camera. Lights and obstacles can move at runtime and do not require physics colliders. Version 2.0.0 targets **Unity 6000.4** (developed with **Unity 6000.4.7f1**) and supports the Built-in Render Pipeline and URP 17.4.
+Light2D is a GPU-based dynamic 2D lighting package for Unity. It renders light obstacles, direct lights, and optional ambient propagation into low-resolution textures, then composites the result over a camera. Lights and obstacles can move at runtime and do not require physics colliders. Version 2.0.0 targets **Unity 6000.4** (developed with **Unity 6000.5.4f1**) and supports the Built-in Render Pipeline and URP 17.4.
 
 ## Repository layout
 
-This repository root is a Unity 6000.4.7f1 project used to develop and test the package. The package itself lives in [`Packages/com.sss13594.light2d/`](Packages/com.sss13594.light2d/). To develop or run the tests, open the **repository root** in Unity, not a subfolder — the package is embedded and auto-discovered under `Packages/`.
+This repository root is a Unity 6000.5.4f1 project used to develop and test the package. The package itself lives in [`Packages/com.sss13594.light2d/`](Packages/com.sss13594.light2d/). To develop or run the tests, open the **repository root** in Unity, not a subfolder — the package is embedded and auto-discovered under `Packages/`.
 
 | Path | Purpose |
 | --- | --- |

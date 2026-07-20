@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Unity 6000.4; this repository’s development host is pinned to Unity 6000.4.7f1.
+- Unity 6000.4; this repository’s development host is pinned to Unity 6000.5.4f1.
 - Built-in Render Pipeline or Universal Render Pipeline 17.4.
 - Three free, distinct Unity layers.
 

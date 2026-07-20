@@ -2,7 +2,7 @@
 
 Light2D is a GPU-based dynamic 2D lighting package for Unity. It renders light obstacles, direct lights, and optional ambient propagation into low-resolution textures, then composites the result over a camera. Lights and obstacles can move at runtime and do not require physics colliders.
 
-Version 2.0.0 targets **Unity 6000.4** and is developed with **Unity 6000.4.7f1**. The package supports the Built-in Render Pipeline and URP 17.4. HDRP and other Scriptable Render Pipelines are not supported.
+Version 2.0.0 targets **Unity 6000.4** and is developed with **Unity 6000.5.4f1**. The package supports the Built-in Render Pipeline and URP 17.4. HDRP and other Scriptable Render Pipelines are not supported.
 
 ![Light2D result](Documentation~/Images/overall.png)
 
@@ -105,7 +105,7 @@ Current limitations include:
 | `CHANGELOG.md` | Canonical package changelog |
 | `Tests/` | EditMode and PlayMode test assemblies |
 
-The package is developed and tested inside the [Light2D repository](https://github.com/SSS135/Light2D), whose root is a Unity 6000.4.7f1 project that embeds this package under `Packages/com.sss13594.light2d/`. That host project, its test automation, and the URP sentinel are not part of the published UPM payload.
+The package is developed and tested inside the [Light2D repository](https://github.com/SSS135/Light2D), whose root is a Unity 6000.5.4f1 project that embeds this package under `Packages/com.sss13594.light2d/`. That host project, its test automation, and the URP sentinel are not part of the published UPM payload.
 
 The package name is `com.sss13594.light2d`. Runtime types are in the `Light2D` namespace and compile into `Light2D.Runtime`; editor tooling compiles into `Light2D.Editor`.
 

@@ -3,12 +3,13 @@
     "com.sss135.editor-automation-mcp": "file:com.sss135.editor-automation-mcp",
     "com.unity.2d.sprite": "1.0.0",
     "com.unity.inputsystem": "1.19.0",
-    "com.unity.render-pipelines.universal": "17.4.0",
-    "com.unity.test-framework": "1.6.0",
-    "com.unity.ugui": "2.0.0",
+    "com.unity.render-pipelines.universal": "17.5.0",
+    "com.unity.test-framework": "1.7.0",
+    "com.unity.ugui": "2.5.0",
     "com.unity.modules.imageconversion": "1.0.0",
     "com.unity.modules.particlesystem": "1.0.0",
     "com.unity.modules.physics2d": "1.0.0",
+    "com.unity.modules.physicscore2d": "1.0.0",
     "com.unity.modules.ui": "1.0.0"
   },
   "testables": [
