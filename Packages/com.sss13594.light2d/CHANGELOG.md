@@ -8,7 +8,7 @@ The upcoming 3.0 major release (version bump pending) is a breaking rewrite of t
 render architecture. Existing scenes must re-add Light2D components after upgrading;
 there is no automatic upgrade. See the "Upgrading from 2.x to 3.0" section in
 [MIGRATION.md](Documentation~/MIGRATION.md#upgrading-from-2x-to-30). The minimum
-supported Unity editor line is 6000.4.
+supported Unity editor line is 6000.3 (validated on 6000.3.20f1 / URP 17.3).
 
 ### Breaking changes
 

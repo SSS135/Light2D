@@ -65,7 +65,7 @@ namespace Light2D
             // FindObjectsByType cannot take an interface, so scan every active MonoBehaviour once and
             // route each into the roles it implements. Snapshot preparation re-checks isActiveAndEnabled
             // through TryGetDrawEntry, so re-adding disabled components here is harmless.
-            foreach (var behaviour in UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude))
+            foreach (var behaviour in UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
                 if (behaviour is ILight2DObstacle obstacle)
                     Obstacles.Add(obstacle);

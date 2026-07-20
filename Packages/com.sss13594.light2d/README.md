@@ -6,8 +6,8 @@ bounce, and collider-free occlusion authored straight from your sprites, meshes,
 and tiles. Lights and obstacles move at runtime, need no physics colliders, and
 render on both the Built-in Render Pipeline and URP from a single package.
 
-Light2D targets **Unity 6000.4** (minimum) and is developed on **Unity 6000.5.4f1**.
-It supports the Built-in Render Pipeline and URP 17.4; HDRP and other Scriptable
+Light2D targets **Unity 6000.3** (minimum) and is developed on **Unity 6000.5.4f1**.
+It supports the Built-in Render Pipeline and URP 17.3; HDRP and other Scriptable
 Render Pipelines are not supported.
 
 ![Light2D result](Documentation~/Images/overall.png)
@@ -23,7 +23,7 @@ Render Pipelines are not supported.
   meshes, or tilemap tiles — no hand-placed shadow-caster shapes, no colliders. The
   Tilemap occluder is even texture-aware, so transparent tile pixels pass light.
 - **One package, both pipelines.** The same components drive the Built-in Render
-  Pipeline and URP 17.4+.
+  Pipeline and URP 17.3+.
 
 ## When to use Unity's built-in 2D lights instead
 
@@ -79,7 +79,7 @@ when that tag is available.
 "com.sss13594.light2d": "file:X:/src/unity/Light2D/Packages/com.sss13594.light2d"
 ```
 
-Unity installs the package dependencies declared in `package.json`, including URP 17.4 even when the consuming project uses the Built-in Render Pipeline.
+Unity installs the package dependencies declared in `package.json`, including URP 17.3 even when the consuming project uses the Built-in Render Pipeline.
 
 Tilemap obstacles (`LightObstacleTilemap`) additionally require the
 **`com.unity.2d.tilemap`** package. When it is present the component compiles
@@ -151,7 +151,7 @@ Light texture resolution is derived from camera coverage and `Light Pixel Size`.
 
 | Pipeline | Status |
 | --- | --- |
-| URP 17.4+ | Supported. RenderGraph renderer feature on Universal Renderer Data or 2D Renderer Data. |
+| URP 17.3+ | Supported. RenderGraph renderer feature on Universal Renderer Data or 2D Renderer Data. |
 | Built-in Render Pipeline | Supported as a compatibility path. `LightingSystem.OnRenderImage` composites the lighting textures over the camera. |
 | HDRP or another SRP | Not supported. `LightingSystem` rejects non-URP SRPs with one warning. |
 

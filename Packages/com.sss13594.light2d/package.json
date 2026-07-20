@@ -2,7 +2,7 @@
   "name": "com.sss13594.light2d",
   "displayName": "Light2D",
   "version": "2.0.0",
-  "unity": "6000.4",
+  "unity": "6000.3",
   "description": "GPU-accelerated dynamic 2D lighting for Unity. Supports the Built-in Render Pipeline and URP 17 with direct lights, obstacles, ambient propagation, and normal mapping.",
   "keywords": [
     "2d",
@@ -21,7 +21,7 @@
     "url": "https://github.com/SSS135"
   },
   "dependencies": {
-    "com.unity.render-pipelines.universal": "17.4.0",
+    "com.unity.render-pipelines.universal": "17.3.0",
     "com.unity.ugui": "2.0.0"
   },
   "samples": [

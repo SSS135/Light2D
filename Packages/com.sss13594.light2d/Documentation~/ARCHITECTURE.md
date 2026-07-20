@@ -109,7 +109,7 @@ renderer on an ambient layer.
 | Blur Ambient Light | Adds a blur after each ambient propagation cycle. |
 | Normal Mapping | Renders full-camera normals and processes visible lights individually. It is substantially more expensive. |
 
-Profile representative scenes on the target GPU. Historical device timings and fixed draw-call counts from pre-2.0 releases are not reliable guidance for Unity 6000.4 or URP RenderGraph.
+Profile representative scenes on the target GPU. Historical device timings and fixed draw-call counts from pre-2.0 releases are not reliable guidance for Unity 6000.3 or URP RenderGraph.
 
 ## Material and Shader Contract
 

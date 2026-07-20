@@ -2,11 +2,11 @@
 
 ## Requirements
 
-- Unity 6000.4 (minimum); this repository’s development host is pinned to Unity 6000.5.4f1.
-- Built-in Render Pipeline or Universal Render Pipeline 17.4.
+- Unity 6000.3 (minimum); this repository’s development host is pinned to Unity 6000.5.4f1.
+- Built-in Render Pipeline or Universal Render Pipeline 17.3.
 - Optional: `com.unity.2d.tilemap` for the `LightObstacleTilemap` occluder.
 
-The package declares URP 17.4 and uGUI 2.0 dependencies. Do not remove or change those dependencies when installing from source. Light2D 3.0 has no layer requirement — lighting roles are expressed as components (see [Add Content](#add-content)).
+The package declares URP 17.3 and uGUI 2.0 dependencies. Do not remove or change those dependencies when installing from source. Light2D 3.0 has no layer requirement — lighting roles are expressed as components (see [Add Content](#add-content)).
 
 ## Install from Git
 

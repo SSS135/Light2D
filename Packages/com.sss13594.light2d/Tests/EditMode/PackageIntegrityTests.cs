@@ -39,8 +39,8 @@ namespace Light2D.Tests
             Assert.That(package.version, Is.EqualTo("2.0.0"));
 
             string json = File.ReadAllText(Path.Combine(package.resolvedPath, "package.json"));
-            StringAssert.Contains("\"unity\": \"6000.4\"", json);
-            StringAssert.Contains("\"com.unity.render-pipelines.universal\": \"17.4.0\"", json);
+            StringAssert.Contains("\"unity\": \"6000.3\"", json);
+            StringAssert.Contains("\"com.unity.render-pipelines.universal\": \"17.3.0\"", json);
         }
 
         [Test]
@@ -105,9 +105,18 @@ namespace Light2D.Tests
 
                 while (property.Next(true))
                 {
-                    if (property.propertyType != SerializedPropertyType.ObjectReference ||
-                        property.objectReferenceEntityIdValue == EntityId.None)
+                    if (property.propertyType != SerializedPropertyType.ObjectReference)
                         continue;
+                    // The serialized null-reference accessor differs across the supported editor range:
+                    // objectReferenceEntityIdValue is the 6000.5+ API (and instanceID is obsolete-as-error
+                    // there), while 6000.3/6000.4 have only objectReferenceInstanceIDValue.
+#if UNITY_6000_5_OR_NEWER
+                    if (property.objectReferenceEntityIdValue == EntityId.None)
+                        continue;
+#else
+                    if (property.objectReferenceInstanceIDValue == 0)
+                        continue;
+#endif
 
                     Object reference = property.objectReferenceValue;
                     Assert.That(reference, Is.Not.Null, materialPath + ":" + property.propertyPath);
