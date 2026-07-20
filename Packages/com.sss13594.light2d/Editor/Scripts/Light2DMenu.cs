@@ -2,6 +2,9 @@
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+#if LIGHT2D_TILEMAP
+using UnityEngine.Tilemaps;
+#endif
 
 namespace Light2D
 {
@@ -26,9 +29,25 @@ namespace Light2D
 
             var undoGroup = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Create Light Obstacles");
+            var settings = Light2DObstacleSettings.GetOrCreate();
             var createdObjects = new List<GameObject>();
             foreach (var renderer in baseObjects)
             {
+#if LIGHT2D_TILEMAP
+                if (renderer is TilemapRenderer)
+                {
+                    // The Tilemap occluder reads the in-place Tilemap, so it lives ON THE SAME GameObject
+                    // as the tilemap rather than in a child obstacle object.
+                    foreach (var existing in renderer.GetComponents<LightObstacleTilemap>())
+                        Undo.DestroyObjectImmediate(existing);
+                    var tilemapObstacle = Undo.AddComponent<LightObstacleTilemap>(renderer.gameObject);
+                    tilemapObstacle.MultiplicativeColor = settings.TexturedMultiplicativeColor;
+                    tilemapObstacle.AdditiveColor = settings.AdditiveColor;
+                    createdObjects.Add(renderer.gameObject);
+                    continue;
+                }
+#endif
+
                 var name = renderer.name + " Light Obstacle";
 
                 var child = renderer.transform.Find(name);
@@ -51,13 +70,20 @@ namespace Light2D
                 {
                     var obstacle = Undo.AddComponent<LightObstacleSprite>(obstacleObj);
                     obstacle.GameSpriteRenderer = renderer;
+                    // Sprites are always textured, so the sprite alpha shapes the shadow; the textured
+                    // default passes it through untinted.
+                    obstacle.Color = settings.TexturedMultiplicativeColor;
+                    obstacle.AdditiveColor = settings.AdditiveColor;
                 }
                 else
                 {
                     var obstacle = Undo.AddComponent<LightObstacleMesh>(obstacleObj);
-                    // Parity with the sprite path: CustomSprite.Color defaults to white, while the
-                    // runtime LightObstacleMesh default stays (0,0,0,0) for serialized-scene compatibility.
-                    obstacle.MultiplicativeColor = new Color32(255, 255, 255, 255);
+                    // Texture-conditional default: a textured source mesh keeps the texture-shaped white
+                    // default, while a solid (untextured) mesh gets opaque black so it casts a full shadow
+                    // instead of a silent no-op.
+                    var textured = renderer.sharedMaterial != null && renderer.sharedMaterial.mainTexture != null;
+                    obstacle.MultiplicativeColor = settings.MultiplicativeFor(textured);
+                    obstacle.AdditiveColor = settings.AdditiveColor;
                 }
 
                 createdObjects.Add(obstacleObj);
@@ -104,6 +130,9 @@ namespace Light2D
         private static bool IsSupportedObstacleRenderer(Renderer renderer)
         {
             return renderer is SpriteRenderer ||
+#if LIGHT2D_TILEMAP
+                   renderer is TilemapRenderer ||
+#endif
                    renderer is MeshRenderer && renderer.GetComponent<MeshFilter>() != null;
         }
     }

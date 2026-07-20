@@ -3,6 +3,9 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.TestTools;
+#if LIGHT2D_TILEMAP
+using UnityEngine.Tilemaps;
+#endif
 
 namespace Light2D.Tests
 {
@@ -98,6 +101,61 @@ namespace Light2D.Tests
                 Object.DestroyImmediate(sourceMesh);
             }
         }
+
+        [Test]
+        public void ObstacleMenuAppliesSolidDefaultToUntexturedMeshObstacle()
+        {
+            var meshObject = new GameObject("Solid Mesh", typeof(MeshRenderer), typeof(MeshFilter));
+            var sourceMesh = CreateQuadMesh();
+            // A material with NO main texture is a solid (untextured) obstacle: white / (0,0,0,0) are
+            // silent no-ops there, so the texture-conditional rule defaults it to opaque black.
+            var sourceMaterial = new Material(Shader.Find("Sprites/Default"));
+            try
+            {
+                meshObject.GetComponent<MeshFilter>().sharedMesh = sourceMesh;
+                meshObject.GetComponent<MeshRenderer>().sharedMaterial = sourceMaterial;
+                Selection.objects = new Object[] { meshObject };
+                Light2DMenu.CreateLightObstacle();
+
+                var meshObstacle = meshObject.transform.Find("Solid Mesh Light Obstacle");
+                Assert.That(meshObstacle, Is.Not.Null);
+                var meshComponent = meshObstacle.GetComponent<LightObstacleMesh>();
+                Assert.That(meshComponent, Is.Not.Null);
+                Assert.That(meshComponent.MultiplicativeColor, Is.EqualTo(new Color32(0, 0, 0, 255)));
+            }
+            finally
+            {
+                Object.DestroyImmediate(meshObject);
+                Object.DestroyImmediate(sourceMaterial);
+                Object.DestroyImmediate(sourceMesh);
+            }
+        }
+
+#if LIGHT2D_TILEMAP
+        [Test]
+        public void ObstacleMenuAddsTilemapOccluderOnTheSameObject()
+        {
+            var gridObject = new GameObject("Grid", typeof(Grid));
+            var tilemapObject = new GameObject("Tilemap", typeof(Tilemap), typeof(TilemapRenderer));
+            tilemapObject.transform.SetParent(gridObject.transform, false);
+            try
+            {
+                Selection.objects = new Object[] { tilemapObject };
+                Light2DMenu.CreateLightObstacle();
+
+                // The occluder is added on the tilemap's own GameObject, not on a child obstacle object,
+                // and no sprite/mesh obstacle is created for it.
+                Assert.That(tilemapObject.GetComponent<LightObstacleTilemap>(), Is.Not.Null);
+                Assert.That(tilemapObject.transform.Find("Tilemap Light Obstacle"), Is.Null);
+                Assert.That(tilemapObject.GetComponentInChildren<LightObstacleSprite>(), Is.Null);
+                Assert.That(tilemapObject.GetComponentInChildren<LightObstacleMesh>(), Is.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(gridObject);
+            }
+        }
+#endif
 
         private static Mesh CreateQuadMesh()
         {

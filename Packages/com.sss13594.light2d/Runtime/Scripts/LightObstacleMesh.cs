@@ -89,6 +89,24 @@ namespace Light2D
                 Refresh();
         }
 
+#if UNITY_EDITOR
+        // Seeds the texture-conditional obstacle defaults when the component is first added/reset in the
+        // editor. Textured-ness comes from the mirrored source: the parent MeshRenderer normally, or this
+        // object's own MeshRenderer when SelfMesh is set. A textured source keeps white; a solid source
+        // gets opaque black so it casts a full shadow instead of a silent no-op.
+        private void Reset()
+        {
+            var settings = Light2DObstacleSettings.GetOrCreate();
+            var source = SelfMesh
+                ? GetComponent<MeshRenderer>()
+                : (transform.parent != null ? transform.parent.GetComponent<MeshRenderer>() : null);
+            var textured = source != null && source.sharedMaterial != null &&
+                           source.sharedMaterial.mainTexture != null;
+            MultiplicativeColor = settings.MultiplicativeFor(textured);
+            AdditiveColor = settings.AdditiveColor;
+        }
+#endif
+
         private void Refresh()
         {
             // Register-and-draw model (§0.3): obstacles draw only through the registry, never a scene

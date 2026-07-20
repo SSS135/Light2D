@@ -54,6 +54,17 @@ namespace Light2D
             base.OnDestroy();
         }
 
+#if UNITY_EDITOR
+        // Seeds the texture-conditional obstacle defaults when the component is first added/reset in the
+        // editor. Sprites are always textured, so the multiplicative default is the textured color.
+        private void Reset()
+        {
+            var settings = Light2DObstacleSettings.GetOrCreate();
+            Color = settings.TexturedMultiplicativeColor;
+            AdditiveColor = settings.AdditiveColor;
+        }
+#endif
+
         bool ILight2DDrawable.TryGetDrawEntry(out Light2DDrawEntry entry)
         {
             entry = default;

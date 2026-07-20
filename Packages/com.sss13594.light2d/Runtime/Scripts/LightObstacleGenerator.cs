@@ -14,6 +14,32 @@ namespace Light2D
         public float LightObstacleScale = 1;
         public LightingSystem Owner;
 
+#if UNITY_EDITOR
+        // Seeds the texture-conditional obstacle defaults when the generator is first added/reset in the
+        // editor, resolved from the source this component sits on: a SpriteRenderer/CustomSprite is always
+        // textured; a MeshRenderer is textured only when its shared material carries a main texture. The
+        // serialized default stays (0,0,0,1) so existing baked generators are untouched; only newly added
+        // ones pick up this default. Start() reads the serialized values verbatim with no settings read.
+        private void Reset()
+        {
+            var settings = Light2DObstacleSettings.GetOrCreate();
+            bool textured;
+            if (GetComponent<SpriteRenderer>() != null || GetComponent<CustomSprite>() != null)
+            {
+                textured = true;
+            }
+            else
+            {
+                var meshRenderer = GetComponent<MeshRenderer>();
+                textured = meshRenderer != null && meshRenderer.sharedMaterial != null &&
+                           meshRenderer.sharedMaterial.mainTexture != null;
+            }
+
+            MultiplicativeColor = settings.MultiplicativeFor(textured);
+            AdditiveColor = settings.AdditiveColor;
+        }
+#endif
+
         private void Start()
         {
 #if UNITY_EDITOR

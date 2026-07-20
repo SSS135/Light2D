@@ -4,5 +4,12 @@
   "references": [
     "Unity.RenderPipelines.Core.Runtime",
     "Unity.RenderPipelines.Universal.Runtime"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.2d.tilemap",
+      "expression": "",
+      "define": "LIGHT2D_TILEMAP"
+    }
   ]
 }

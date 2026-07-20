@@ -2,6 +2,7 @@
   "dependencies": {
     "com.sss135.editor-automation-mcp": "file:com.sss135.editor-automation-mcp",
     "com.unity.2d.sprite": "1.0.0",
+    "com.unity.2d.tilemap": "1.0.0",
     "com.unity.inputsystem": "1.19.0",
     "com.unity.render-pipelines.universal": "17.5.0",
     "com.unity.test-framework": "1.7.0",

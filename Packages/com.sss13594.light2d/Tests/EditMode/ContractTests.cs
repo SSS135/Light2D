@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -45,7 +46,7 @@ namespace Light2D.Tests
         [Test]
         public void RuntimeAssemblyExposesOnlyApprovedPublicTypes()
         {
-            string[] approvedPublicTypes =
+            var approvedPublicTypes = new List<string>
             {
                 "Light2D.CustomSprite",
                 "Light2D.Light2DDiagnostics",
@@ -60,6 +61,11 @@ namespace Light2D.Tests
                 "Light2D.LightSprite",
                 "Light2D.LightingSystem"
             };
+#if LIGHT2D_TILEMAP
+            // The Tilemap occluder is compiled into the runtime assembly only when com.unity.2d.tilemap is
+            // present; the expected set follows the same define so it matches with and without the package.
+            approvedPublicTypes.Add("Light2D.LightObstacleTilemap");
+#endif
 
             var exportedTypes = typeof(LightingSystem).Assembly.GetExportedTypes()
                 .Where(type => !type.IsNested)

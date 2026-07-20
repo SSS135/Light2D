@@ -11,5 +11,12 @@
   ],
   "optionalUnityReferences": [
     "TestAssemblies"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.2d.tilemap",
+      "expression": "",
+      "define": "LIGHT2D_TILEMAP"
+    }
   ]
 }

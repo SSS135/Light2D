@@ -42,6 +42,10 @@ sysinfo.txt
 /Assets/InitTestScene*
 /ProjectSettings/PackageManagerSettings.asset
 
+# Edit-time-only Light2D obstacle authoring defaults (OQ-S1: NOT committed; the
+# in-memory GetOrCreate defaults are the canonical white/black/clear fallback).
+/ProjectSettings/Light2DObstacleSettings.asset
+
 # Leftover metas from the former root-as-package layout (root files outside
 # Assets/Packages/ProjectSettings are not imported by Unity).
 /CLAUDE.md.meta

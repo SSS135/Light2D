@@ -20,6 +20,9 @@ namespace Light2D
         private static readonly List<Sortable> Scratch = new List<Sortable>();
         private static readonly Comparison<Sortable> CompareEntries = Compare;
 
+        // Reused per multi-draw producer so its GetDrawEntries fill allocates nothing steady-state.
+        private static readonly List<Light2DDrawEntry> EntryScratch = new List<Light2DDrawEntry>();
+
         internal static void RegisterObstacle(ILight2DObstacle obstacle)
         {
             if (obstacle != null)
@@ -99,21 +102,38 @@ namespace Light2D
 
             foreach (var producer in registry)
             {
-                if (!producer.TryGetDrawEntry(out var entry))
-                    continue;
-                // Owner scoping replaces layer scoping: an entry with an explicit Owner only draws for
-                // that system; an unowned entry draws for any system. Mirrors LightSprite.PrepareSnapshot.
-                if (entry.Owner != null && entry.Owner != ctx.Owner)
-                    continue;
-                if (ctx.Planes != null && !GeometryUtility.TestPlanesAABB(ctx.Planes, entry.WorldBounds))
-                    continue;
-                Scratch.Add(new Sortable(entry, EntityIdOf(producer)));
+                var id = EntityIdOf(producer);
+                // A multi-draw producer (e.g. the texture-aware Tilemap occluder) contributes one entry
+                // per source-texture group; the single-entry majority keeps the allocation-free path.
+                if (producer is ILight2DMultiDrawable multi)
+                {
+                    EntryScratch.Clear();
+                    multi.GetDrawEntries(EntryScratch);
+                    for (var e = 0; e < EntryScratch.Count; e++)
+                        TryAdd(EntryScratch[e], id, ctx);
+                }
+                else if (producer.TryGetDrawEntry(out var entry))
+                {
+                    TryAdd(entry, id, ctx);
+                }
             }
 
             Scratch.Sort(CompareEntries);
             for (var i = 0; i < Scratch.Count; i++)
                 dst.Add(Scratch[i].Entry);
             Scratch.Clear();
+        }
+
+        // Extracted so single- and multi-entry producers share the owner filter + frustum cull + sort
+        // record. Owner scoping replaces layer scoping: an entry with an explicit Owner only draws for
+        // that system; an unowned entry draws for any system. Mirrors LightSprite.PrepareSnapshot.
+        private static void TryAdd(in Light2DDrawEntry entry, EntityId id, in Light2DCullContext ctx)
+        {
+            if (entry.Owner != null && entry.Owner != ctx.Owner)
+                return;
+            if (ctx.Planes != null && !GeometryUtility.TestPlanesAABB(ctx.Planes, entry.WorldBounds))
+                return;
+            Scratch.Add(new Sortable(entry, id));
         }
 
         private static bool IsMissing<T>(T producer) where T : class, ILight2DDrawable

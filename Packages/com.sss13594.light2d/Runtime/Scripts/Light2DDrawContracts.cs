@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Light2D
@@ -28,6 +29,18 @@ namespace Light2D
     /// </summary>
     internal interface ILight2DAmbientEmitter : ILight2DDrawable
     {
+    }
+
+    /// <summary>
+    /// Optional capability for producers that contribute MORE THAN ONE draw entry per frame (e.g. a
+    /// texture-aware Tilemap occluder that emits one single-submesh mesh + material per source texture).
+    /// The registry prefers this over ILight2DDrawable.TryGetDrawEntry when a producer implements it.
+    /// Entries are appended to the caller-owned buffer (add zero to skip this frame); the buffer is
+    /// reused across frames, so implementations MUST NOT clear it.
+    /// </summary>
+    internal interface ILight2DMultiDrawable
+    {
+        void GetDrawEntries(List<Light2DDrawEntry> buffer);
     }
 
     /// <summary>
