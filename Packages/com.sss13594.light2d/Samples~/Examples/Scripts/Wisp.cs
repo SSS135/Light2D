@@ -30,7 +30,9 @@ namespace Light2D.Examples
                 _rigidbody.AddForce(force, ForceMode2D.Force);
             }
 
-            if (_camera != null)
+            // LineLight is a public field that may be left unassigned; guard it so the
+            // per-frame rotation assignment does not spam NREs.
+            if (_camera != null && LineLight != null)
             {
                 var lightAngle = SampleUtilities.AngleZ(SampleUtilities.PointerWorldPosition(_camera) - (Vector2)transform.position);
                 LineLight.transform.rotation = Quaternion.Euler(0, 0, lightAngle);

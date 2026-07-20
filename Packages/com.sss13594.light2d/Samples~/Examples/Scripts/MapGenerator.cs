@@ -60,13 +60,28 @@ namespace Light2D.Examples
 
             if (RandomSeed)
             {
-                var spawnPoint = Vector2Int.RoundToInt(FindAnyObjectByType<Spacecraft>().MainRigidbody.position);
-                do
+                // FindAnyObjectByType returns null when no Spacecraft exists, and MainRigidbody
+                // may be unassigned; either would NRE on the next line. Fall back to a plain
+                // random seed instead of crashing scene startup.
+                var craft = FindAnyObjectByType<Spacecraft>();
+                if (craft == null || craft.MainRigidbody == null)
+                {
+                    InitRandom();
+                    return;
+                }
+
+                var spawnPoint = Vector2Int.RoundToInt(craft.MainRigidbody.position);
+                // A dense or mis-tuned BlockSet can make a wall-free spawn area rare or
+                // impossible, so the original unbounded do/while could hang startup forever.
+                // Cap the attempts and accept the last seed rather than freezing.
+                for (int attempt = 0; attempt < 200; attempt++)
                 {
                     Seed = Random.Range(-9999999, 9999999);
                     InitRandom();
                     _collMapPoints.Clear();
-                } while (!IsGoodSpawnPoint(spawnPoint));
+                    if (IsGoodSpawnPoint(spawnPoint))
+                        break;
+                }
             }
             else
             {

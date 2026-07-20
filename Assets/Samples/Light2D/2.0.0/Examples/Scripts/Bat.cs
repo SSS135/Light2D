@@ -25,8 +25,15 @@ namespace Light2D.Examples
             var pos = transform.position;
             var rot = transform.rotation;
 
-            while (((Vector2) pos - _flyTarget).sqrMagnitude < _targetSqDist)
-                FindNewFlyTarget();
+            // A degenerate/unassigned FlyRect (size ~0, or smaller than the target distance)
+            // can never yield a target far enough away, so the original unbounded while-loop
+            // would freeze the main thread. Cap the retries and accept the last pick; skip
+            // re-targeting entirely when the fly area is too small to satisfy the distance test.
+            if (FlyRect.size.sqrMagnitude >= _targetSqDist)
+            {
+                for (int i = 0; i < 32 && ((Vector2) pos - _flyTarget).sqrMagnitude < _targetSqDist; i++)
+                    FindNewFlyTarget();
+            }
 
             var direction = rot*new Vector3(0, 1, 0);
             var targetRot = Quaternion.Euler(0, 0, SampleUtilities.AngleZ(_flyTarget - (Vector2)pos));
