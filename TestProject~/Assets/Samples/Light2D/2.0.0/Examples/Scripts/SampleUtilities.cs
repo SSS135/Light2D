@@ -37,29 +37,29 @@ namespace Light2D.Examples
 
         public static Vector2 PointerWorldPosition(Camera camera)
         {
-            var screenPosition = Input.touchCount > 0
-                ? (Vector3)Input.GetTouch(0).position
-                : Input.mousePosition;
+            var screenPosition = SampleInput.TouchCount > 0
+                ? (Vector3)SampleInput.GetTouchPosition(0)
+                : SampleInput.MousePosition;
             screenPosition.z = Mathf.Abs(camera.transform.position.z);
             return camera.ScreenToWorldPoint(screenPosition);
         }
 
         public static bool PointerPressedThisFrame()
         {
-            return Input.GetMouseButtonDown(0) ||
-                   Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began;
+            return SampleInput.GetMouseButtonDown(0) ||
+                   SampleInput.TouchCount > 0 && SampleInput.GetTouchPhase(0) == TouchPhase.Began;
         }
 
         public static bool PointerHeld()
         {
             var touchHeld = false;
-            if (Input.touchCount > 0)
+            if (SampleInput.TouchCount > 0)
             {
-                var phase = Input.GetTouch(0).phase;
+                var phase = SampleInput.GetTouchPhase(0);
                 touchHeld = phase == TouchPhase.Began || phase == TouchPhase.Moved || phase == TouchPhase.Stationary;
             }
 
-            return Input.GetMouseButton(0) ||
+            return SampleInput.GetMouseButton(0) ||
                    touchHeld;
         }
 

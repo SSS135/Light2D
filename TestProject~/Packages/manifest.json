@@ -3,6 +3,7 @@
     "com.sss135.editor-automation-mcp": "file:com.sss135.editor-automation-mcp",
     "com.sss13594.light2d": "file:../..",
     "com.unity.2d.sprite": "1.0.0",
+    "com.unity.inputsystem": "1.19.0",
     "com.unity.render-pipelines.universal": "17.4.0",
     "com.unity.test-framework": "1.6.0",
     "com.unity.ugui": "2.0.0",

@@ -3,6 +3,14 @@
   "rootNamespace": "Light2D.Examples",
   "references": [
     "Light2D.Runtime",
-    "Unity.UGUI"
+    "Unity.UGUI",
+    "Unity.InputSystem"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.inputsystem",
+      "expression": "",
+      "define": "LIGHT2D_SAMPLES_INPUT_SYSTEM"
+    }
   ]
 }

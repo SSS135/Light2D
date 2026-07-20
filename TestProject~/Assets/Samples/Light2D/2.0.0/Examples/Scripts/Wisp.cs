@@ -19,10 +19,10 @@ namespace Light2D.Examples
         {
             var moveVec = Vector2.zero;
 
-            if (Input.GetKey(KeyCode.UpArrow)) moveVec += new Vector2(0, 1);
-            if (Input.GetKey(KeyCode.DownArrow)) moveVec += new Vector2(0, -1);
-            if (Input.GetKey(KeyCode.RightArrow)) moveVec += new Vector2(1, 0);
-            if (Input.GetKey(KeyCode.LeftArrow)) moveVec += new Vector2(-1, 0);
+            if (SampleInput.GetKey(KeyCode.UpArrow)) moveVec += new Vector2(0, 1);
+            if (SampleInput.GetKey(KeyCode.DownArrow)) moveVec += new Vector2(0, -1);
+            if (SampleInput.GetKey(KeyCode.RightArrow)) moveVec += new Vector2(1, 0);
+            if (SampleInput.GetKey(KeyCode.LeftArrow)) moveVec += new Vector2(-1, 0);
 
             if (moveVec.sqrMagnitude > 0.01f*0.01f)
             {

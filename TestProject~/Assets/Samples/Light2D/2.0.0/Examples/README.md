@@ -15,7 +15,7 @@ The source camera must exclude the configured light source, ambient emitter, and
 
 ## Support
 
-- Desktop and mobile input are supported without an Input System package dependency. In Player Settings, set **Active Input Handling** to **Input Manager (Old)** or **Both**.
+- Desktop and mobile input work without forcing an Input System package dependency. The sample scripts read through the Input System package automatically when it is present in the project (the `Light2D.Samples.Runtime` assembly gates this on the package), and fall back to the legacy `Input` class otherwise. Because the sample scenes drive their on-screen touch UI through uGUI's legacy input modules, keep **Active Input Handling** (Player Settings) set to **Input Manager (Old)** or **Both**; the scenes' uGUI does not run under **Input System Package (New)** only.
 - Orthographic XY normal mapping is supported.
 - XR is not supported.
 - URP Base/Overlay camera stacks are not supported. Use independent Base cameras instead.

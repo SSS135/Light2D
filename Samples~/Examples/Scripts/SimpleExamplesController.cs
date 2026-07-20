@@ -18,7 +18,7 @@ namespace Light2D.Examples
 
         void Update()
         {
-            if (Input.GetMouseButtonUp(0) || TouchEnded(0))
+            if (SampleInput.GetMouseButtonUp(0) || TouchEnded(0))
             {
                 _currExampleIndex++;
                 if (_currExampleIndex >= Examples.Length)
@@ -27,7 +27,7 @@ namespace Light2D.Examples
                 UpdateExample();
             }
 
-            if (Input.GetMouseButtonUp(1) || TouchEnded(1))
+            if (SampleInput.GetMouseButtonUp(1) || TouchEnded(1))
             {
                 _currColorIndex++;
                 if (_currColorIndex >= LightColors.Length)
@@ -54,7 +54,7 @@ namespace Light2D.Examples
 
         private static bool TouchEnded(int fingerIndex)
         {
-            return Input.touchCount > fingerIndex && Input.GetTouch(fingerIndex).phase == TouchPhase.Ended;
+            return SampleInput.TouchCount > fingerIndex && SampleInput.GetTouchPhase(fingerIndex) == TouchPhase.Ended;
         }
     }
 }
