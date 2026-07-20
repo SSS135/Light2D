@@ -7,6 +7,7 @@ namespace Light2D
     /// </summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("Light2D/Light Obstacle Generator")]
+    [HelpURL(Light2DDocs.HelpUrl)]
     public class LightObstacleGenerator : MonoBehaviour
     {
         [Tooltip("Multiplicative obstacle color forwarded to the generated obstacle; darkens light passing " +

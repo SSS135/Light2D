@@ -9,6 +9,7 @@ namespace Light2D
     [DisallowMultipleComponent]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [AddComponentMenu("Light2D/Light Obstacle Mesh")]
+    [HelpURL(Light2DDocs.HelpUrl)]
     public class LightObstacleMesh : MonoBehaviour, ILight2DObstacle
     {
         [Tooltip("Per-vertex multiplicative obstacle color; darkens light passing through (opaque black " +

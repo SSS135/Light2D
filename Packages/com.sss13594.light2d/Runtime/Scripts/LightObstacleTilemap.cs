@@ -18,6 +18,7 @@ namespace Light2D
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Tilemap))]
     [AddComponentMenu("Light2D/Light Obstacle Tilemap")]
+    [HelpURL(Light2DDocs.HelpUrl)]
     public class LightObstacleTilemap : MonoBehaviour, ILight2DObstacle, ILight2DMultiDrawable
     {
         // Default white: tiles are always textured, so the tile sprite alpha shapes the shadow and white

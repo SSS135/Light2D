@@ -22,6 +22,7 @@ namespace Light2D
     [ExecuteInEditMode]
     [RequireComponent(typeof(Camera))]
     [AddComponentMenu("Light2D/Light 2D System")]
+    [HelpURL(Light2DDocs.HelpUrl)]
     public class LightingSystem : MonoBehaviour
     {
         private const int MaximumAmbientCyclesPerFrame = 8;

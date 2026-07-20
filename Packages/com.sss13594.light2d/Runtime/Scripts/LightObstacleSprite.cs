@@ -9,6 +9,7 @@ namespace Light2D
     /// Mirrors sprite geometry into the obstacle layer and stores additive color in UV1.
     /// </summary>
     [AddComponentMenu("Light2D/Light Obstacle Sprite")]
+    [HelpURL(Light2DDocs.HelpUrl)]
     public class LightObstacleSprite : CustomSprite, ILight2DObstacle
     {
         [Tooltip("Renderer whose sprite geometry is mirrored into this obstacle. Auto-filled from the " +

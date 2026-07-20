@@ -13,6 +13,7 @@ namespace Light2D
     [DisallowMultipleComponent]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [AddComponentMenu("Light2D/Light Ambient Emitter")]
+    [HelpURL(Light2DDocs.HelpUrl)]
     public class LightAmbientEmitter : MonoBehaviour, ILight2DAmbientEmitter
     {
         [Tooltip("Emissive color drawn into the ambient emission texture. In sprite mode it is baked " +

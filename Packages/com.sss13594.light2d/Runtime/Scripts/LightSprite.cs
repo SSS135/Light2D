@@ -8,6 +8,7 @@ namespace Light2D
     /// Draws a point or line light and stores its world-space origin in UV1.
     /// </summary>
     [AddComponentMenu("Light2D/Light Sprite")]
+    [HelpURL(Light2DDocs.HelpUrl)]
     public class LightSprite : CustomSprite
     {
         private static readonly HashSet<LightSprite> LightSprites = new HashSet<LightSprite>();
