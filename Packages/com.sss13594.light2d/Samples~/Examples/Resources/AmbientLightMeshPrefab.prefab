@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 3300000}
   - component: {fileID: 2300000}
   - component: {fileID: 11400000}
+  - component: {fileID: 11400001}
   m_Layer: 11
   m_Name: AmbientLightMeshPrefab
   m_TagString: Untagged
@@ -103,4 +104,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5b5dd1e5e122805479516bfbf45443d7, type: 3}
   m_Name:
   m_EditorClassIdentifier:
+  SortingOrder: 0
+--- !u!114 &11400001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aa26743c0f0d9564fa1a4d014606f27f, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  EmissionColor: {r: 1, g: 1, b: 1, a: 1}
+  Sprite: {fileID: 0}
+  GameSpriteRenderer: {fileID: 0}
+  Material: {fileID: 2100000, guid: 10427a74559cd1047ad2a07082f6a6d6, type: 2}
+  Owner: {fileID: 0}
   SortingOrder: 0

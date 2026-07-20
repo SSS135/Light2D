@@ -16,6 +16,12 @@ namespace Light2D
         public LightingSystem Owner;
         public int SortingOrder;
 
+        [Tooltip("Draw this object's own MeshFilter/MeshRenderer directly instead of mirroring a parent " +
+                 "renderer. Required when the obstacle object is parented to unrelated geometry whose mesh " +
+                 "must NOT be mirrored (MapGenerator chunks parent the obstacle mesh under the block-visual " +
+                 "mesh, and the Phase-2 Tilemap occluder owns its own mesh).")]
+        public bool SelfMesh;
+
         private MeshRenderer _parentMeshRenderer;
         private MeshFilter _parentMeshFilter;
         private MeshRenderer _meshRenderer;
@@ -90,7 +96,9 @@ namespace Light2D
             if (_meshRenderer != null)
                 _meshRenderer.enabled = false;
 
-            var parent = transform.parent;
+            // SelfMesh forces the self-mesh path even when a mirror-able parent exists: MapGenerator parents
+            // the obstacle mesh under the block-visual mesh, whose geometry must never be mirrored.
+            var parent = SelfMesh ? null : transform.parent;
             _parentMeshRenderer = parent != null ? parent.GetComponent<MeshRenderer>() : null;
             _parentMeshFilter = parent != null ? parent.GetComponent<MeshFilter>() : null;
 
