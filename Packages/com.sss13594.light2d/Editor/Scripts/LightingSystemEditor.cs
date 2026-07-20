@@ -20,10 +20,6 @@ namespace Light2D
         private SerializedProperty _lightOverlayMaterial;
         private SerializedProperty _lightSourcesBlurMaterial;
         private SerializedProperty _ambientLightBlurMaterial;
-        private SerializedProperty _lightCamera;
-        private SerializedProperty _lightSourcesLayer;
-        private SerializedProperty _ambientLightLayer;
-        private SerializedProperty _lightObstaclesLayer;
         private SerializedProperty _lightObstaclesDistance;
         private SerializedProperty _lightTexturesFilterMode;
         private SerializedProperty _enableNormalMapping;
@@ -44,10 +40,6 @@ namespace Light2D
             _lightOverlayMaterial = serializedObject.FindProperty("LightOverlayMaterial");
             _lightSourcesBlurMaterial = serializedObject.FindProperty("LightSourcesBlurMaterial");
             _ambientLightBlurMaterial = serializedObject.FindProperty("AmbientLightBlurMaterial");
-            _lightCamera = serializedObject.FindProperty("LightCamera");
-            _lightSourcesLayer = serializedObject.FindProperty("LightSourcesLayer");
-            _ambientLightLayer = serializedObject.FindProperty("AmbientLightLayer");
-            _lightObstaclesLayer = serializedObject.FindProperty("LightObstaclesLayer");
             _lightObstaclesDistance = serializedObject.FindProperty("LightObstaclesDistance");
             _lightTexturesFilterMode = serializedObject.FindProperty("LightTexturesFilterMode");
             _enableNormalMapping = serializedObject.FindProperty("EnableNormalMapping");
@@ -118,11 +110,6 @@ namespace Light2D
             GUI.enabled = normalGuiEnableState;
 
             EditorGUILayout.PropertyField(_lightOverlayMaterial, new GUIContent("Light Overlay Material"));
-            if (GraphicsSettings.currentRenderPipeline == null)
-                EditorGUILayout.PropertyField(_lightCamera, new GUIContent("Lighting Camera"));
-            _lightSourcesLayer.intValue = EditorGUILayout.LayerField(new GUIContent("Light Sources Layer"), _lightSourcesLayer.intValue);
-            _lightObstaclesLayer.intValue = EditorGUILayout.LayerField(new GUIContent("Light Obstacles Layer"), _lightObstaclesLayer.intValue);
-            _ambientLightLayer.intValue = EditorGUILayout.LayerField(new GUIContent("Ambient Light Layer"), _ambientLightLayer.intValue);
 
             DrawSizeEstimate(cam);
 
@@ -162,22 +149,9 @@ namespace Light2D
 
             if (urpAsset != null)
                 DrawRendererFeatureWarning(camera);
-            else if (_lightCamera.objectReferenceValue == null)
-                EditorGUILayout.HelpBox("Built-in rendering requires a Lighting Camera assignment.", MessageType.Error);
-
-            var sourceLayer = _lightSourcesLayer.intValue;
-            var ambientLayer = _ambientLightLayer.intValue;
-            var obstacleLayer = _lightObstaclesLayer.intValue;
-            var layerError = LightingSettingsValidator.ValidateLayers(sourceLayer, ambientLayer, obstacleLayer, false);
-            if (layerError != null)
-                EditorGUILayout.HelpBox(layerError, MessageType.Error);
 
             if (camera != null)
             {
-                var lightingMask = (1 << sourceLayer) | (1 << ambientLayer) | (1 << obstacleLayer);
-                if ((camera.cullingMask & lightingMask) != 0)
-                    EditorGUILayout.HelpBox("The source camera culling mask includes one or more Light2D layers. Exclude all three to avoid drawing lighting inputs directly.", MessageType.Warning);
-
                 if (_enableNormalMapping.boolValue && !camera.orthographic)
                     EditorGUILayout.HelpBox("Normal mapping requires an orthographic camera; perspective rendering is not supported.", MessageType.Error);
                 if (_enableNormalMapping.boolValue && _xzPlane.boolValue)

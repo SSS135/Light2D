@@ -7,9 +7,6 @@ namespace Light2D
 {
     public class LightingSystemCreationWindow : EditorWindow
     {
-        private int _lightObstaclesLayer;
-        private int _lightSourcesLayer;
-        private int _ambientLightLayer;
         private bool _installRendererFeature = true;
         private Camera _targetCamera;
 
@@ -34,14 +31,6 @@ namespace Light2D
             if (targetCamera != null && targetCamera.GetComponent<LightingSystem>() != null)
                 EditorGUILayout.HelpBox("The selected camera already contains a LightingSystem. Create will update its setup.", MessageType.Info);
 
-            GUILayout.Label("Select layers you wish to use. You could modify them later in created object.");
-            _lightObstaclesLayer = EditorGUILayout.LayerField("Light Obstacles", _lightObstaclesLayer);
-            _lightSourcesLayer = EditorGUILayout.LayerField("Light Sources", _lightSourcesLayer);
-            _ambientLightLayer = EditorGUILayout.LayerField("Ambient Light", _ambientLightLayer);
-            var layerValidationMessage = GetLayerValidationMessage();
-            if (layerValidationMessage != null)
-                EditorGUILayout.HelpBox(layerValidationMessage, MessageType.Error);
-
             var pipelineAsset = GraphicsSettings.currentRenderPipeline;
             var isUrp = pipelineAsset is UniversalRenderPipelineAsset;
             if (pipelineAsset != null && !isUrp)
@@ -55,8 +44,7 @@ namespace Light2D
                     status == Light2DRendererFeatureStatus.Installed ? MessageType.Info : MessageType.Warning);
             }
 
-            using (new EditorGUI.DisabledScope(targetCamera == null || layerValidationMessage != null ||
-                                               pipelineAsset != null && !isUrp))
+            using (new EditorGUI.DisabledScope(targetCamera == null || pipelineAsset != null && !isUrp))
             {
                 if (GUILayout.Button("Create"))
                 {
@@ -67,32 +55,20 @@ namespace Light2D
 
         private void CreateLightingSystem(Camera targetCamera, bool isUrp)
         {
-            var layerValidationMessage = GetLayerValidationMessage();
-            if (layerValidationMessage != null)
-            {
-                EditorUtility.DisplayDialog("Invalid Light2D Layers", layerValidationMessage, "OK");
-                return;
-            }
-
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Packages/com.sss13594.light2d/Runtime/Resources/Lighting Camera.prefab");
             if (targetCamera == null)
             {
                 Debug.LogError("Can't create a lighting system because no camera is selected and no MainCamera fallback exists.");
                 return;
             }
 
-            if (prefab == null)
+            // The helper camera is retired; the prefab config is loaded only as the canonical
+            // source of the three default materials assigned to the LightingSystem below.
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Packages/com.sss13594.light2d/Runtime/Resources/Lighting Camera.prefab");
+            var prefabConfig = prefab != null ? prefab.GetComponent<LightingSystemPrefabConfig>() : null;
+            if (prefabConfig == null)
             {
-                Debug.LogError("Can't create a lighting system because the Lighting Camera resource is missing.");
-                return;
-            }
-
-            var prefabConfig = prefab.GetComponent<LightingSystemPrefabConfig>();
-            var prefabCamera = prefab.GetComponent<Camera>();
-            if (prefabConfig == null || (!isUrp && prefabCamera == null))
-            {
-                Debug.LogError("Can't create a lighting system because the Lighting Camera resource is invalid.");
+                Debug.LogError("Can't create a lighting system because the default material configuration is missing.");
                 return;
             }
 
@@ -123,44 +99,11 @@ namespace Light2D
                 lightingSystem.AmbientLightComputeMaterial = prefabConfig.AmbientLightComputeMaterial;
                 lightingSystem.LightOverlayMaterial = prefabConfig.LightOverlayMaterial;
                 lightingSystem.AmbientLightBlurMaterial = lightingSystem.LightSourcesBlurMaterial = prefabConfig.BlurMaterial;
-                lightingSystem.LightSourcesLayer = _lightSourcesLayer;
-                lightingSystem.AmbientLightLayer = _ambientLightLayer;
-                lightingSystem.LightObstaclesLayer = _lightObstaclesLayer;
-                targetCamera.cullingMask &=
-                    ~((1 << _lightSourcesLayer) | (1 << _ambientLightLayer) | (1 << _lightObstaclesLayer));
 
-                GameObject selectedObject;
-                if (isUrp)
-                {
-                    lightingSystem.LightCamera = null;
-                    selectedObject = targetCamera.gameObject;
-                }
-                else
-                {
-                    var lightingSystemObj = PrefabUtility.InstantiatePrefab(prefab, targetCamera.gameObject.scene) as GameObject;
-                    if (lightingSystemObj == null)
-                        throw new System.InvalidOperationException("The Lighting Camera prefab could not be instantiated.");
-                    Undo.RegisterCreatedObjectUndo(lightingSystemObj, "Create Lighting Camera");
-                    Undo.SetTransformParent(lightingSystemObj.transform, targetCamera.transform, "Parent Lighting Camera");
-                    lightingSystemObj.transform.localPosition = Vector3.zero;
-                    lightingSystemObj.transform.localScale = Vector3.one;
-                    lightingSystemObj.transform.localRotation = Quaternion.identity;
-
-                    var config = lightingSystemObj.GetComponent<LightingSystemPrefabConfig>();
-                    var lightCamera = lightingSystemObj.GetComponent<Camera>();
-                    lightingSystem.LightCamera = lightCamera;
-                    Undo.DestroyObjectImmediate(config);
-                    lightCamera.depth = targetCamera.depth - 1;
-                    lightCamera.cullingMask = 1 << _lightSourcesLayer;
-                    selectedObject = lightingSystemObj;
-                }
-
-                if (PrefabUtility.IsPartOfPrefabInstance(targetCamera))
-                    PrefabUtility.RecordPrefabInstancePropertyModifications(targetCamera);
                 if (PrefabUtility.IsPartOfPrefabInstance(lightingSystem))
                     PrefabUtility.RecordPrefabInstancePropertyModifications(lightingSystem);
                 Undo.CollapseUndoOperations(undoGroup);
-                Selection.activeGameObject = selectedObject;
+                Selection.activeGameObject = targetCamera.gameObject;
                 Close();
             }
             catch (System.Exception exception)
@@ -170,12 +113,6 @@ namespace Light2D
                     AssetDatabase.SaveAssetIfDirty(rendererData);
                 Debug.LogError($"Can't create a lighting system: {exception.Message}", targetCamera);
             }
-        }
-
-        private string GetLayerValidationMessage()
-        {
-            return LightingSettingsValidator.ValidateLayers(_lightSourcesLayer, _ambientLightLayer,
-                _lightObstaclesLayer, true);
         }
 
         private static string GetRendererFeatureMessage(Light2DRendererFeatureStatus status, string rendererName)

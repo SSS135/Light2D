@@ -448,16 +448,11 @@ namespace Light2D
 
         private sealed class Light2DPass : ScriptableRenderPass
         {
-            private static readonly List<ShaderTagId> ForwardTags = new List<ShaderTagId>
-            {
-                new ShaderTagId("SRPDefaultUnlit"),
-                new ShaderTagId("UniversalForward"),
-                new ShaderTagId("UniversalForwardOnly")
-            };
-            private static readonly List<ShaderTagId> NormalTags = new List<ShaderTagId>
-            {
-                new ShaderTagId("Light2DNormals")
-            };
+            // DrawMesh selects a pass by index, not by LightMode, so the register-and-draw path resolves the
+            // pass index from these LightMode names via Light2DDraw.ResolvePass. The colored obstacle/source/
+            // ambient draw uses SRPDefaultUnlit; the obstacle normal buffer uses Light2DNormals (design R1).
+            private const string ForwardLightMode = "SRPDefaultUnlit";
+            private const string NormalsLightMode = "Light2DNormals";
             private static readonly int UrpObstacleTex = Shader.PropertyToID("_Light2DURPObstacleTex");
             private static readonly int UrpMainTex = Shader.PropertyToID("_Light2DURPMainTex");
             private static readonly int UrpGameTex = Shader.PropertyToID("_Light2DURPGameTex");
@@ -484,6 +479,14 @@ namespace Light2D
             private readonly Dictionary<LightingSystem, CameraContext> _contexts;
             private readonly FeatureSettings _settings;
             private readonly List<LightSprite> _lightSprites = new List<LightSprite>();
+            // Register-and-draw snapshots captured on the main thread in RecordRenderGraph and read by the
+            // raster render funcs. Obstacles/ambient/sources each own a list; the normals pass reuses the
+            // obstacle snapshot. Frustum planes are cached into reusable arrays to avoid per-frame allocation.
+            private readonly List<Light2DDrawEntry> _obstacleSnapshot = new List<Light2DDrawEntry>();
+            private readonly List<Light2DDrawEntry> _ambientSnapshot = new List<Light2DDrawEntry>();
+            private readonly List<Light2DDrawEntry> _sourceEntries = new List<Light2DDrawEntry>();
+            private readonly Plane[] _extendedPlanes = new Plane[6];
+            private readonly Plane[] _smallPlanes = new Plane[6];
             private readonly LightingSystem _lighting;
             private readonly Action<Camera, LightingSystem, string> _warnOnce;
 
@@ -544,12 +547,10 @@ namespace Light2D
                 if (!contextIsReady)
                     return;
 
-                LightSprite.PrepareSnapshot(_lightSprites, _lighting.XZPlane);
-                int lightSourcesLayer = _lighting.LightSourcesLayer;
-                _lightSprites.RemoveAll(light => light == null || light.gameObject.layer != lightSourcesLayer);
-                Vector3 lightPosition = CalculateSnappedPosition(_lighting, camera);
-                LightCameraGeometry extendedCamera = CalculateLightCameraGeometry(_lighting, camera, sizes, true,
-                    lightPosition);
+                Vector3 lightPosition = Light2DCameraGeometry.CalculateSnappedPosition(camera,
+                    _lighting.LightPixelsPerUnityMeter);
+                Light2DCameraGeometry extendedCamera = Light2DCameraGeometry.Calculate(camera, lightPosition,
+                    sizes.Small, sizes.Extended, true, _lighting.LightCameraFovAdd, _lighting.LightObstaclesDistance);
 
                 var lightFormat = _lighting.HDR && SystemInfo.IsFormatSupported(GraphicsFormat.R16G16B16A16_SFloat,
                     GraphicsFormatUsage.Render)
@@ -570,55 +571,63 @@ namespace Light2D
                 Matrix4x4 extendedProjection = extendedCamera.Projection;
                 Matrix4x4 cameraView = cameraData.GetViewMatrix();
                 Matrix4x4 cameraProjection = GL.GetGPUProjectionMatrix(cameraData.GetProjectionMatrix(), true);
-                CullingResults expandedCull = Cull(frameData, camera, extendedProjection * extendedView,
-                    extendedCamera.Position, LayerMaskFor(_lighting));
 
-                RendererListHandle obstaclesList = CreateRendererList(renderGraph, frameData, expandedCull,
-                    1 << _lighting.LightObstaclesLayer);
-                AddDrawPass(renderGraph, "Light2D Obstacles", Light2DProfiling.Obstacles, obstaclesAA, obstaclesList,
-                    extendedView, extendedProjection, cameraView, cameraProjection, new Color(1, 1, 1, 0), context,
-                    false, default(TextureHandle), default(TextureHandle), black);
+                Light2DCameraGeometry smallCamera = Light2DCameraGeometry.Calculate(camera, lightPosition,
+                    sizes.Small, sizes.Extended, false, _lighting.LightCameraFovAdd, _lighting.LightObstaclesDistance);
+                Matrix4x4 smallView = smallCamera.View;
+                Matrix4x4 smallProjection = smallCamera.Projection;
+
+                // Registry snapshots replace the layer-culled RendererLists. Obstacles and ambient cull against
+                // the extended light-camera frustum; sources cull against the same extended frustum the old
+                // expanded CullingResults used. Owner scoping (Light2DCullContext.Owner) replaces layer scoping.
+                // All snapshots are captured here on the main thread into member lists; the raster render funcs
+                // only read them via Light2DDraw.Draw and never touch live component state.
+                GeometryUtility.CalculateFrustumPlanes(extendedProjection * extendedView, _extendedPlanes);
+                GeometryUtility.CalculateFrustumPlanes(smallProjection * smallView, _smallPlanes);
+                var extendedContext = new Light2DCullContext(_extendedPlanes, _lighting);
+                Light2DRenderRegistry.PrepareObstacleSnapshot(_obstacleSnapshot, extendedContext);
+                LightSprite.PrepareSnapshot(_lightSprites, _lighting.XZPlane, _lighting, _extendedPlanes);
+                BuildSourceEntries(_lightSprites, _sourceEntries);
+
+                int obstaclePass = ResolvePassForSnapshot(_obstacleSnapshot, ForwardLightMode);
+                AddDrawPass(renderGraph, "Light2D Obstacles", Light2DProfiling.Obstacles, obstaclesAA,
+                    _obstacleSnapshot, obstaclePass, extendedView, extendedProjection, cameraView, cameraProjection,
+                    new Color(1, 1, 1, 0), context, false, default(TextureHandle), default(TextureHandle), black);
                 AddBorderPass(renderGraph, obstaclesAA, context);
                 AddBlitPass(renderGraph, "Light2D Resolve Obstacles", Light2DProfiling.Obstacles, obstaclesAA,
                     obstacles, null, black, sizes.Extended.x * aa, sizes.Extended.y * aa);
-
-                LightCameraGeometry smallCamera = CalculateLightCameraGeometry(_lighting, camera, sizes, false,
-                    lightPosition);
-                Matrix4x4 smallView = smallCamera.View;
-                Matrix4x4 smallProjection = smallCamera.Projection;
-                RendererListHandle sourcesList = CreateRendererList(renderGraph, frameData, expandedCull,
-                    1 << _lighting.LightSourcesLayer);
 
                 TextureHandle normals = default(TextureHandle);
                 if (_lighting.EnableNormalMapping)
                 {
                     normals = CreateTexture(renderGraph, sourceDescriptor.width, sourceDescriptor.height,
                         GraphicsFormat.R8G8B8A8_UNorm, FilterMode.Point, "Light2D Normals");
-                    CullingResults normalCull = Cull(frameData, camera,
-                        smallProjection * smallView, smallCamera.Position,
-                        1 << _lighting.LightObstaclesLayer);
-                    RendererListHandle normalsList = CreateRendererList(renderGraph, frameData, normalCull,
-                        1 << _lighting.LightObstaclesLayer, NormalTags);
-                    AddDrawPass(renderGraph, "Light2D Normals", Light2DProfiling.Normals, normals, normalsList,
-                        smallView, smallProjection, cameraView, cameraProjection, new Color(0.5f, 0.5f, 0, 1),
-                        context, false, default(TextureHandle), default(TextureHandle), black);
+                    // Normals draw the obstacle geometry with the Light2DNormals pass. Reuse the obstacle
+                    // snapshot (culled by the extended frustum, a superset of the small frustum the old separate
+                    // normal cull used); obstacles outside the small viewport clip harmlessly under smallView.
+                    int normalPass = ResolvePassForSnapshot(_obstacleSnapshot, NormalsLightMode);
+                    AddDrawPass(renderGraph, "Light2D Normals", Light2DProfiling.Normals, normals, _obstacleSnapshot,
+                        normalPass, smallView, smallProjection, cameraView, cameraProjection,
+                        new Color(0.5f, 0.5f, 0, 1), context, false, default(TextureHandle), default(TextureHandle),
+                        black);
                 }
 
-                AddDrawPass(renderGraph, "Light2D Sources", Light2DProfiling.Sources, sources, sourcesList,
-                    smallView, smallProjection, cameraView, cameraProjection, Color.clear, context, true, obstacles,
-                    normals, black);
+                int sourcePass = ResolvePassForSnapshot(_sourceEntries, ForwardLightMode);
+                AddDrawPass(renderGraph, "Light2D Sources", Light2DProfiling.Sources, sources, _sourceEntries,
+                    sourcePass, smallView, smallProjection, cameraView, cameraProjection, Color.clear, context, true,
+                    obstacles, normals, black);
                 if (_lighting.EnableNormalMapping)
                 {
-                    Plane[] planes = GeometryUtility.CalculateFrustumPlanes(smallProjection * smallView);
                     foreach (var lightSprite in _lightSprites)
                     {
-                        if (lightSprite == null || lightSprite.Renderer == null || !lightSprite.Renderer.enabled ||
-                            lightSprite.Renderer.sharedMaterial == null || lightSprite.Sprite == null ||
-                            !GeometryUtility.TestPlanesAABB(planes, lightSprite.Renderer.bounds))
+                        if (lightSprite == null || lightSprite.Sprite == null ||
+                            !TryBuildLightEntry(lightSprite, out var lightEntry) ||
+                            !GeometryUtility.TestPlanesAABB(_smallPlanes, lightEntry.WorldBounds))
                             continue;
                         TextureHandle singleLight = CreateTexture(renderGraph, lightWidth, lightHeight, lightFormat,
                             FilterMode.Point, "Light2D Single Normal-Mapped Light");
-                        AddSingleLightPass(renderGraph, context, lightSprite, singleLight, obstacles,
+                        int singleLightPass = Light2DDraw.ResolvePass(lightEntry.Material, ForwardLightMode);
+                        AddSingleLightPass(renderGraph, context, lightEntry, singleLightPass, singleLight, obstacles,
                             smallView, smallProjection, cameraView, cameraProjection, sizes, black);
                         AddNormalLightPass(renderGraph, context, lightSprite, singleLight, normals, sources,
                             smallCamera, black);
@@ -654,11 +663,11 @@ namespace Light2D
                     }
                     TextureHandle ambientEmission = CreateTexture(renderGraph, sizes.Extended.x, sizes.Extended.y,
                         lightFormat, _lighting.LightTexturesFilterMode, "Light2D Ambient Emission");
-                    RendererListHandle ambientList = CreateRendererList(renderGraph, frameData, expandedCull,
-                        1 << _lighting.AmbientLightLayer);
+                    Light2DRenderRegistry.PrepareAmbientSnapshot(_ambientSnapshot, extendedContext);
+                    int ambientPass = ResolvePassForSnapshot(_ambientSnapshot, ForwardLightMode);
                     AddDrawPass(renderGraph, "Light2D Ambient Emission", Light2DProfiling.Ambient, ambientEmission,
-                        ambientList, extendedView, extendedProjection, cameraView, cameraProjection, Color.clear,
-                        context, false, default(TextureHandle), default(TextureHandle), black);
+                        _ambientSnapshot, ambientPass, extendedView, extendedProjection, cameraView, cameraProjection,
+                        Color.clear, context, false, default(TextureHandle), default(TextureHandle), black);
                     context.ResetHistoryForUnsupportedTransform(camera, _settings.AmbientWarmupCycles);
                     ambient = RecordAmbient(renderGraph, context, obstacles, ambientEmission, sizes, black,
                         extendedCamera.Position, out ambientCycles);
@@ -737,15 +746,16 @@ namespace Light2D
             }
 
             private void AddDrawPass(RenderGraph graph, string name, ProfilerMarker marker, TextureHandle target,
-                RendererListHandle rendererList, Matrix4x4 view, Matrix4x4 projection, Matrix4x4 cameraView,
-                Matrix4x4 cameraProjection, Color clear,
+                List<Light2DDrawEntry> snapshot, int shaderPass, Matrix4x4 view, Matrix4x4 projection,
+                Matrix4x4 cameraView, Matrix4x4 cameraProjection, Color clear,
                 CameraContext context, bool setLightState, TextureHandle obstacles, TextureHandle normals,
                 TextureHandle black)
             {
                 using (var builder = graph.AddRasterRenderPass<DrawPassData>(name, out var data, profilingSampler))
                 {
                     data.Marker = marker;
-                    data.RendererList = rendererList;
+                    data.Snapshot = snapshot;
+                    data.ShaderPass = shaderPass;
                     data.View = view;
                     data.Projection = GL.GetGPUProjectionMatrix(projection, true);
                     data.Clear = clear;
@@ -768,7 +778,6 @@ namespace Light2D
                     }
                     data.ExtendedScale = new Vector2(small.x / (float)extended.x, small.y / (float)extended.y);
                     data.PositionOffset = new Vector2(0.5f / extended.x, 0.5f / extended.y);
-                    builder.UseRendererList(rendererList);
                     builder.SetRenderAttachment(target, 0, AccessFlags.Write);
                     if (obstacles.IsValid())
                         builder.UseTexture(obstacles, AccessFlags.Read);
@@ -791,7 +800,7 @@ namespace Light2D
                             rg.cmd.SetGlobalVector(PositionOffset, pass.PositionOffset);
                             SetKeywords(rg.cmd, pass.XZ, pass.Perspective);
                         }
-                        rg.cmd.DrawRendererList(pass.RendererList);
+                        Light2DDraw.Draw(rg.cmd, pass.Snapshot, pass.ShaderPass);
                         if (pass.SetLightState)
                         {
                             ClearKeywords(rg.cmd);
@@ -904,15 +913,18 @@ namespace Light2D
                 }
             }
 
-            private static void AddSingleLightPass(RenderGraph graph, CameraContext context, LightSprite light,
-                TextureHandle target, TextureHandle obstacles, Matrix4x4 view, Matrix4x4 projection,
+            private static void AddSingleLightPass(RenderGraph graph, CameraContext context, Light2DDrawEntry lightEntry,
+                int shaderPass, TextureHandle target, TextureHandle obstacles, Matrix4x4 view, Matrix4x4 projection,
                 Matrix4x4 cameraView, Matrix4x4 cameraProjection, Sizes sizes, TextureHandle black)
             {
                 using (var builder = graph.AddRasterRenderPass<SingleLightPassData>("Light2D Draw Normal-Mapped Light",
                            out var data))
                 {
-                    data.Renderer = light.Renderer;
-                    data.Material = light.Renderer.sharedMaterial;
+                    data.Mesh = lightEntry.Mesh;
+                    data.Material = lightEntry.Material;
+                    data.Matrix = lightEntry.Matrix;
+                    data.SubmeshCount = Mathf.Max(1, lightEntry.SubmeshCount);
+                    data.ShaderPass = shaderPass;
                     data.Target = target;
                     data.Obstacles = obstacles;
                     data.View = view;
@@ -939,7 +951,8 @@ namespace Light2D
                         rg.cmd.SetGlobalVector(ExtendedScale, pass.ExtendedScale);
                         rg.cmd.SetGlobalVector(PositionOffset, pass.PositionOffset);
                         SetKeywords(rg.cmd, pass.XZ, false);
-                        rg.cmd.DrawRenderer(pass.Renderer, pass.Material, 0, 0);
+                        for (int s = 0; s < pass.SubmeshCount; s++)
+                            rg.cmd.DrawMesh(pass.Mesh, pass.Matrix, pass.Material, s, pass.ShaderPass);
                         ClearKeywords(rg.cmd);
                         ClearTextureGlobals(rg.cmd, pass.Black);
                         rg.cmd.SetViewProjectionMatrices(pass.CameraView, pass.CameraProjection);
@@ -950,7 +963,7 @@ namespace Light2D
 
             private static void AddNormalLightPass(RenderGraph graph, CameraContext context, LightSprite light,
                 TextureHandle singleLight, TextureHandle normals, TextureHandle target,
-                LightCameraGeometry smallCamera, TextureHandle black)
+                Light2DCameraGeometry smallCamera, TextureHandle black)
             {
                 Vector2 size = light.Sprite.bounds.size;
                 Vector3 center = light.transform.localToWorldMatrix.MultiplyPoint3x4(
@@ -996,7 +1009,7 @@ namespace Light2D
 
             private void AddOverlayPass(RenderGraph graph, CameraContext context, Camera camera,
                 TextureHandle source, TextureHandle destination, TextureHandle ambient, TextureHandle sources,
-                Sizes sizes, LightCameraGeometry lightCamera, TextureHandle black)
+                Sizes sizes, Light2DCameraGeometry lightCamera, TextureHandle black)
             {
                 using (var builder = graph.AddRasterRenderPass<OverlayPassData>("Light2D Composite", out var data,
                            profilingSampler))
@@ -1042,32 +1055,41 @@ namespace Light2D
                 }
             }
 
-            private static CullingResults Cull(ContextContainer frameData, Camera camera, Matrix4x4 cullingMatrix,
-                Vector3 origin, int layerMask)
+            // Resolves the DrawMesh pass index for a snapshot from a representative material. Obstacle, source
+            // and ambient materials within one role share a shader family, so the first entry's pass layout
+            // applies to the whole snapshot. Returns 0 for an empty snapshot (no draw happens anyway).
+            private static int ResolvePassForSnapshot(List<Light2DDrawEntry> snapshot, string lightMode)
             {
-                using (Light2DProfiling.Culling.Auto())
+                return snapshot.Count > 0 ? Light2DDraw.ResolvePass(snapshot[0].Material, lightMode) : 0;
+            }
+
+            // Converts the LightSprite snapshot into draw entries the shared Light2DDraw routine can consume.
+            private static void BuildSourceEntries(List<LightSprite> lights, List<Light2DDrawEntry> dst)
+            {
+                dst.Clear();
+                for (var i = 0; i < lights.Count; i++)
                 {
-                    ScriptableCullingParameters parameters;
-                    camera.TryGetCullingParameters(false, out parameters);
-                    parameters.cullingMatrix = cullingMatrix;
-                    parameters.origin = origin;
-                    parameters.cullingMask = (uint)layerMask;
-                    parameters.shadowDistance = 0;
-                    parameters.cullingOptions &= ~CullingOptions.OcclusionCull;
-                    return frameData.Get<CullContextData>().Cull(ref parameters);
+                    if (TryBuildLightEntry(lights[i], out var entry))
+                        dst.Add(entry);
                 }
             }
 
-            private static RendererListHandle CreateRendererList(RenderGraph graph, ContextContainer frameData,
-                CullingResults cullingResults, int layerMask, List<ShaderTagId> shaderTags = null)
+            // Builds a draw entry from a light's owned mesh + generated material + world matrix. Does not check
+            // Renderer.enabled: the register-and-draw path draws lighting inputs whose renderers are disabled so
+            // no scene camera renders them (the enabled=false invariant that replaces layer exclusion).
+            private static bool TryBuildLightEntry(LightSprite light, out Light2DDrawEntry entry)
             {
-                var renderingData = frameData.Get<UniversalRenderingData>();
-                var cameraData = frameData.Get<UniversalCameraData>();
-                var lightData = frameData.Get<UniversalLightData>();
-                DrawingSettings drawing = RenderingUtils.CreateDrawingSettings(shaderTags ?? ForwardTags, renderingData,
-                    cameraData, lightData, SortingCriteria.CommonTransparent);
-                var filtering = new FilteringSettings(RenderQueueRange.all, layerMask);
-                return graph.CreateRendererList(new RendererListParams(cullingResults, drawing, filtering));
+                entry = default;
+                if (light == null || light.Renderer == null)
+                    return false;
+                var filter = light.Renderer.GetComponent<MeshFilter>();
+                var mesh = filter != null ? filter.sharedMesh : null;
+                var material = light.Renderer.sharedMaterial;
+                if (mesh == null || material == null)
+                    return false;
+                entry = new Light2DDrawEntry(mesh, material, light.transform.localToWorldMatrix, light.Renderer.bounds,
+                    Mathf.Max(1, mesh.subMeshCount), light.SortingOrder, null);
+                return true;
             }
 
             private static TextureHandle CreateTexture(RenderGraph graph, int width, int height,
@@ -1098,21 +1120,6 @@ namespace Light2D
                 LightingSizeEstimate estimate;
                 if (!TryCalculateSizes(lighting, camera, out estimate, out reason))
                     return false;
-                int sourceLayer = lighting.LightSourcesLayer;
-                int ambientLayer = lighting.AmbientLightLayer;
-                int obstacleLayer = lighting.LightObstaclesLayer;
-                string layerError = LightingSettingsValidator.ValidateLayers(sourceLayer, ambientLayer,
-                    obstacleLayer, false);
-                if (layerError != null)
-                {
-                    reason = layerError;
-                    return false;
-                }
-                if ((camera.cullingMask & LayerMaskFor(lighting)) != 0)
-                {
-                    reason = "The Light2D source camera must exclude its source, ambient, and obstacle layers.";
-                    return false;
-                }
                 if (descriptor.width <= 0 || descriptor.height <= 0 || descriptor.dimension != TextureDimension.Tex2D ||
                     descriptor.graphicsFormat == GraphicsFormat.None ||
                     !SystemInfo.IsFormatSupported(descriptor.graphicsFormat, GraphicsFormatUsage.Render))
@@ -1166,54 +1173,9 @@ namespace Light2D
                     lighting.EnableNormalMapping, out estimate, out error);
             }
 
-            private static LightCameraGeometry CalculateLightCameraGeometry(LightingSystem lighting, Camera camera,
-                Sizes sizes, bool extended, Vector3 position)
-            {
-                float aspect = extended ? sizes.Extended.x / (float)sizes.Extended.y :
-                    sizes.Small.x / (float)sizes.Small.y;
-                float orthographicSize;
-                float fieldOfView;
-                if (extended)
-                {
-                    orthographicSize = camera.orthographicSize * sizes.Extended.y / sizes.Small.y;
-                    fieldOfView = camera.fieldOfView + lighting.LightCameraFovAdd;
-                }
-                else
-                {
-                    orthographicSize = camera.orthographic ? camera.orthographicSize :
-                        Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * lighting.LightObstaclesDistance;
-                    fieldOfView = camera.fieldOfView;
-                }
-
-                Matrix4x4 view = camera.worldToCameraMatrix *
-                                 Matrix4x4.Translate(camera.transform.position - position);
-                Matrix4x4 projection = camera.orthographic
-                    ? Matrix4x4.Ortho(-orthographicSize * aspect, orthographicSize * aspect,
-                        -orthographicSize, orthographicSize, camera.nearClipPlane, camera.farClipPlane)
-                    : Matrix4x4.Perspective(fieldOfView, aspect, camera.nearClipPlane, camera.farClipPlane);
-                return new LightCameraGeometry(position, view, projection, orthographicSize, aspect);
-            }
-
-            private static Vector3 CalculateSnappedPosition(LightingSystem lighting, Camera camera)
-            {
-                float pixels = lighting.LightPixelsPerUnityMeter;
-                Vector3 position = camera.transform.position;
-                Quaternion rotation = camera.transform.rotation;
-                Vector3 local = Quaternion.Inverse(rotation) * position;
-                var snapped = new Vector2(Mathf.Round(local.x * pixels) / pixels,
-                    Mathf.Round(local.y * pixels) / pixels);
-                return rotation * (snapped - (Vector2)local) + position;
-            }
-
             private static int AddWithoutOverflow(int left, int right)
             {
                 return left > int.MaxValue - right ? int.MaxValue : left + right;
-            }
-
-            private static int LayerMaskFor(LightingSystem lighting)
-            {
-                return (1 << lighting.LightSourcesLayer) | (1 << lighting.LightObstaclesLayer) |
-                       (1 << lighting.AmbientLightLayer);
             }
 
             private static void SetKeywords(RasterCommandBuffer cmd, bool xz, bool perspective)
@@ -1254,29 +1216,11 @@ namespace Light2D
                 }
             }
 
-            private readonly struct LightCameraGeometry
-            {
-                internal readonly Vector3 Position;
-                internal readonly Matrix4x4 View;
-                internal readonly Matrix4x4 Projection;
-                internal readonly float OrthographicSize;
-                internal readonly float Aspect;
-
-                internal LightCameraGeometry(Vector3 position, Matrix4x4 view, Matrix4x4 projection,
-                    float orthographicSize, float aspect)
-                {
-                    Position = position;
-                    View = view;
-                    Projection = projection;
-                    OrthographicSize = orthographicSize;
-                    Aspect = aspect;
-                }
-            }
-
             private sealed class DrawPassData
             {
                 internal ProfilerMarker Marker;
-                internal RendererListHandle RendererList;
+                internal List<Light2DDrawEntry> Snapshot;
+                internal int ShaderPass;
                 internal Matrix4x4 View;
                 internal Matrix4x4 Projection;
                 internal Matrix4x4 CameraView;
@@ -1325,7 +1269,10 @@ namespace Light2D
 
             private sealed class SingleLightPassData
             {
-                internal Renderer Renderer;
+                internal Mesh Mesh;
+                internal Matrix4x4 Matrix;
+                internal int SubmeshCount;
+                internal int ShaderPass;
                 internal Material Material;
                 internal TextureHandle Target;
                 internal TextureHandle Obstacles;

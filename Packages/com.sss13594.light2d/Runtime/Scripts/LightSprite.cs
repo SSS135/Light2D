@@ -31,6 +31,10 @@ namespace Light2D
         protected override void OnEnable()
         {
             base.OnEnable();
+            // Register-and-draw model (§0.3): the owned renderer is permanently disabled so no scene
+            // camera ever draws the light mesh; it is drawn only through the LightSprites snapshot.
+            if (_meshRenderer != null)
+                _meshRenderer.enabled = false;
             LightSprites.Add(this);
         }
 
@@ -144,7 +148,10 @@ namespace Light2D
 
         private static bool IsRenderable(LightSprite light)
         {
-            return light != null && light.isActiveAndEnabled && light.Renderer != null && light.Renderer.enabled;
+            // The owned MeshRenderer is permanently disabled in the register-and-draw model, so
+            // renderability is gated on the component being active/enabled, not the renderer's flag.
+            // The renderer is still required as the mesh/material/bounds container for the snapshot.
+            return light != null && light.isActiveAndEnabled && light.Renderer != null;
         }
 
         private static int CompareLights(LightSprite left, LightSprite right)

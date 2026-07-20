@@ -121,6 +121,9 @@ namespace Light2D
             if (_meshFilter == null || _meshRenderer == null)
                 return;
 
+            // Register-and-draw model (§0.3): the owned renderer stays disabled so no scene camera draws
+            // the emission mesh; it is drawn only through the ambient registry snapshot.
+            _meshRenderer.enabled = false;
             _meshRenderer.sortingOrder = SortingOrder;
 
             var source = ResolveSourceSprite();

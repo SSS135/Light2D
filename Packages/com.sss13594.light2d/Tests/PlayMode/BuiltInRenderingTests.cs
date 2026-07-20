@@ -60,7 +60,7 @@ namespace Light2D.Tests
         }
 
         [UnityTest, Timeout(30000)]
-        public IEnumerator DisableAndDestroyReleaseOwnedTexturesMaterialsAndCamera()
+        public IEnumerator DisableAndDestroyReleaseOwnedTexturesAndMaterials()
         {
             RenderPipelineAsset oldDefault = GraphicsSettings.defaultRenderPipeline;
             RenderPipelineAsset oldQuality = QualitySettings.renderPipeline;
@@ -82,9 +82,7 @@ namespace Light2D.Tests
                 Assert.That(sources, Is.Not.Null);
                 Assert.That(ambient, Is.Null, "Disabled ambient lighting allocated textures");
                 Material[] ownedMaterials = FindOwnedMaterials();
-                Camera[] ownedCameras = FindNormalsCameras();
                 Assert.That(ownedMaterials, Is.Not.Empty);
-                Assert.That(ownedCameras, Is.Not.Empty);
 
                 lighting.enabled = false;
                 yield return null;
@@ -95,21 +93,14 @@ namespace Light2D.Tests
                 Assert.That(sources == null, Is.True);
                 Assert.That(ownedMaterials.All(material => material == null), Is.True,
                     "A generated material survived disable");
-                Assert.That(ownedCameras.All(camera => camera == null), Is.True,
-                    "The generated normals camera survived disable");
-                Assert.That(fixture.LightCamera, Is.Not.Null, "The user-owned lighting camera was destroyed");
 
                 lighting.enabled = true;
                 fixture.RenderAndMeasure();
                 ownedMaterials = FindOwnedMaterials();
-                ownedCameras = FindNormalsCameras();
                 Object.Destroy(lighting);
                 yield return null;
                 Assert.That(ownedMaterials.All(material => material == null), Is.True,
                     "A generated material survived destroy");
-                Assert.That(ownedCameras.All(camera => camera == null), Is.True,
-                    "The generated normals camera survived destroy");
-                Assert.That(fixture.LightCamera, Is.Not.Null, "The user-owned lighting camera was destroyed");
             }
             finally
             {
@@ -194,13 +185,6 @@ namespace Light2D.Tests
                 .ToArray();
         }
 
-        private static Camera[] FindNormalsCameras()
-        {
-            return Resources.FindObjectsOfTypeAll<Camera>()
-                .Where(camera => camera != null && camera.name == "Light2D Normals Camera")
-                .ToArray();
-        }
-
         private static IEnumerator WaitForBuiltInPipeline()
         {
             const int frameLimit = 30;
@@ -220,15 +204,16 @@ namespace Light2D.Tests
         {
             internal readonly LightingSystem Lighting;
             internal readonly GameObject Obstacle;
-            internal readonly Camera LightCamera;
 
             private readonly GameObject _cameraObject;
-            private readonly GameObject _lightCameraObject;
             private readonly GameObject _lightObject;
             private readonly GameObject _obstacleSource;
             private readonly RenderTexture _target;
             private readonly Material _lightMaterial;
             private readonly Material _obstacleMaterial;
+            private readonly Material _overlayMaterial;
+            private readonly Material _ambientMaterial;
+            private readonly Material _blurMaterial;
 
             internal RenderFixture(bool normalMapping)
             {
@@ -241,38 +226,33 @@ namespace Light2D.Tests
                 camera.transform.position = new Vector3(0, 0, -10);
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = Color.white;
+                // v3 has no layers: the light/obstacle MeshRenderers are disabled and drawn only through
+                // the registry, so the source camera draws none of them. cullingMask 0 keeps the game
+                // image to the composited overlay, so the SourceTarget metrics stay comparable to before.
                 camera.cullingMask = 0;
                 _target = new RenderTexture(96, 96, 0, RenderTextureFormat.ARGB32);
                 _target.Create();
                 camera.targetTexture = _target;
 
                 Lighting = _cameraObject.AddComponent<LightingSystem>();
-                var prefab = Resources.Load<GameObject>("Lighting Camera");
-                var config = prefab.GetComponent<LightingSystemPrefabConfig>();
-                _lightCameraObject = Object.Instantiate(prefab);
-                _lightCameraObject.name = "Test Lighting Camera";
-                _lightCameraObject.transform.SetParent(_cameraObject.transform, false);
-                var lightCamera = _lightCameraObject.GetComponent<Camera>();
-                lightCamera.enabled = false;
-                LightCamera = lightCamera;
-                Lighting.LightCamera = LightCamera;
-                Lighting.AmbientLightComputeMaterial = config.AmbientLightComputeMaterial;
-                Lighting.LightOverlayMaterial = config.LightOverlayMaterial;
-                Lighting.LightSourcesBlurMaterial = config.BlurMaterial;
-                Lighting.AmbientLightBlurMaterial = config.BlurMaterial;
+                // v3 retires the Built-in helper camera and the "Lighting Camera" prefab; the composition
+                // materials come straight from their shaders (as the light/obstacle materials do below).
+                _overlayMaterial = new Material(Shader.Find("Light2D/Light Overlay"));
+                _ambientMaterial = new Material(Shader.Find("Light2D/Ambient Light Computer"));
+                _blurMaterial = new Material(Shader.Find("Light2D/Fast Blur"));
+                Lighting.AmbientLightComputeMaterial = _ambientMaterial;
+                Lighting.LightOverlayMaterial = _overlayMaterial;
+                Lighting.LightSourcesBlurMaterial = _blurMaterial;
+                Lighting.AmbientLightBlurMaterial = _blurMaterial;
                 Lighting.EnableAmbientLight = false;
                 Lighting.BlurLightSources = false;
                 Lighting.BlurAmbientLight = false;
                 Lighting.HDR = false;
                 Lighting.EnableNormalMapping = normalMapping;
-                Lighting.LightSourcesLayer = 29;
-                Lighting.AmbientLightLayer = 28;
-                Lighting.LightObstaclesLayer = 27;
                 Lighting.LightPixelSize = 0.1f;
 
                 Sprite sprite = Resources.Load<Sprite>("DefaultLight");
                 _lightObject = new GameObject("Procedural Light");
-                _lightObject.layer = Lighting.LightSourcesLayer;
                 var light = _lightObject.AddComponent<LightSprite>();
                 light.Sprite = sprite;
                 _lightMaterial = new Material(Shader.Find("Light2D/Light 1 Point"));
@@ -289,7 +269,6 @@ namespace Light2D.Tests
                 Obstacle = new GameObject("Light Obstacle");
                 Obstacle.transform.SetParent(_obstacleSource.transform, false);
                 Obstacle.transform.localScale = new Vector3(0.7f, 5, 1);
-                Obstacle.layer = Lighting.LightObstaclesLayer;
                 var obstacle = Obstacle.AddComponent<LightObstacleSprite>();
                 obstacle.Owner = Lighting;
                 obstacle.GameSpriteRenderer = sourceRenderer;
@@ -354,8 +333,6 @@ namespace Light2D.Tests
             {
                 if (_cameraObject != null)
                     Object.DestroyImmediate(_cameraObject);
-                if (_lightCameraObject != null)
-                    Object.DestroyImmediate(_lightCameraObject);
                 if (_lightObject != null)
                     Object.DestroyImmediate(_lightObject);
                 if (_obstacleSource != null)
@@ -366,6 +343,12 @@ namespace Light2D.Tests
                     Object.DestroyImmediate(_lightMaterial);
                 if (_obstacleMaterial != null)
                     Object.DestroyImmediate(_obstacleMaterial);
+                if (_overlayMaterial != null)
+                    Object.DestroyImmediate(_overlayMaterial);
+                if (_ambientMaterial != null)
+                    Object.DestroyImmediate(_ambientMaterial);
+                if (_blurMaterial != null)
+                    Object.DestroyImmediate(_blurMaterial);
             }
         }
 

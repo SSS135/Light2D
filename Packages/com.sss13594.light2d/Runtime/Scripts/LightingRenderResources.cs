@@ -10,9 +10,8 @@ namespace Light2D
         private Material _lightSourcesBlurMaterial;
         private Material _ambientLightBlurMaterial;
         private Material _normalMappedLightMaterial;
-        private Material _lightCombiningMaterial;
+        private Material _normalMapDrawerMaterial;
         private Material _alphaBlendedMaterial;
-        private Camera _normalMapCamera;
         private readonly int _diagnosticsGeneration;
         private bool _disposed;
 
@@ -32,9 +31,8 @@ namespace Light2D
         internal Material LightSourcesBlurMaterial { get { return _lightSourcesBlurMaterial; } }
         internal Material AmbientLightBlurMaterial { get { return _ambientLightBlurMaterial; } }
         internal Material NormalMappedLightMaterial { get { return _normalMappedLightMaterial; } }
-        internal Material LightCombiningMaterial { get { return _lightCombiningMaterial; } }
+        internal Material NormalMapDrawerMaterial { get { return _normalMapDrawerMaterial; } }
         internal Material AlphaBlendedMaterial { get { return _alphaBlendedMaterial; } }
-        internal Camera NormalMapCamera { get { return _normalMapCamera; } }
 
         internal LightingRenderResources()
         {
@@ -61,10 +59,10 @@ namespace Light2D
             return material;
         }
 
-        internal void EnsureNormalMappingMaterials(Shader normalMappedLightShader, Shader lightCombiningShader)
+        internal void EnsureNormalMappingMaterials(Shader normalDrawerShader, Shader normalMappedLightShader)
         {
+            EnsureInternalMaterial(ref _normalMapDrawerMaterial, normalDrawerShader, "Normal Map Drawer");
             EnsureInternalMaterial(ref _normalMappedLightMaterial, normalMappedLightShader, "Normal Mapped Light");
-            EnsureInternalMaterial(ref _lightCombiningMaterial, lightCombiningShader, "Light Blender");
         }
 
         internal void EnsureAlphaBlendedMaterial(Shader shader)
@@ -98,19 +96,6 @@ namespace Light2D
                 return true;
             }
             return false;
-        }
-
-        internal Camera EnsureNormalMapCamera(Transform parent)
-        {
-            if (_normalMapCamera != null)
-                return _normalMapCamera;
-
-            var cameraObject = new GameObject("Light2D Normals Camera");
-            cameraObject.hideFlags = HideFlags.HideAndDontSave;
-            cameraObject.transform.SetParent(parent, false);
-            _normalMapCamera = cameraObject.AddComponent<Camera>();
-            _normalMapCamera.enabled = false;
-            return _normalMapCamera;
         }
 
         internal void ReleaseTextures()
@@ -166,11 +151,8 @@ namespace Light2D
             Destroy(ref _lightSourcesBlurMaterial);
             Destroy(ref _ambientLightBlurMaterial);
             Destroy(ref _normalMappedLightMaterial);
-            Destroy(ref _lightCombiningMaterial);
+            Destroy(ref _normalMapDrawerMaterial);
             Destroy(ref _alphaBlendedMaterial);
-            if (_normalMapCamera != null)
-                Light2DObjectUtility.Destroy(_normalMapCamera.gameObject);
-            _normalMapCamera = null;
             Light2DDiagnostics.UnregisterContext(_diagnosticsGeneration);
         }
 

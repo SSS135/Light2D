@@ -37,7 +37,6 @@ namespace Light2D
             var obstacleObject = new GameObject(gameObject.name + " Light Obstacle");
             obstacleObject.transform.SetParent(transform, false);
             obstacleObject.transform.localScale = Vector3.one * LightObstacleScale;
-            obstacleObject.layer = lightingSystem.LightObstaclesLayer;
 
             if (GetComponent<SpriteRenderer>() != null || GetComponent<CustomSprite>() != null)
             {

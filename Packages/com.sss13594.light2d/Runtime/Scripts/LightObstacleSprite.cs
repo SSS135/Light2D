@@ -8,7 +8,7 @@ namespace Light2D
     /// <summary>
     /// Mirrors sprite geometry into the obstacle layer and stores additive color in UV1.
     /// </summary>
-    public class LightObstacleSprite : CustomSprite
+    public class LightObstacleSprite : CustomSprite, ILight2DObstacle
     {
         public Renderer GameSpriteRenderer;
         public Color AdditiveColor;
@@ -17,8 +17,6 @@ namespace Light2D
         private Color _oldSecondaryColor;
         private Renderer _oldGameSpriteRenderer;
         private Sprite _oldSourceSprite;
-        private LightingSystem _oldResolvedOwner;
-        private int _oldObstacleLayer = -1;
         private Renderer _sourceRenderer;
         private CustomSprite _sourceCustomSprite;
         private SpriteRenderer _sourceSpriteRenderer;
@@ -37,6 +35,41 @@ namespace Light2D
 
             base.OnEnable();
             UpdateMeshData(true);
+            // Register-and-draw model (§0.3): keep the owned renderer disabled so no scene camera draws
+            // the obstacle mesh; it is drawn only through the obstacle registry snapshot.
+            if (_meshRenderer != null)
+                _meshRenderer.enabled = false;
+            Light2DRenderRegistry.RegisterObstacle(this);
+        }
+
+        protected override void OnDisable()
+        {
+            Light2DRenderRegistry.DeregisterObstacle(this);
+            base.OnDisable();
+        }
+
+        protected override void OnDestroy()
+        {
+            Light2DRenderRegistry.DeregisterObstacle(this);
+            base.OnDestroy();
+        }
+
+        bool ILight2DDrawable.TryGetDrawEntry(out Light2DDrawEntry entry)
+        {
+            entry = default;
+            if (!isActiveAndEnabled || _meshFilter == null || _meshRenderer == null)
+                return false;
+            if (Light2DObjectUtility.IsInPrefabStage(gameObject))
+                return false;
+
+            var mesh = _meshFilter.sharedMesh;
+            var material = _meshRenderer.sharedMaterial;
+            if (mesh == null || material == null)
+                return false;
+
+            entry = new Light2DDrawEntry(mesh, material, transform.localToWorldMatrix, _meshRenderer.bounds,
+                Mathf.Max(1, mesh.subMeshCount), SortingOrder, Owner);
+            return true;
         }
 
         protected override bool UseNormalTexcoordMaterial { get { return true; } }
@@ -70,14 +103,6 @@ namespace Light2D
                 _isMeshDirty = true;
                 base.UpdateMeshData();
             }
-
-            var resolvedOwner = Light2DObjectUtility.ResolveOwner(Owner);
-            var obstacleLayer = resolvedOwner != null ? resolvedOwner.LightObstaclesLayer : -1;
-            if (!Light2DObjectUtility.IsInPrefabStage(gameObject) &&
-                (resolvedOwner != _oldResolvedOwner || obstacleLayer != _oldObstacleLayer) && obstacleLayer >= 0)
-                gameObject.layer = obstacleLayer;
-            _oldResolvedOwner = resolvedOwner;
-            _oldObstacleLayer = obstacleLayer;
         }
 
         private Sprite ResolveSourceSprite(Renderer source)

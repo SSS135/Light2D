@@ -93,18 +93,6 @@ namespace Light2D
             return true;
         }
 
-        internal static string ValidateLayers(int sources, int ambient, int obstacles, bool requireNamedLayers)
-        {
-            if (!IsLayerValid(sources, requireNamedLayers) || !IsLayerValid(ambient, requireNamedLayers) ||
-                !IsLayerValid(obstacles, requireNamedLayers))
-                return requireNamedLayers
-                    ? "Select three configured layers other than Default (layer 0)."
-                    : "Light2D layers must be between 0 and 31.";
-            if (sources == ambient || sources == obstacles || ambient == obstacles)
-                return "Light Sources, Ambient Light, and Light Obstacles must use three different layers.";
-            return null;
-        }
-
         private static bool TryDimension(double value, out int dimension)
         {
             dimension = 0;
@@ -117,12 +105,6 @@ namespace Light2D
         private static int MakeEven(int value)
         {
             return value + (value & 1);
-        }
-
-        private static bool IsLayerValid(int layer, bool requireNamedLayer)
-        {
-            return layer >= (requireNamedLayer ? 1 : 0) && layer < 32 &&
-                   (!requireNamedLayer || !string.IsNullOrEmpty(LayerMask.LayerToName(layer)));
         }
 
         private static bool IsFinite(float value)

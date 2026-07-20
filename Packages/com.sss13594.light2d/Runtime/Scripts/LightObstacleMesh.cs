@@ -8,12 +8,13 @@ namespace Light2D
     [ExecuteAlways]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
-    public class LightObstacleMesh : MonoBehaviour
+    public class LightObstacleMesh : MonoBehaviour, ILight2DObstacle
     {
         public Color32 MultiplicativeColor;
         public Color AdditiveColor;
         public Material Material;
         public LightingSystem Owner;
+        public int SortingOrder;
 
         private MeshRenderer _parentMeshRenderer;
         private MeshFilter _parentMeshFilter;
@@ -26,8 +27,6 @@ namespace Light2D
         private Material _oldParentMaterial;
         private Material _oldBaseMaterial;
         private Texture2D _oldTexture;
-        private LightingSystem _oldResolvedOwner;
-        private int _oldObstacleLayer = -1;
         private CustomSprite.MaterialKey _materialKey;
 
         private const string GeneratedMeshName = "Generated Light Obstacle Mesh (DONT change it)";
@@ -37,17 +36,40 @@ namespace Light2D
             _meshRenderer = GetComponent<MeshRenderer>();
             _meshFilter = GetComponent<MeshFilter>();
             ReleaseOrphanedResources();
+            Light2DRenderRegistry.RegisterObstacle(this);
             Refresh();
         }
 
         private void OnDisable()
         {
+            Light2DRenderRegistry.DeregisterObstacle(this);
             ReleaseOwnedResources();
         }
 
         private void OnDestroy()
         {
+            Light2DRenderRegistry.DeregisterObstacle(this);
             ReleaseOwnedResources();
+        }
+
+        bool ILight2DDrawable.TryGetDrawEntry(out Light2DDrawEntry entry)
+        {
+            entry = default;
+            if (!isActiveAndEnabled || _meshFilter == null || _meshRenderer == null)
+                return false;
+            if (Light2DObjectUtility.IsInPrefabStage(gameObject))
+                return false;
+
+            // Read the shared mesh/material live so a self-mesh assigned after OnEnable (MapGenerator,
+            // Phase-2 Tilemap) is picked up the next frame without caching a stale entry (Risk R4).
+            var mesh = _meshFilter.sharedMesh;
+            var material = _meshRenderer.sharedMaterial;
+            if (mesh == null || material == null)
+                return false;
+
+            entry = new Light2DDrawEntry(mesh, material, transform.localToWorldMatrix, _meshRenderer.bounds,
+                Mathf.Max(1, mesh.subMeshCount), SortingOrder, Owner);
+            return true;
         }
 
         private void Update()
@@ -63,30 +85,30 @@ namespace Light2D
 
         private void Refresh()
         {
+            // Register-and-draw model (§0.3): obstacles draw only through the registry, never a scene
+            // camera, so the owned renderer stays disabled in both mirror and self-mesh modes.
+            if (_meshRenderer != null)
+                _meshRenderer.enabled = false;
+
             var parent = transform.parent;
             _parentMeshRenderer = parent != null ? parent.GetComponent<MeshRenderer>() : null;
             _parentMeshFilter = parent != null ? parent.GetComponent<MeshFilter>() : null;
 
-            var resolvedOwner = Light2DObjectUtility.ResolveOwner(Owner);
-            var obstacleLayer = resolvedOwner != null ? resolvedOwner.LightObstaclesLayer : -1;
-            if (!Light2DObjectUtility.IsInPrefabStage(gameObject) && obstacleLayer >= 0 &&
-                (resolvedOwner != _oldResolvedOwner || obstacleLayer != _oldObstacleLayer))
-                gameObject.layer = obstacleLayer;
-            _oldResolvedOwner = resolvedOwner;
-            _oldObstacleLayer = obstacleLayer;
-
-            if (_parentMeshFilter == null || _parentMeshRenderer == null ||
-                _parentMeshFilter.sharedMesh == null || _parentMeshRenderer.sharedMaterial == null)
+            var hasParentMirror = _parentMeshFilter != null && _parentMeshRenderer != null &&
+                _parentMeshFilter.sharedMesh != null && _parentMeshRenderer.sharedMaterial != null;
+            if (!hasParentMirror)
             {
+                // Self-mesh mode (OQ1 option A): no parent geometry to mirror. Drop any owned generated
+                // mesh/material left from a prior mirror pass and register this object's own MeshFilter/
+                // MeshRenderer directly. Serves MapGenerator's self-mesh obstacle prefab and the Phase-2
+                // Tilemap occluder, whose meshes/materials are assigned externally after OnEnable.
                 ReleaseMesh();
                 ReleaseMaterial();
                 _oldParentMesh = null;
                 _oldParentMaterial = null;
-                _meshRenderer.enabled = false;
                 return;
             }
 
-            _meshRenderer.enabled = true;
             var geometryChanged = false;
             if (_parentMeshFilter.sharedMesh != _oldParentMesh || _mesh == null)
             {

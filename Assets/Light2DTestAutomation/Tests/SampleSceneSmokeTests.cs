@@ -97,8 +97,8 @@ namespace Light2D.TestProject.Tests
                 "The LightingSystem did not stay active through the frame advancement.");
             Assert.That(Object.FindObjectsByType<LightingSystem>(FindObjectsSortMode.None), Has.Length.EqualTo(1),
                 "The scene no longer has exactly one active LightingSystem after the frame advancement.");
-            Assert.That(context.Lighting.LightCamera, Is.Not.Null,
-                "The LightingSystem lost its light camera.");
+            Assert.That(context.Lighting.IsRenderingReady, Is.True,
+                "The LightingSystem is no longer ready to render (overlay material lost or pipeline unsupported).");
             Assert.That(context.Lighting.ObstaclesTexture, Is.Not.Null,
                 "The obstacle texture was not allocated during rendering.");
             Assert.That(context.Lighting.LightSourcesTexture, Is.Not.Null,

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -12,6 +13,8 @@ namespace Light2D
     /// </summary>
     internal static class Light2DDraw
     {
+        private static readonly ShaderTagId LightModeTag = new ShaderTagId("LightMode");
+
         internal static void Draw(IRasterCommandBuffer cmd, List<Light2DDrawEntry> snapshot, int shaderPass)
         {
             if (cmd == null || snapshot == null)
@@ -32,27 +35,37 @@ namespace Light2D
         /// <summary>
         /// Resolves the DrawMesh pass index for a LightMode (e.g. "SRPDefaultUnlit", "Light2DNormals").
         /// DrawMesh selects a pass by index, not by LightMode, and the obstacle shaders carry more than
-        /// one pass, so callers MUST resolve the index once per material and hand it to <see cref="Draw"/>
-        /// rather than assuming pass 0 (design risk R1). <see cref="Material.FindPass"/> matches by pass
-        /// name; a name-scan fallback covers shaders whose pass name differs from the LightMode tag.
-        /// Returns 0 when nothing matches so a mis-tagged shader still draws its first pass.
+        /// one pass (an SRPDefaultUnlit colour pass and a Light2DNormals pass), so callers MUST resolve
+        /// the index and hand it to <see cref="Draw"/> rather than assuming pass 0 (design risk R1).
+        ///
+        /// The authoritative match is on the pass's LightMode TAG, read from the material's active
+        /// SubShader via <see cref="Shader.FindPassTagValue(int, ShaderTagId)"/> — the same SubShader
+        /// DrawMesh's pass index and <see cref="Material.passCount"/> index into, so a tag hit maps
+        /// straight to a valid DrawMesh pass index. <see cref="Material.FindPass"/> only matches the pass
+        /// NAME (e.g. "Obstacle"), which differs from the LightMode tag, so it is used only as a fallback
+        /// for shaders whose pass Name happens to equal the requested LightMode (e.g. a pass literally
+        /// named "Light2DNormals"). Returns 0 when nothing matches so a single-pass Built-in SubShader
+        /// (whose only pass carries no LightMode tag) still draws its colour pass.
         /// </summary>
         internal static int ResolvePass(Material material, string lightMode)
         {
             if (material == null || string.IsNullOrEmpty(lightMode))
                 return 0;
 
-            var pass = material.FindPass(lightMode);
-            if (pass >= 0)
-                return pass;
-
-            var passCount = material.passCount;
-            for (var i = 0; i < passCount; i++)
+            var shader = material.shader;
+            if (shader != null)
             {
-                if (string.Equals(material.GetPassName(i), lightMode, System.StringComparison.OrdinalIgnoreCase))
-                    return i;
+                var passCount = material.passCount;
+                for (var i = 0; i < passCount; i++)
+                {
+                    var tag = shader.FindPassTagValue(i, LightModeTag);
+                    if (string.Equals(tag.name, lightMode, StringComparison.OrdinalIgnoreCase))
+                        return i;
+                }
             }
-            return 0;
+
+            var byName = material.FindPass(lightMode);
+            return byName >= 0 ? byName : 0;
         }
     }
 }

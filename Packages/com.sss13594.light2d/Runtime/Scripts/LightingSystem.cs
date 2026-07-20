@@ -43,10 +43,6 @@ namespace Light2D
         public Material LightOverlayMaterial;
         public Material LightSourcesBlurMaterial;
         public Material AmbientLightBlurMaterial;
-        public Camera LightCamera;
-        public int LightSourcesLayer;
-        public int AmbientLightLayer;
-        public int LightObstaclesLayer;
         public bool XZPlane;
 
         private static readonly HashSet<LightingSystem> ActiveInstances = new HashSet<LightingSystem>();
@@ -56,15 +52,18 @@ namespace Light2D
         private LightingRenderResources _resources;
         private ObstacleCameraPostPorcessor _obstaclesPostProcessor;
         private readonly List<LightSprite> _lightSpritesCache = new List<LightSprite>();
-        private readonly List<MeshRenderer> _flatPassHiddenRenderers = new List<MeshRenderer>();
-        private readonly Plane[] _frustumPlanes = new Plane[6];
+        private readonly List<Light2DDrawEntry> _sourceSnapshot = new List<Light2DDrawEntry>();
+        private readonly List<Light2DDrawEntry> _obstacleSnapshot = new List<Light2DDrawEntry>();
+        private readonly List<Light2DDrawEntry> _ambientSnapshot = new List<Light2DDrawEntry>();
+        private readonly Plane[] _extendedPlanes = new Plane[6];
+        private readonly Plane[] _smallPlanes = new Plane[6];
+        private MaterialPropertyBlock _normalLightProperties;
         private Vector2Int _extendedLightTextureSize;
         private Vector2Int _smallLightTextureSize;
         private Vector3 _oldPos;
         private Vector3 _currPos;
         private RenderTextureFormat _texFormat;
         private int _aditionalAmbientLightCycles;
-        private Shader _normalMapRenderShader;
         private bool _initialized;
         private int _settingsHash;
         private bool _hasSourceDescriptor;
@@ -84,6 +83,7 @@ namespace Light2D
 
         private static readonly int ObstacleTexId = Shader.PropertyToID("_ObstacleTex");
         private static readonly int NormalsBufferId = Shader.PropertyToID("_NormalsBuffer");
+        private static readonly int NormalTexId = Shader.PropertyToID("_NormalTex");
         private static readonly int PixelsPerBlockId = Shader.PropertyToID("_PixelsPerBlock");
         private static readonly int ExtendedToSmallTextureScaleId = Shader.PropertyToID("_ExtendedToSmallTextureScale");
         private static readonly int PosOffsetId = Shader.PropertyToID("_PosOffset");
@@ -94,6 +94,8 @@ namespace Light2D
         private static readonly int ShiftId = Shader.PropertyToID("_Shift");
         private static readonly int OffsetId = Shader.PropertyToID("_Offset");
         private static readonly int ScaleId = Shader.PropertyToID("_Scale");
+        private static readonly int LightPosId = Shader.PropertyToID("_LightPos");
+        private const string DefaultUnlitMode = "SRPDefaultUnlit";
 
         public static LightingSystem Instance
         {
@@ -129,7 +131,6 @@ namespace Light2D
                 switch (ActivePipeline)
                 {
                     case Light2DPipeline.BuiltIn:
-                        return LightCamera != null;
                     case Light2DPipeline.UniversalRenderPipeline:
                         return true;
                     default:
@@ -152,20 +153,6 @@ namespace Light2D
             return pipelineAsset is UniversalRenderPipelineAsset
                 ? Light2DPipeline.UniversalRenderPipeline
                 : Light2DPipeline.UnsupportedScriptableRenderPipeline;
-        }
-
-        internal static bool IsNormalMappingLightCamera(Camera camera)
-        {
-            if (camera == null)
-                return false;
-            CleanupRegistry();
-            foreach (var instance in ActiveInstances)
-            {
-                if (!instance.IsScriptableRenderPipelineActive && instance.BuiltInNormalMappingEnabled &&
-                    instance.LightCamera == camera)
-                    return true;
-            }
-            return false;
         }
 
         private float SourceOrthographicSize
@@ -241,7 +228,6 @@ namespace Light2D
             }
 #endif
             var oldActive = RenderTexture.active;
-            var lightCameraState = LightCameraState.Capture(LightCamera);
             var shaderState = GlobalShaderState.Capture();
             try
             {
@@ -252,19 +238,39 @@ namespace Light2D
                 }
 
                 EnsureFrameResources(src.descriptor);
-                UpdateCamera();
+
+                // Derive the light-camera geometry directly (no helper camera): a snapped position plus
+                // an extended (obstacle/ambient) and small (light-source) view/projection, and the frustum
+                // planes the registry snapshots cull against. Mirrors the URP feature's per-frame geometry.
+                _currPos = Light2DCameraGeometry.CalculateSnappedPosition(_camera, LightPixelsPerUnityMeter);
+                var extendedGeom = Light2DCameraGeometry.Calculate(_camera, _currPos, _smallLightTextureSize,
+                    _extendedLightTextureSize, true, LightCameraFovAdd, LightObstaclesDistance);
+                var smallGeom = Light2DCameraGeometry.Calculate(_camera, _currPos, _smallLightTextureSize,
+                    _extendedLightTextureSize, false, LightCameraFovAdd, LightObstaclesDistance);
+                GeometryUtility.CalculateFrustumPlanes(extendedGeom.Projection * extendedGeom.View, _extendedPlanes);
+                GeometryUtility.CalculateFrustumPlanes(smallGeom.Projection * smallGeom.View, _smallPlanes);
+
                 using (Light2DProfiling.Culling.Auto())
-                    LightSprite.PrepareSnapshot(_lightSpritesCache, XZPlane, LightSourcesLayer, _camera);
+                {
+                    var extendedContext = new Light2DCullContext(_extendedPlanes, this);
+                    LightSprite.PrepareSnapshot(_lightSpritesCache, XZPlane, this, _smallPlanes);
+                    BuildSourceEntries();
+                    Light2DRenderRegistry.PrepareObstacleSnapshot(_obstacleSnapshot, extendedContext);
+                    if (EnableAmbientLight)
+                        Light2DRenderRegistry.PrepareAmbientSnapshot(_ambientSnapshot, extendedContext);
+                    else
+                        _ambientSnapshot.Clear();
+                }
                 SetKeyword("LIGHT2D_XZ_PLANE", XZPlane);
                 SetKeyword("HDR", _texFormat == RenderTextureFormat.ARGBHalf);
                 SetKeyword("PERSPECTIVE_CAMERA", !_camera.orthographic);
-                RenderObstacles();
+                RenderObstacles(extendedGeom);
                 SetupShaders();
-                RenderNormalBuffer();
-                RenderLightSources();
+                RenderNormalBuffer(smallGeom);
+                RenderLightSources(smallGeom);
                 RenderLightSourcesBlur();
-                int ambientCyclesConsumed = RenderAmbientLight();
-                RenderLightOverlay(src, dest);
+                int ambientCyclesConsumed = RenderAmbientLight(extendedGeom);
+                RenderLightOverlay(src, dest, smallGeom);
                 ReportBuiltInFrame(ambientCyclesConsumed);
             }
             catch (Exception exception)
@@ -276,7 +282,6 @@ namespace Light2D
             {
                 shaderState.Restore();
                 RenderTexture.active = oldActive;
-                lightCameraState.Restore(LightCamera);
             }
         }
 
@@ -320,10 +325,10 @@ namespace Light2D
             LightingFrameConfig frameConfig;
             using (Light2DProfiling.Validation.Auto())
             {
-                if (LightCamera == null || LightOverlayMaterial == null)
+                if (LightOverlayMaterial == null)
                 {
                     if (!_initialized)
-                        Debug.LogError("Lighting Camera and LightOverlayMaterial must be assigned for Light2D to render.", this);
+                        Debug.LogError("LightOverlayMaterial must be assigned for Light2D to render.", this);
                     return false;
                 }
                 descriptor = sourceDescriptor ?? (_hasSourceDescriptor ? _sourceDescriptor : CreateCameraDescriptor());
@@ -332,15 +337,12 @@ namespace Light2D
                     orthographicSizeAdd: LightCameraSizeAdd,
                     fieldOfViewAdd: LightCameraFovAdd,
                     obstacleDistance: LightObstaclesDistance,
-                    lightSourcesLayer: LightSourcesLayer,
-                    ambientLightLayer: AmbientLightLayer,
-                    lightObstaclesLayer: LightObstaclesLayer,
                     hdr: HDR,
                     enableAmbientLight: EnableAmbientLight,
                     obstacleAntialiasing: LightObstaclesAntialiasing,
                     normalMapping: BuiltInNormalMappingEnabled,
                     maximumTexturePixels: MaximumOwnedTexturePixels);
-                if (!TryCreateFrameConfig(_camera, LightCamera, descriptor, settings, out frameConfig,
+                if (!TryCreateFrameConfig(_camera, descriptor, settings, out frameConfig,
                         out var validationError))
                 {
                     ReportValidationError(validationError);
@@ -378,14 +380,15 @@ namespace Light2D
             _resources.EnsureSerializedMaterials(AmbientLightComputeMaterial, LightOverlayMaterial,
                 LightSourcesBlurMaterial, AmbientLightBlurMaterial);
 
-            _normalMapRenderShader = Shader.Find("Light2D/Internal/Normal Map Drawer");
             if (BuiltInNormalMappingEnabled)
             {
+                var normalDrawerShader = Shader.Find("Light2D/Internal/Normal Map Drawer");
                 var normalMappedShader = Shader.Find("Light2D/Internal/Normal Mapped Light");
-                var combiningShader = Shader.Find("Light2D/Internal/Light Blender");
-                if (_normalMapRenderShader == null || normalMappedShader == null || combiningShader == null)
+                if (normalDrawerShader == null || normalMappedShader == null)
                     return false;
-                _resources.EnsureNormalMappingMaterials(normalMappedShader, combiningShader);
+                _resources.EnsureNormalMappingMaterials(normalDrawerShader, normalMappedShader);
+                if (_normalLightProperties == null)
+                    _normalLightProperties = new MaterialPropertyBlock();
             }
             if (AffectOnlyThisCamera)
             {
@@ -540,30 +543,39 @@ namespace Light2D
             }
         }
 
-        private void RenderObstacles()
+        private void RenderObstacles(in Light2DCameraGeometry geometry)
         {
             using (Light2DProfiling.Obstacles.Auto())
             {
-                ConfigLightCamera(true);
-                LightCamera.enabled = false;
                 var obstacleTarget = LightObstaclesAntialiasing
                     ? _resources.ObstaclesUpsampledTexture
                     : _resources.ObstaclesTexture;
-                LightCamera.targetTexture = obstacleTarget;
-                LightCamera.cullingMask = 1 << LightObstaclesLayer;
-                LightCamera.backgroundColor = new Color(1, 1, 1, 0);
-                var borderCommand = _obstaclesPostProcessor.GetDrawCommand(LightCamera,
+                int pass = ResolveSnapshotPass(_obstacleSnapshot, DefaultUnlitMode);
+                var borderMesh = _obstaclesPostProcessor.GetBorderMesh(obstacleTarget.width, obstacleTarget.height,
                     LightObstaclesAntialiasing ? 2f : 1f);
-                if (borderCommand != null)
-                    LightCamera.AddCommandBuffer(CameraEvent.AfterEverything, borderCommand);
+                var borderMaterial = _obstaclesPostProcessor.Material;
+
+                var commands = CommandBufferPool.Get("Light2D Obstacles");
                 try
                 {
-                    LightCamera.Render();
+                    commands.SetRenderTarget(obstacleTarget);
+                    commands.ClearRenderTarget(true, true, new Color(1, 1, 1, 0));
+                    var raster = CommandBufferHelpers.GetRasterCommandBuffer(commands);
+                    raster.SetViewProjectionMatrices(geometry.View,
+                        GL.GetGPUProjectionMatrix(geometry.Projection, true));
+                    Light2DDraw.Draw(raster, _obstacleSnapshot, pass);
+                    // One-pixel white border so lights with off-screen origins keep sampling obstacles.
+                    // The border shader emits clip-space vertices directly, so it ignores view/projection.
+                    if (borderMesh != null && borderMaterial != null)
+                    {
+                        int borderPass = Light2DDraw.ResolvePass(borderMaterial, DefaultUnlitMode);
+                        raster.DrawMesh(borderMesh, Matrix4x4.identity, borderMaterial, 0, borderPass);
+                    }
+                    Graphics.ExecuteCommandBuffer(commands);
                 }
                 finally
                 {
-                    if (borderCommand != null)
-                        LightCamera.RemoveCommandBuffer(CameraEvent.AfterEverything, borderCommand);
+                    CommandBufferPool.Release(commands);
                 }
                 if (LightObstaclesAntialiasing)
                 {
@@ -585,110 +597,181 @@ namespace Light2D
                 : (BuiltInNormalMappingEnabled ? _resources.ObstaclesTexture.texelSize : _resources.ObstaclesTexture.texelSize * 0.5f));
         }
 
-        private void RenderNormalBuffer()
+        private void RenderNormalBuffer(in Light2DCameraGeometry geometry)
         {
             SetKeyword("NORMAL_MAPPED_LIGHTS", BuiltInNormalMappingEnabled);
             if (!BuiltInNormalMappingEnabled)
                 return;
             using (Light2DProfiling.Normals.Auto())
             {
-                var normalCamera = _resources.EnsureNormalMapCamera(_camera.transform);
-                normalCamera.CopyFrom(_camera);
-                normalCamera.transform.position = LightCamera.transform.position;
-                normalCamera.clearFlags = CameraClearFlags.SolidColor;
-                normalCamera.targetTexture = _resources.NormalMapBuffer;
-                normalCamera.cullingMask = 1 << LightObstaclesLayer;
-                normalCamera.backgroundColor = new Color(0.5f, 0.5f, 0, 1);
-                normalCamera.enabled = false;
-                normalCamera.RenderWithShader(_normalMapRenderShader, "LightObstacle");
+                var drawerMaterial = _resources.NormalMapDrawerMaterial;
+                if (drawerMaterial == null)
+                    return;
+                int pass = Light2DDraw.ResolvePass(drawerMaterial, DefaultUnlitMode);
+                var commands = CommandBufferPool.Get("Light2D Normal Buffer");
+                try
+                {
+                    commands.SetRenderTarget(_resources.NormalMapBuffer);
+                    commands.ClearRenderTarget(true, true, new Color(0.5f, 0.5f, 0, 1));
+                    var raster = CommandBufferHelpers.GetRasterCommandBuffer(commands);
+                    raster.SetViewProjectionMatrices(geometry.View,
+                        GL.GetGPUProjectionMatrix(geometry.Projection, true));
+                    // Draw every obstacle with the shared normal-map drawer, feeding each obstacle's own
+                    // base/normal textures through a property block. This is the DrawMesh equivalent of the
+                    // retired camera RenderWithShader "LightObstacle" replacement, which pulled the same
+                    // textures from each obstacle material.
+                    for (int i = 0; i < _obstacleSnapshot.Count; i++)
+                    {
+                        var entry = _obstacleSnapshot[i];
+                        if (entry.Mesh == null)
+                            continue;
+                        _normalLightProperties.Clear();
+                        CopyTextureProperty(_normalLightProperties, entry.Material, MainTexId);
+                        CopyTextureProperty(_normalLightProperties, entry.Material, NormalTexId);
+                        int submeshCount = entry.SubmeshCount > 0 ? entry.SubmeshCount : 1;
+                        for (int s = 0; s < submeshCount; s++)
+                            raster.DrawMesh(entry.Mesh, entry.Matrix, drawerMaterial, s, pass, _normalLightProperties);
+                    }
+                    Graphics.ExecuteCommandBuffer(commands);
+                }
+                finally
+                {
+                    CommandBufferPool.Release(commands);
+                }
                 Shader.SetGlobalTexture(NormalsBufferId, _resources.NormalMapBuffer);
             }
         }
 
-        private void RenderLightSources()
+        private void RenderLightSources(in Light2DCameraGeometry geometry)
         {
             using (Light2DProfiling.Sources.Auto())
-                RenderLightSourcesCore();
+            {
+                if (BuiltInNormalMappingEnabled)
+                    RenderNormalMappedLightSources(geometry);
+                else
+                    RunSnapshotPass("Light2D Light Sources", _resources.LightSourcesTexture, Color.clear,
+                        geometry, _sourceSnapshot, DefaultUnlitMode);
+            }
         }
 
-        private void RenderLightSourcesCore()
+        // Normal-mapped source path (R2). Renders each registered light individually into a scratch target
+        // (shadowed by the global obstacle texture), then modulates it by the normal buffer and accumulates
+        // into the light-sources target. Mirrors the URP feature's AddSingleLightPass/AddNormalLightPass but
+        // keeps the built-in Normal Mapped Light shader's world-space _LightPos semantics. XY-plane only.
+        private void RenderNormalMappedLightSources(in Light2DCameraGeometry geometry)
         {
-            ConfigLightCamera(false);
-            LightCamera.backgroundColor = Color.clear;
-            if (!BuiltInNormalMappingEnabled)
-            {
-                LightCamera.targetTexture = _resources.LightSourcesTexture;
-                LightCamera.cullingMask = 1 << LightSourcesLayer;
-                LightCamera.Render();
-                return;
-            }
-
             var normalMaterial = _resources.NormalMappedLightMaterial;
-            var combiningMaterial = _resources.LightCombiningMaterial;
-            normalMaterial.SetTexture("_MainTex", _resources.SingleLightSourceTexture);
-            combiningMaterial.SetTexture("_MainTex", _resources.SingleLightSourceTexture);
-            var oldActive = RenderTexture.active;
+            if (normalMaterial == null)
+                return;
+            int normalPass = Light2DDraw.ResolvePass(normalMaterial, DefaultUnlitMode);
+            var projection = GL.GetGPUProjectionMatrix(geometry.Projection, true);
+            var commands = CommandBufferPool.Get("Light2D Normal-Mapped Sources");
             try
             {
-                var clearCommands = CommandBufferPool.Get("Light2D Clear Light Sources");
-                try
+                var raster = CommandBufferHelpers.GetRasterCommandBuffer(commands);
+                commands.SetRenderTarget(_resources.LightSourcesTexture);
+                commands.ClearRenderTarget(true, true, Color.clear);
+                for (int i = 0; i < _lightSpritesCache.Count; i++)
                 {
-                    clearCommands.SetRenderTarget(_resources.LightSourcesTexture);
-                    clearCommands.ClearRenderTarget(false, true, LightCamera.backgroundColor);
-                    Graphics.ExecuteCommandBuffer(clearCommands);
-                }
-                finally
-                {
-                    CommandBufferPool.Release(clearCommands);
-                }
-                GeometryUtility.CalculateFrustumPlanes(_camera, _frustumPlanes);
-                var lightCameraLocalPosition = LightCamera.transform.localPosition;
-                LightCamera.targetTexture = _resources.SingleLightSourceTexture;
-                LightCamera.cullingMask = 0;
-                LightCamera.backgroundColor = Color.clear;
-                foreach (var lightSprite in _lightSpritesCache)
-                {
-                    if (!lightSprite.RendererEnabled ||
-                        !GeometryUtility.TestPlanesAABB(_frustumPlanes, lightSprite.Renderer.bounds))
+                    var light = _lightSpritesCache[i];
+                    if (light == null || light.Sprite == null)
                         continue;
-                    LightCamera.RenderWithShader(_normalMapRenderShader, "f84j");
-                    Graphics.SetRenderTarget(_resources.SingleLightSourceTexture);
-                    lightSprite.DrawLightingNow(lightCameraLocalPosition);
-                    Graphics.SetRenderTarget(_resources.LightSourcesTexture);
-                    lightSprite.DrawLightNormalsNow(normalMaterial);
+                    var renderer = light.Renderer;
+                    var filter = light.GetComponent<MeshFilter>();
+                    var mesh = filter != null ? filter.sharedMesh : null;
+                    var lightMaterial = renderer != null ? renderer.sharedMaterial : null;
+                    if (mesh == null || lightMaterial == null)
+                        continue;
+                    var matrix = light.transform.localToWorldMatrix;
+                    int submeshCount = mesh.subMeshCount > 0 ? mesh.subMeshCount : 1;
+                    int sourcePass = Light2DDraw.ResolvePass(lightMaterial, DefaultUnlitMode);
+
+                    commands.SetRenderTarget(_resources.SingleLightSourceTexture);
+                    commands.ClearRenderTarget(true, true, Color.clear);
+                    raster.SetViewProjectionMatrices(geometry.View, projection);
+                    for (int s = 0; s < submeshCount; s++)
+                        raster.DrawMesh(mesh, matrix, lightMaterial, s, sourcePass);
+
+                    var size = light.Sprite.bounds.size;
+                    var center = matrix.MultiplyPoint3x4(Vector2.Scale((Vector2)light.LightOrigin, size));
+                    _normalLightProperties.Clear();
+                    _normalLightProperties.SetVector(LightPosId,
+                        new Vector4(center.x, center.y, light.LightOrigin.z, 0f));
+                    _normalLightProperties.SetTexture(MainTexId, _resources.SingleLightSourceTexture);
+                    commands.SetRenderTarget(_resources.LightSourcesTexture);
+                    raster.SetViewProjectionMatrices(geometry.View, projection);
+                    for (int s = 0; s < submeshCount; s++)
+                        raster.DrawMesh(mesh, matrix, normalMaterial, s, normalPass, _normalLightProperties);
                 }
-                // Light sprites were already drawn manually above; hide their renderers so the
-                // flat camera pass draws only the remaining light-sources layer content.
-                var hiddenRenderers = _flatPassHiddenRenderers;
-                try
-                {
-                    foreach (var lightSprite in _lightSpritesCache)
-                    {
-                        var renderer = lightSprite.Renderer;
-                        if (renderer != null && renderer.enabled)
-                        {
-                            renderer.enabled = false;
-                            hiddenRenderers.Add(renderer);
-                        }
-                    }
-                    LightCamera.cullingMask = 1 << LightSourcesLayer;
-                    LightCamera.Render();
-                }
-                finally
-                {
-                    foreach (var renderer in hiddenRenderers)
-                    {
-                        if (renderer != null)
-                            renderer.enabled = true;
-                    }
-                    hiddenRenderers.Clear();
-                }
-                Graphics.Blit(_resources.SingleLightSourceTexture, _resources.LightSourcesTexture, combiningMaterial);
+                Graphics.ExecuteCommandBuffer(commands);
             }
             finally
             {
-                RenderTexture.active = oldActive;
+                CommandBufferPool.Release(commands);
             }
+        }
+
+        // Boilerplate for a single-target snapshot draw: bind + clear the role target, set the light-camera
+        // view/projection, then issue the shared DrawMesh loop.
+        private void RunSnapshotPass(string bufferName, RenderTexture target, Color clear,
+            in Light2DCameraGeometry geometry, List<Light2DDrawEntry> snapshot, string lightMode)
+        {
+            int pass = ResolveSnapshotPass(snapshot, lightMode);
+            var commands = CommandBufferPool.Get(bufferName);
+            try
+            {
+                commands.SetRenderTarget(target);
+                commands.ClearRenderTarget(true, true, clear);
+                var raster = CommandBufferHelpers.GetRasterCommandBuffer(commands);
+                raster.SetViewProjectionMatrices(geometry.View, GL.GetGPUProjectionMatrix(geometry.Projection, true));
+                Light2DDraw.Draw(raster, snapshot, pass);
+                Graphics.ExecuteCommandBuffer(commands);
+            }
+            finally
+            {
+                CommandBufferPool.Release(commands);
+            }
+        }
+
+        // Builds this frame's flat light-source draw entries from the already culled, UV1-baked light snapshot.
+        private void BuildSourceEntries()
+        {
+            _sourceSnapshot.Clear();
+            for (int i = 0; i < _lightSpritesCache.Count; i++)
+            {
+                var light = _lightSpritesCache[i];
+                if (light == null)
+                    continue;
+                var renderer = light.Renderer;
+                var filter = light.GetComponent<MeshFilter>();
+                var mesh = filter != null ? filter.sharedMesh : null;
+                var material = renderer != null ? renderer.sharedMaterial : null;
+                if (mesh == null || material == null)
+                    continue;
+                _sourceSnapshot.Add(new Light2DDrawEntry(mesh, material, light.transform.localToWorldMatrix,
+                    renderer.bounds, mesh.subMeshCount, light.SortingOrder, light.Owner));
+            }
+        }
+
+        // Resolves the DrawMesh pass index once per snapshot from its first drawable material. All entries in
+        // a role share the same shader family, so a single resolved index is correct for the whole snapshot.
+        private static int ResolveSnapshotPass(List<Light2DDrawEntry> snapshot, string lightMode)
+        {
+            for (int i = 0; i < snapshot.Count; i++)
+            {
+                if (snapshot[i].Material != null)
+                    return Light2DDraw.ResolvePass(snapshot[i].Material, lightMode);
+            }
+            return 0;
+        }
+
+        private static void CopyTextureProperty(MaterialPropertyBlock destination, Material source, int propertyId)
+        {
+            if (source == null || !source.HasProperty(propertyId))
+                return;
+            var texture = source.GetTexture(propertyId);
+            if (texture != null)
+                destination.SetTexture(propertyId, texture);
         }
 
         private void RenderLightSourcesBlur()
@@ -714,18 +797,15 @@ namespace Light2D
             }
         }
 
-        private int RenderAmbientLight()
+        private int RenderAmbientLight(in Light2DCameraGeometry geometry)
         {
             var computeMaterial = _resources.AmbientLightComputeMaterial;
             if (!EnableAmbientLight || computeMaterial == null)
                 return 0;
             using (Light2DProfiling.Ambient.Auto())
             {
-                ConfigLightCamera(true);
-                LightCamera.targetTexture = _resources.AmbientEmissionTexture;
-                LightCamera.cullingMask = 1 << AmbientLightLayer;
-                LightCamera.backgroundColor = Color.clear;
-                LightCamera.Render();
+                RunSnapshotPass("Light2D Ambient Emission", _resources.AmbientEmissionTexture, Color.clear,
+                    geometry, _ambientSnapshot, DefaultUnlitMode);
                 int additionalCycles = ConsumePendingAmbientLightCycles();
                 for (int i = 0; i < additionalCycles + 1; i++)
                 {
@@ -749,14 +829,13 @@ namespace Light2D
             }
         }
 
-        private void RenderLightOverlay(RenderTexture src, RenderTexture dest)
+        private void RenderLightOverlay(RenderTexture src, RenderTexture dest, in Light2DCameraGeometry geometry)
         {
             using (Light2DProfiling.Composition.Auto())
             {
-                ConfigLightCamera(false);
                 var texelSize = new Vector2(1f / _smallLightTextureSize.x, 1f / _smallLightTextureSize.y);
                 Vector2 worldOffset = Quaternion.Inverse(_camera.transform.rotation) *
-                                      (LightCamera.transform.position - _camera.transform.position);
+                                      (geometry.Position - _camera.transform.position);
                 Vector2 offset = Vector2.Scale(texelSize, -worldOffset * LightPixelsPerUnityMeter);
                 var lightSources = BlurLightSources && _resources.LightSourcesBlurMaterial != null &&
                                    LightTexturesFilterMode != FilterMode.Point
@@ -765,30 +844,15 @@ namespace Light2D
                 float sourceOrthographicSize = _camera.orthographic
                     ? SourceOrthographicSize
                     : Mathf.Tan(_camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * LightObstaclesDistance;
-                float scaleY = sourceOrthographicSize / LightCamera.orthographicSize;
+                float scaleY = sourceOrthographicSize / geometry.OrthographicSize;
                 var overlay = _resources.LightOverlayMaterial;
                 overlay.SetTexture(AmbientLightTexId, EnableAmbientLight ? _resources.AmbientTexture : null);
                 overlay.SetTexture(LightSourcesTexId, lightSources);
                 overlay.SetTexture(GameTexId, src);
                 overlay.SetVector(OffsetId, offset);
-                overlay.SetVector(ScaleId, new Vector2(scaleY * _camera.aspect / LightCamera.aspect, scaleY));
+                overlay.SetVector(ScaleId, new Vector2(scaleY * _camera.aspect / geometry.Aspect, scaleY));
                 Graphics.Blit(null, dest, overlay);
             }
-        }
-
-        private void UpdateCamera()
-        {
-            float pixelsPerMeter = LightPixelsPerUnityMeter;
-            Vector3 mainPosition = _camera.transform.position;
-            Quaternion cameraRotation = _camera.transform.rotation;
-            Vector3 unrotatedPosition = Quaternion.Inverse(cameraRotation) * mainPosition;
-            var gridPosition = new Vector2(
-                Mathf.Round(unrotatedPosition.x * pixelsPerMeter) / pixelsPerMeter,
-                Mathf.Round(unrotatedPosition.y * pixelsPerMeter) / pixelsPerMeter);
-            Vector2 positionDifference = gridPosition - (Vector2)unrotatedPosition;
-            Vector3 position = cameraRotation * positionDifference + mainPosition;
-            LightCamera.transform.position = position;
-            _currPos = position;
         }
 
         public void LoopAmbientLight(int cycles)
@@ -809,26 +873,6 @@ namespace Light2D
             int cycles = Mathf.Min(MaximumAmbientCyclesPerFrame, Mathf.Max(0, _aditionalAmbientLightCycles));
             _aditionalAmbientLightCycles -= cycles;
             return cycles;
-        }
-
-        private void ConfigLightCamera(bool extended)
-        {
-            LightCamera.orthographic = _camera.orthographic;
-            if (extended)
-            {
-                LightCamera.orthographicSize = SourceOrthographicSize *
-                                               (_extendedLightTextureSize.y / (float)_smallLightTextureSize.y);
-                LightCamera.fieldOfView = _camera.fieldOfView + LightCameraFovAdd;
-                LightCamera.aspect = _extendedLightTextureSize.x / (float)_extendedLightTextureSize.y;
-            }
-            else
-            {
-                LightCamera.orthographicSize = _camera.orthographic
-                    ? SourceOrthographicSize
-                    : Mathf.Tan(_camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * LightObstaclesDistance;
-                LightCamera.fieldOfView = _camera.fieldOfView;
-                LightCamera.aspect = _smallLightTextureSize.x / (float)_smallLightTextureSize.y;
-            }
         }
 
         private void CaptureMainCameraState()
@@ -926,22 +970,14 @@ namespace Light2D
             _aditionalAmbientLightCycles = 0;
         }
 
-        private static bool TryCreateFrameConfig(Camera sourceCamera, Camera lightCamera,
+        private static bool TryCreateFrameConfig(Camera sourceCamera,
             RenderTextureDescriptor sourceDescriptor, in LightingFrameSettings settings,
             out LightingFrameConfig config, out string error)
         {
             config = default(LightingFrameConfig);
             error = null;
-            if (sourceCamera == null || lightCamera == null)
-                error = "source and helper cameras must be assigned.";
-            else if (sourceCamera == lightCamera || lightCamera.GetComponent<LightingSystem>() != null)
-                error = "the helper camera must not be a LightingSystem source camera.";
-            else if (LightingSettingsValidator.ValidateLayers(settings.LightSourcesLayer, settings.AmbientLightLayer,
-                         settings.LightObstaclesLayer, false) is var layerError && layerError != null)
-                error = layerError;
-            else if ((sourceCamera.cullingMask & ((1 << settings.LightSourcesLayer) | (1 << settings.AmbientLightLayer) |
-                                                  (1 << settings.LightObstaclesLayer))) != 0)
-                error = "the source camera culling mask must exclude all Light2D layers.";
+            if (sourceCamera == null)
+                error = "the source camera must be assigned.";
             else if (sourceDescriptor.width <= 0 || sourceDescriptor.height <= 0 || sourceDescriptor.volumeDepth != 1 ||
                      sourceDescriptor.dimension != TextureDimension.Tex2D || sourceDescriptor.vrUsage != VRTextureUsage.None)
                 error = "the source render target must be a non-XR 2D texture with positive dimensions.";
@@ -1043,74 +1079,11 @@ namespace Light2D
         private void LateUpdate()
         {
 #if UNITY_EDITOR
-            if (!Application.isPlaying && !IsScriptableRenderPipelineActive && LightCamera != null)
-            {
-                _camera = GetComponent<Camera>();
-                LightCamera.orthographic = _camera.orthographic;
-                if (_camera.orthographic)
-                    LightCamera.orthographicSize = SourceOrthographicSize + LightCameraSizeAdd;
-                else
-                    LightCamera.fieldOfView = _camera.fieldOfView + LightCameraFovAdd;
-            }
             if (!Application.isPlaying ||
                 (UnityEditor.SceneView.currentDrawingSceneView != null &&
                  UnityEditor.SceneView.currentDrawingSceneView == UnityEditor.EditorWindow.focusedWindow))
                 Shader.SetGlobalTexture(ObstacleTexId, Texture2D.whiteTexture);
 #endif
-        }
-
-        private struct LightCameraState
-        {
-            private readonly bool _valid;
-            private readonly bool _enabled;
-            private readonly RenderTexture _targetTexture;
-            private readonly int _cullingMask;
-            private readonly Color _backgroundColor;
-            private readonly CameraClearFlags _clearFlags;
-            private readonly bool _orthographic;
-            private readonly float _orthographicSize;
-            private readonly float _fieldOfView;
-            private readonly float _aspect;
-            private readonly Vector3 _position;
-            private readonly Quaternion _rotation;
-
-            private LightCameraState(Camera camera)
-            {
-                _valid = camera != null;
-                _enabled = _valid && camera.enabled;
-                _targetTexture = _valid ? camera.targetTexture : null;
-                _cullingMask = _valid ? camera.cullingMask : 0;
-                _backgroundColor = _valid ? camera.backgroundColor : default(Color);
-                _clearFlags = _valid ? camera.clearFlags : default(CameraClearFlags);
-                _orthographic = _valid && camera.orthographic;
-                _orthographicSize = _valid ? camera.orthographicSize : 0;
-                _fieldOfView = _valid ? camera.fieldOfView : 0;
-                _aspect = _valid ? camera.aspect : 0;
-                _position = _valid ? camera.transform.position : default(Vector3);
-                _rotation = _valid ? camera.transform.rotation : default(Quaternion);
-            }
-
-            internal static LightCameraState Capture(Camera camera)
-            {
-                return new LightCameraState(camera);
-            }
-
-            internal void Restore(Camera camera)
-            {
-                if (!_valid || camera == null)
-                    return;
-                camera.enabled = _enabled;
-                camera.targetTexture = _targetTexture;
-                camera.cullingMask = _cullingMask;
-                camera.backgroundColor = _backgroundColor;
-                camera.clearFlags = _clearFlags;
-                camera.orthographic = _orthographic;
-                camera.orthographicSize = _orthographicSize;
-                camera.fieldOfView = _fieldOfView;
-                camera.aspect = _aspect;
-                camera.transform.position = _position;
-                camera.transform.rotation = _rotation;
-            }
         }
 
         private readonly struct LightingFrameConfig
@@ -1135,9 +1108,6 @@ namespace Light2D
             internal readonly float OrthographicSizeAdd;
             internal readonly float FieldOfViewAdd;
             internal readonly float ObstacleDistance;
-            internal readonly int LightSourcesLayer;
-            internal readonly int AmbientLightLayer;
-            internal readonly int LightObstaclesLayer;
             internal readonly bool Hdr;
             internal readonly bool EnableAmbientLight;
             internal readonly bool ObstacleAntialiasing;
@@ -1145,17 +1115,13 @@ namespace Light2D
             internal readonly long MaximumTexturePixels;
 
             internal LightingFrameSettings(float pixelSize, float orthographicSizeAdd, float fieldOfViewAdd,
-                float obstacleDistance, int lightSourcesLayer, int ambientLightLayer, int lightObstaclesLayer,
-                bool hdr, bool enableAmbientLight, bool obstacleAntialiasing, bool normalMapping,
-                long maximumTexturePixels)
+                float obstacleDistance, bool hdr, bool enableAmbientLight, bool obstacleAntialiasing,
+                bool normalMapping, long maximumTexturePixels)
             {
                 PixelSize = pixelSize;
                 OrthographicSizeAdd = orthographicSizeAdd;
                 FieldOfViewAdd = fieldOfViewAdd;
                 ObstacleDistance = obstacleDistance;
-                LightSourcesLayer = lightSourcesLayer;
-                AmbientLightLayer = ambientLightLayer;
-                LightObstaclesLayer = lightObstaclesLayer;
                 Hdr = hdr;
                 EnableAmbientLight = enableAmbientLight;
                 ObstacleAntialiasing = obstacleAntialiasing;

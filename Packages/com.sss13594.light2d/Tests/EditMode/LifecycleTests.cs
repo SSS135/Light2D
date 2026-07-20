@@ -21,7 +21,6 @@ namespace Light2D.Tests
                 Assert.That(LightingSettingsValidator.TryCalculateSizes(camera, 0.000001f, 3f, 30f, 10f,
                     false, false, true, false, out _, out var oversizedError), Is.False);
                 Assert.That(oversizedError, Does.Contain("texture-size limit"));
-                Assert.That(LightingSettingsValidator.ValidateLayers(8, 8, 9, false), Does.Contain("different"));
             }
             finally
             {
@@ -92,10 +91,9 @@ namespace Light2D.Tests
                 Assert.That(LightingSystem.Instances, Does.Contain(lighting));
                 Assert.That(lighting.IsRenderingReady, Is.False);
                 lighting.LightOverlayMaterial = overlay;
-                Assert.That(lighting.IsRenderingReady, Is.EqualTo(lighting.IsScriptableRenderPipelineActive));
-                var lightCameraObject = new GameObject("Assigned Lighting Camera");
-                lightCameraObject.transform.SetParent(gameObject.transform);
-                lighting.LightCamera = lightCameraObject.AddComponent<Camera>();
+                // v3 retires the Built-in helper LightCamera: with the overlay material assigned the
+                // system is ready on both backends (Built-in no longer requires a LightCamera, URP was
+                // already ready). The EditMode host runs Built-in or URP, never an unsupported SRP.
                 Assert.That(lighting.IsRenderingReady, Is.True);
                 lighting.LightPixelSize = 0;
                 Assert.That(lighting.LightPixelsPerUnityMeter, Is.EqualTo(100000).Within(1));

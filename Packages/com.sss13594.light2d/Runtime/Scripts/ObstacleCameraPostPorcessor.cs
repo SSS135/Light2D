@@ -1,23 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Light2D
 {
     /// <summary>
-    /// This class apply post processing effect to light obstacles texture.
-    /// It is drawing one pixel wide white border on light obstacles texture.
-    /// Whithout it light sources with off screen origin may not work.
+    /// Builds the obstacle-texture border mesh: a one-pixel wide white frame drawn over the light obstacles
+    /// texture after the obstacle geometry. Without it, light sources with off-screen origins may not work.
+    /// The mesh and its <see cref="Material"/> are handed to the backend, which issues the DrawMesh itself.
     /// </summary>
     internal sealed class ObstacleCameraPostPorcessor : IDisposable
     {
         private Mesh _mesh;
         private Material _material;
-        private Vector2Int _oldCameraSize;
+        private Vector2Int _oldTargetSize;
         private float _oldPixelWidth = -1;
         private bool _disposed;
-        private CommandBuffer _commandBuffer;
         private readonly List<Color32> _colors32 = new List<Color32>();
         private readonly List<Vector3> _vertices = new List<Vector3>();
         private readonly List<int> _indices = new List<int>();
@@ -38,35 +36,34 @@ namespace Light2D
             }
         }
 
-        public CommandBuffer GetDrawCommand(Camera camera, float pixelWidth)
+        internal Material Material { get { return _material; } }
+
+        /// <summary>
+        /// Returns the border mesh for the given obstacle-target dimensions, rebuilding it only when the
+        /// target size or border width changes. The mesh vertices are in clip space (the border shader emits
+        /// them directly), so the caller can draw it with an identity matrix. Returns null when unavailable.
+        /// </summary>
+        public Mesh GetBorderMesh(int width, int height, float pixelWidth)
         {
-            if (_disposed || camera == null || _material == null || camera.pixelWidth <= 0 || camera.pixelHeight <= 0)
+            if (_disposed || _material == null || width <= 0 || height <= 0)
                 return null;
 
-            var camSize = new Vector2Int(Mathf.RoundToInt(camera.pixelWidth), Mathf.RoundToInt(camera.pixelHeight));
-            if (_oldCameraSize != camSize || !Mathf.Approximately(_oldPixelWidth, pixelWidth) || _mesh == null)
+            var targetSize = new Vector2Int(width, height);
+            if (_oldTargetSize != targetSize || !Mathf.Approximately(_oldPixelWidth, pixelWidth) || _mesh == null)
             {
-                _oldCameraSize = camSize;
+                _oldTargetSize = targetSize;
                 _oldPixelWidth = pixelWidth;
-                CreateMesh(camera, pixelWidth);
+                CreateMesh(width, height, pixelWidth);
             }
-
-            if (_commandBuffer == null)
-            {
-                _commandBuffer = new CommandBuffer();
-                _commandBuffer.name = "Light2D Obstacle Border";
-            }
-            _commandBuffer.Clear();
-            _commandBuffer.DrawMesh(_mesh, Matrix4x4.identity, _material);
-            return _commandBuffer;
+            return _mesh;
         }
 
         /// <summary>
         /// Generating mesh with one pixel wide white border.
         /// </summary>
-        private void CreateMesh(Camera camera, float pixelWidth)
+        private void CreateMesh(int width, int height, float pixelWidth)
         {
-            var pixelSize = new Vector2(1f/camera.pixelWidth, 1f/camera.pixelHeight)*pixelWidth;
+            var pixelSize = new Vector2(1f/width, 1f/height)*pixelWidth;
 
             _vertices.Clear();
             _colors32.Clear();
@@ -122,11 +119,8 @@ namespace Light2D
             _disposed = true;
             Light2DObjectUtility.Destroy(_mesh);
             Light2DObjectUtility.Destroy(_material);
-            if (_commandBuffer != null)
-                _commandBuffer.Dispose();
             _mesh = null;
             _material = null;
-            _commandBuffer = null;
         }
     }
 }

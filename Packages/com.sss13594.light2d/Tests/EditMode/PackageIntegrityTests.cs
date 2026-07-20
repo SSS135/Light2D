@@ -48,7 +48,6 @@ namespace Light2D.Tests
         {
             string[] requiredPaths =
             {
-                PackageRoot + "/Runtime/Resources/Lighting Camera.prefab",
                 DefaultLightPath,
                 PackageRoot + "/Runtime/Materials/LightOverlay.mat",
                 PackageRoot + "/Runtime/Materials/Light1Point.mat",
@@ -60,10 +59,13 @@ namespace Light2D.Tests
             foreach (string path in requiredPaths)
                 Assert.That(AssetDatabase.LoadMainAssetAtPath(path), Is.Not.Null, path);
 
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(requiredPaths[0]);
-            var config = prefab.GetComponent<LightingSystemPrefabConfig>();
-            Assert.That(prefab.GetComponent<Camera>(), Is.Not.Null);
-            Assert.That(config, Is.Not.Null);
+            // v3 retires the Built-in helper camera and its "Lighting Camera.prefab", but the material
+            // source the creation flow reads is still a LightingSystemPrefabConfig (now on a camera-less
+            // prefab). Find it by component so the assertion no longer pins the retired prefab path or a
+            // Camera on it.
+            var config = FindRuntimePrefabConfig();
+            Assert.That(config, Is.Not.Null,
+                "No prefab carrying a LightingSystemPrefabConfig was found under " + RuntimeRoot);
             Assert.That(config.AmbientLightComputeMaterial, Is.Not.Null);
             Assert.That(config.LightOverlayMaterial, Is.Not.Null);
             Assert.That(config.BlurMaterial, Is.Not.Null);
@@ -75,6 +77,22 @@ namespace Light2D.Tests
                 Assert.That(material, Is.Not.Null, path);
                 Assert.That(material.shader, Is.Not.Null, path);
             }
+        }
+
+        private static LightingSystemPrefabConfig FindRuntimePrefabConfig()
+        {
+            foreach (string guid in AssetDatabase.FindAssets("t:Prefab", new[] { PackageRoot + "/Runtime" }))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (prefab == null)
+                    continue;
+                var config = prefab.GetComponentInChildren<LightingSystemPrefabConfig>(true);
+                if (config != null)
+                    return config;
+            }
+
+            return null;
         }
 
         [Test]

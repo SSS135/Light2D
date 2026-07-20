@@ -60,9 +60,6 @@ namespace Light2D
                     obstacle.MultiplicativeColor = new Color32(255, 255, 255, 255);
                 }
 
-                var systems = LightingSystem.Instances;
-                if (systems.Count == 1)
-                    obstacleObj.layer = systems[0].LightObstaclesLayer;
                 createdObjects.Add(obstacleObj);
             }
 
@@ -81,14 +78,26 @@ namespace Light2D
         {
             var obj = new GameObject("Light");
             Undo.RegisterCreatedObjectUndo(obj, "Create Light Source");
-            if (LightingSystem.Instance != null)
-                obj.layer = LightingSystem.Instance.LightSourcesLayer;
             var light = Undo.AddComponent<LightSprite>(obj);
             var materialPath = AssetDatabase.GUIDToAssetPath("5d8645bc2e5501a4ebd138db5aa609bd");
             light.Material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
             light.Sprite = AssetDatabase.LoadAssetAtPath<Sprite>(
                 "Packages/com.sss13594.light2d/Runtime/Resources/DefaultLight.psd");
             light.Color = new Color(1, 1, 1, 0.5f);
+            Selection.activeGameObject = obj;
+        }
+
+        [MenuItem("GameObject/Light2D/Ambient Emitter", false, 6)]
+        public static void CreateAmbientEmitter()
+        {
+            var obj = new GameObject("Ambient Emitter");
+            Undo.RegisterCreatedObjectUndo(obj, "Create Ambient Emitter");
+            // AddComponent pulls in the required MeshFilter/MeshRenderer; the emitter's editor OnEnable
+            // assigns its default material. Seeding the sprite gives an immediately visible emitter,
+            // mirroring CreateLightSource; leave both sprite sources empty for self-mesh mode instead.
+            var emitter = Undo.AddComponent<LightAmbientEmitter>(obj);
+            emitter.Sprite = AssetDatabase.LoadAssetAtPath<Sprite>(
+                "Packages/com.sss13594.light2d/Runtime/Resources/DefaultLight.psd");
             Selection.activeGameObject = obj;
         }
 

@@ -83,7 +83,9 @@ namespace Light2D.Tests
                 Assert.That(obstacleFilter.sharedMesh, Is.Not.Null);
                 Assert.That(obstacleFilter.sharedMesh, Is.Not.SameAs(sourceMesh));
                 Assert.That(obstacleFilter.sharedMesh.vertexCount, Is.EqualTo(sourceMesh.vertexCount));
-                Assert.That(obstacleRenderer.enabled, Is.True);
+                // v3 draws obstacles only through the registry, so the mirror's MeshRenderer stays
+                // disabled (the R5 double-draw guard) even though its mesh and material are fully built.
+                Assert.That(obstacleRenderer.enabled, Is.False);
                 Assert.That(obstacleRenderer.sharedMaterial, Is.Not.Null);
                 Assert.That(obstacleRenderer.sharedMaterial.mainTexture, Is.SameAs(sourceTexture));
             }
