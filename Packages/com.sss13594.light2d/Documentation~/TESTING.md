@@ -2,13 +2,15 @@
 
 ## Host Project
 
-Open `TestProject~` as the Unity project when developing the package. Its manifest references the package root as:
+Open the repository root `X:\src\unity\Light2D` as the Unity project when developing the package. The package is embedded under `Packages/com.sss13594.light2d/` and is auto-discovered, so the host manifest no longer needs a `file:` dependency on it. The host manifest lists the package in its `testables` array so the package tests run:
 
 ```json
-"com.sss13594.light2d": "file:../.."
+"testables": [
+  "com.sss13594.light2d"
+]
 ```
 
-The trailing `~` excludes the host from the UPM package payload. Generated host directories and user state are ignored by Git; the project settings and package manifest are source inputs.
+Generated host directories and user state are ignored by Git; the project settings and package manifest are source inputs.
 
 The exact editor used by the host is:
 
@@ -16,7 +18,7 @@ The exact editor used by the host is:
 C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe
 ```
 
-Do not open the repository root as a Unity project. It is the package root and no longer contains the legacy root `Assets`/`ProjectSettings` project structure.
+Open the repository root directly. It is a Unity 6000.4.7f1 project whose `Assets/` and `ProjectSettings/` are the development host, and it embeds the package under `Packages/`.
 
 ## Validation Order
 
@@ -31,7 +33,7 @@ Do not open the repository root as a Unity project. It is the package root and n
 
 The EditMode suites cover contract behavior (public API surface, pipeline classification, and legacy-API removal), lifecycle and resource release, component resources, diagnostics, editor workflows, package integrity, shader import, and deterministic URP feature setup. The package PlayMode suite contains four Built-in tests covering rendered output, obstacle attenuation, and owned-resource cleanup, plus four URP rendering tests: aligned non-square target output, partial viewport-rect alignment, reduced-render-scale composition, and two-base-camera lighting isolation. Every URP PlayMode test begins with the positive three-condition host-defect detection described under the blocker section below: on the pinned defective host all four report as skipped with the defect message, and on a healthy host all four run fully.
 
-The host project additionally provides a sample PlayMode suite in assembly `Light2D.TestProject.SampleTests` under `TestProject~/Assets/Light2DTestAutomation/Tests/`: two frame-advance sample smoke tests plus one visual smoke test that writes its PNG artifact to `TestProject~/TestResults/Light2DSampleVisual/rocket-visual-smoke.png` before asserting. The EditMode suites and the Built-in PlayMode tests have been exercised on the pinned host; the URP PlayMode tests self-skip there under the current blocker below.
+The host project additionally provides a sample PlayMode suite in assembly `Light2D.TestProject.SampleTests` under `Assets/Light2DTestAutomation/Tests/`: two frame-advance sample smoke tests plus one visual smoke test that writes its PNG artifact to `TestResults/Light2DSampleVisual/rocket-visual-smoke.png` before asserting. The EditMode suites and the Built-in PlayMode tests have been exercised on the pinned host; the URP PlayMode tests self-skip there under the current blocker below.
 
 ## Batch Commands
 
@@ -40,13 +42,13 @@ Do not run these while the same project is open in another Unity process. Quote 
 Compile/import and write a log:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe" -batchmode -quit -projectPath "X:\src\unity\Light2D\TestProject~" -logFile "X:\src\unity\Light2D\TestProject~\unity-import.log"
+& "C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe" -batchmode -quit -projectPath "X:\src\unity\Light2D" -logFile "X:\src\unity\Light2D\unity-import.log"
 ```
 
 Run Edit Mode tests:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe" -batchmode -projectPath "X:\src\unity\Light2D\TestProject~" -runTests -testPlatform EditMode -testResults "X:\src\unity\Light2D\TestProject~\editmode-results.xml" -logFile "X:\src\unity\Light2D\TestProject~\unity-editmode-tests.log"
+& "C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe" -batchmode -projectPath "X:\src\unity\Light2D" -runTests -testPlatform EditMode -testResults "X:\src\unity\Light2D\editmode-results.xml" -logFile "X:\src\unity\Light2D\unity-editmode-tests.log"
 ```
 
 Run Play Mode tests:
@@ -54,11 +56,11 @@ Run Play Mode tests:
 ```powershell
 $arguments = @(
     '-batchmode',
-    '-projectPath', '"X:\src\unity\Light2D\TestProject~"',
+    '-projectPath', '"X:\src\unity\Light2D"',
     '-runTests',
     '-testPlatform', 'PlayMode',
-    '-testResults', '"X:\src\unity\Light2D\TestProject~\playmode-results.xml"',
-    '-logFile', '"X:\src\unity\Light2D\TestProject~\unity-playmode-tests.log"'
+    '-testResults', '"X:\src\unity\Light2D\playmode-results.xml"',
+    '-logFile', '"X:\src\unity\Light2D\unity-playmode-tests.log"'
 )
 $unity = Start-Process -FilePath 'C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe' -ArgumentList $arguments -PassThru
 if (-not $unity.WaitForExit(900000)) {
@@ -76,7 +78,7 @@ To run a single test as a fast path, add a `-testFilter` entry to the same `$arg
 
 On this host (Unity 6000.4.7f1, Test Framework 1.6) `-testFilter` reliably starts the matched tests, whereas `-assemblyNames Light2D.TestProject.SampleTests` registers the filter in the run settings but never starts a test, so the batch job hangs until the watchdog kills it. Use `-testFilter` for filtered fast paths, or run unfiltered.
 
-Do not add `-quit` to either `-runTests` command; Unity Test Framework owns shutdown for a test run. On this host, a PlayMode run can produce its result and still leave the editor process alive, so the external watchdog prevents an indefinite batch job. The sample suite advances several minutes of captured game frames, which is why the watchdog allows 15 minutes. Logs and result XML files under `TestProject~` are generated artifacts and must not be committed.
+Do not add `-quit` to either `-runTests` command; Unity Test Framework owns shutdown for a test run. On this host, a PlayMode run can produce its result and still leave the editor process alive, so the external watchdog prevents an indefinite batch job. The sample suite advances several minutes of captured game frames, which is why the watchdog allows 15 minutes. Logs and result XML files written to the repository root are generated artifacts and must not be committed.
 
 ## Built-in Windows Build Evidence
 
@@ -84,9 +86,9 @@ The Built-in sample player was built for `StandaloneWindows64` with `Light2D.Tes
 
 ## Host Sentinel and Workaround
 
-`TestProject~` deliberately keeps `Assets/UniversalRenderPipelineGlobalSettings.asset` and its `.meta` registered in `ProjectSettings/GraphicsSettings.asset`. Built-in automation treats this as a sentinel: it validates the script GUID and registration, keeps the active render pipeline null, and removes numbered global-settings copies generated by URP. Preserve the sentinel and its GUID. This workaround allows Built-in tests and the Windows build to complete despite URP package postprocessor errors; it does not create a valid URP validation environment.
+The host deliberately keeps `Assets/UniversalRenderPipelineGlobalSettings.asset` and its `.meta` registered in `ProjectSettings/GraphicsSettings.asset`. Built-in automation treats this as a sentinel: it validates the script GUID and registration, keeps the active render pipeline null, and removes numbered global-settings copies generated by URP. Preserve the sentinel and its GUID. This workaround allows Built-in tests and the Windows build to complete despite URP package postprocessor errors; it does not create a valid URP validation environment.
 
-Host setup is fully reproducible from this repository alone. The automation in `TestProject~/Assets/Light2DTestAutomation` generates URP global settings locally (`UrpProjectSetup.RegenerateGlobalSettings`) and has no fallback to any external project or copied foreign asset. No external project or copied external global-settings asset is a user requirement or supported validation prerequisite.
+Host setup is fully reproducible from this repository alone. The automation in `Assets/Light2DTestAutomation` generates URP global settings locally (`UrpProjectSetup.RegenerateGlobalSettings`) and has no fallback to any external project or copied foreign asset. No external project or copied external global-settings asset is a user requirement or supported validation prerequisite.
 
 ## Current URP Validation Blocker
 
@@ -106,12 +108,12 @@ The host embeds `com.sss135.editor-automation-mcp`. While the editor is open and
 http://127.0.0.1:17777/mcp
 ```
 
-The root `.mcp.json` configures that endpoint. There is no separate server process. The active port is also written to `TestProject~/Library/EditorAutomationHttp/port.txt`.
+The root `.mcp.json` configures that endpoint. There is no separate server process. The active port is also written to `Library/EditorAutomationHttp/port.txt`.
 
 Code edits require an asset refresh and completed Unity compilation before tests exercise the new assembly. An unfocused Windows editor can stall refresh or domain reload. Before a recompile-triggering MCP call, run the one-shot helper:
 
 ```powershell
-& "X:\src\unity\Light2D\TestProject~\Packages\com.sss135.editor-automation-mcp\Tools\wake-unity.ps1" -ProjectFilter "TestProject~"
+& "X:\src\unity\Light2D\Packages\com.sss135.editor-automation-mcp\Tools\wake-unity.ps1" -ProjectFilter "Light2D"
 ```
 
 Then request `assets.refresh`, poll `editor.application-get-state` until compilation and updating are both settled, run `tests.run`, poll its job ticket, and inspect `console.get-logs`. The gateway disappears during domain reload; reconnect only after its health endpoint responds again. If port 17777 is already occupied, close the other Unity editor using it.

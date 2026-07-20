@@ -13,19 +13,23 @@ The package declares URP 17.4 and uGUI 2.0 dependencies. Do not remove or change
 In **Window > Package Management > Package Manager**, use **Install package from git URL...**:
 
 ```text
-https://github.com/SSS135/Light2D.git
+https://github.com/SSS135/Light2D.git?path=/Packages/com.sss13594.light2d
 ```
 
-For reproducible projects, append a released tag or commit hash after `#`. The package is at the repository root, so no `?path=` suffix is needed.
+The package is embedded under `Packages/com.sss13594.light2d/` in the repository, so the `?path=` suffix is required; do not point Package Manager at the repository root. For reproducible projects, append a released tag or commit hash after the `path` query, for example:
+
+```text
+https://github.com/SSS135/Light2D.git?path=/Packages/com.sss13594.light2d#v2.0.0
+```
 
 ## Install from Local Disk
 
-Clone or extract this repository outside the consuming project’s generated directories. In Package Manager, use **Install package from disk...** and select the root `package.json`.
+Clone or extract this repository outside the consuming project’s generated directories. In Package Manager, use **Install package from disk...** and select the package `package.json` under `Packages/com.sss13594.light2d/`, not the repository root. You can also embed the folder directly under your project’s `Packages/`.
 
-The equivalent `Packages/manifest.json` dependency uses an absolute or manifest-relative path:
+The equivalent `Packages/manifest.json` dependency uses an absolute or manifest-relative path to the embedded package folder:
 
 ```json
-"com.sss13594.light2d": "file:X:/src/unity/Light2D"
+"com.sss13594.light2d": "file:X:/src/unity/Light2D/Packages/com.sss13594.light2d"
 ```
 
 Unity’s package cache is read-only in normal use. Use a Git or local-disk package when modifying Light2D itself.
