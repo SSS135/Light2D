@@ -11,9 +11,9 @@
       }
     },
     "com.sss13594.light2d": {
-      "version": "file:../..",
+      "version": "file:com.sss13594.light2d",
       "depth": 0,
-      "source": "local",
+      "source": "embedded",
       "dependencies": {
         "com.unity.render-pipelines.universal": "17.4.0",
         "com.unity.ugui": "2.0.0"
