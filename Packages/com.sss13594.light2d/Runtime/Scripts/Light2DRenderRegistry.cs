@@ -1,0 +1,149 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Light2D
+{
+    /// <summary>
+    /// Static register-and-draw surface for the obstacle and ambient-emitter roles. Light sources keep
+    /// their existing registry on <see cref="LightSprite"/>, so this class only owns the two new roles.
+    /// Mirrors the lifecycle of <see cref="LightSprite"/>: components self-register in OnEnable and
+    /// deregister in OnDisable/OnDestroy, and a SubsystemRegistration reset clears then re-finds active
+    /// instances after a domain reload.
+    /// </summary>
+    internal static class Light2DRenderRegistry
+    {
+        private static readonly HashSet<ILight2DObstacle> Obstacles = new HashSet<ILight2DObstacle>();
+        private static readonly HashSet<ILight2DAmbientEmitter> AmbientEmitters = new HashSet<ILight2DAmbientEmitter>();
+
+        // Reused across snapshots so per-frame preparation allocates nothing steady-state.
+        private static readonly List<Sortable> Scratch = new List<Sortable>();
+        private static readonly Comparison<Sortable> CompareEntries = Compare;
+
+        internal static void RegisterObstacle(ILight2DObstacle obstacle)
+        {
+            if (obstacle != null)
+                Obstacles.Add(obstacle);
+        }
+
+        internal static void DeregisterObstacle(ILight2DObstacle obstacle)
+        {
+            Obstacles.Remove(obstacle);
+        }
+
+        internal static void RegisterAmbient(ILight2DAmbientEmitter emitter)
+        {
+            if (emitter != null)
+                AmbientEmitters.Add(emitter);
+        }
+
+        internal static void DeregisterAmbient(ILight2DAmbientEmitter emitter)
+        {
+            AmbientEmitters.Remove(emitter);
+        }
+
+        // Membership probes for tests; not part of the drawing path.
+        internal static bool ContainsObstacle(ILight2DObstacle obstacle)
+        {
+            return Obstacles.Contains(obstacle);
+        }
+
+        internal static bool ContainsAmbient(ILight2DAmbientEmitter emitter)
+        {
+            return AmbientEmitters.Contains(emitter);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetRegistry()
+        {
+            Obstacles.Clear();
+            AmbientEmitters.Clear();
+
+            // FindObjectsByType cannot take an interface, so scan every active MonoBehaviour once and
+            // route each into the roles it implements. Snapshot preparation re-checks isActiveAndEnabled
+            // through TryGetDrawEntry, so re-adding disabled components here is harmless.
+            foreach (var behaviour in UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude))
+            {
+                if (behaviour is ILight2DObstacle obstacle)
+                    Obstacles.Add(obstacle);
+                if (behaviour is ILight2DAmbientEmitter emitter)
+                    AmbientEmitters.Add(emitter);
+            }
+        }
+
+        /// <summary>
+        /// Culls, owner-filters and orders the obstacle registry into <paramref name="dst"/>.
+        /// </summary>
+        internal static void PrepareObstacleSnapshot(List<Light2DDrawEntry> dst, in Light2DCullContext ctx)
+        {
+            PrepareSnapshot(Obstacles, dst, ctx);
+        }
+
+        /// <summary>
+        /// Culls, owner-filters and orders the ambient-emitter registry into <paramref name="dst"/>.
+        /// </summary>
+        internal static void PrepareAmbientSnapshot(List<Light2DDrawEntry> dst, in Light2DCullContext ctx)
+        {
+            PrepareSnapshot(AmbientEmitters, dst, ctx);
+        }
+
+        private static void PrepareSnapshot<T>(HashSet<T> registry, List<Light2DDrawEntry> dst,
+            in Light2DCullContext ctx) where T : class, ILight2DDrawable
+        {
+            if (dst == null)
+                throw new ArgumentNullException(nameof(dst));
+
+            registry.RemoveWhere(IsMissing);
+            dst.Clear();
+            Scratch.Clear();
+
+            foreach (var producer in registry)
+            {
+                if (!producer.TryGetDrawEntry(out var entry))
+                    continue;
+                // Owner scoping replaces layer scoping: an entry with an explicit Owner only draws for
+                // that system; an unowned entry draws for any system. Mirrors LightSprite.PrepareSnapshot.
+                if (entry.Owner != null && entry.Owner != ctx.Owner)
+                    continue;
+                if (ctx.Planes != null && !GeometryUtility.TestPlanesAABB(ctx.Planes, entry.WorldBounds))
+                    continue;
+                Scratch.Add(new Sortable(entry, EntityIdOf(producer)));
+            }
+
+            Scratch.Sort(CompareEntries);
+            for (var i = 0; i < Scratch.Count; i++)
+                dst.Add(Scratch[i].Entry);
+            Scratch.Clear();
+        }
+
+        private static bool IsMissing<T>(T producer) where T : class, ILight2DDrawable
+        {
+            // Interface references skip Unity's null overload, so cast to Object to catch destroyed
+            // components that never got a chance to deregister.
+            return !(producer is UnityEngine.Object obj) || obj == null;
+        }
+
+        private static EntityId EntityIdOf(ILight2DDrawable producer)
+        {
+            return producer is UnityEngine.Object obj ? obj.GetEntityId() : default;
+        }
+
+        private static int Compare(Sortable left, Sortable right)
+        {
+            var order = left.Entry.SortKey.CompareTo(right.Entry.SortKey);
+            return order != 0 ? order : left.Id.CompareTo(right.Id);
+        }
+
+        private readonly struct Sortable
+        {
+            internal readonly Light2DDrawEntry Entry;
+            internal readonly EntityId Id;
+
+            internal Sortable(Light2DDrawEntry entry, EntityId id)
+            {
+                Entry = entry;
+                Id = id;
+            }
+        }
+    }
+}

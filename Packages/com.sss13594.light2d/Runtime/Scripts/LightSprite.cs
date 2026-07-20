@@ -96,6 +96,31 @@ namespace Light2D
                 snapshot[i].PrepareForLighting(xzPlane);
         }
 
+        // Additive owner-filtered overload for the v3 register-and-draw backends: no layer filter, an
+        // explicit Owner scope, and caller-cached frustum planes (null skips frustum culling). The
+        // layer-based overload above stays for the current backends until they switch over.
+        internal static void PrepareSnapshot(List<LightSprite> snapshot, bool xzPlane, LightingSystem owner,
+            Plane[] planes)
+        {
+            if (snapshot == null)
+                throw new ArgumentNullException("snapshot");
+
+            LightSprites.RemoveWhere(IsMissing);
+            snapshot.Clear();
+            foreach (var light in LightSprites)
+            {
+                if (!IsRenderable(light) ||
+                    (light.Owner != null && light.Owner != owner) ||
+                    (planes != null && !GeometryUtility.TestPlanesAABB(planes, light.Renderer.bounds)))
+                    continue;
+                snapshot.Add(light);
+            }
+
+            snapshot.Sort(CompareByEntityId);
+            for (var i = 0; i < snapshot.Count; i++)
+                snapshot[i].PrepareForLighting(xzPlane);
+        }
+
         public static LightSprite[] PrepareSnapshot(bool xzPlane)
         {
             var snapshot = CreateSnapshot();
