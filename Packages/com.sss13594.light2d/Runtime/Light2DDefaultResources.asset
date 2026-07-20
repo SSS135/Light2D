@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a84973fb2c2f0449bd5d1b1fbb5b86d, type: 3}
+  m_Name: Light2DDefaultResources
+  m_EditorClassIdentifier: Light2D.Runtime::Light2D.Light2DDefaultResources
+  AmbientLightComputeMaterial: {fileID: 2100000, guid: 0d2e0bb3755347a42ba8fe781dcfa6f1, type: 2}
+  LightOverlayMaterial: {fileID: 2100000, guid: 357b085471a3b6b4aace8aa4cc99238a, type: 2}
+  BlurMaterial: {fileID: 2100000, guid: a359593f98c7f7740b07a09ac6d11e43, type: 2}

@@ -61,12 +61,11 @@ namespace Light2D
                 return;
             }
 
-            // The helper camera is retired; the prefab config is loaded only as the canonical
-            // source of the three default materials assigned to the LightingSystem below.
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Packages/com.sss13594.light2d/Runtime/Resources/Lighting Camera.prefab");
-            var prefabConfig = prefab != null ? prefab.GetComponent<LightingSystemPrefabConfig>() : null;
-            if (prefabConfig == null)
+            // The helper camera is retired; the default composition materials are carried by an
+            // edit-time ScriptableObject that the creation flow reads to configure the LightingSystem.
+            var defaults = AssetDatabase.LoadAssetAtPath<Light2DDefaultResources>(
+                "Packages/com.sss13594.light2d/Runtime/Light2DDefaultResources.asset");
+            if (defaults == null)
             {
                 Debug.LogError("Can't create a lighting system because the default material configuration is missing.");
                 return;
@@ -96,9 +95,9 @@ namespace Light2D
                                      Undo.AddComponent<LightingSystem>(targetCamera.gameObject);
                 Undo.RecordObjects(new Object[] { lightingSystem, targetCamera }, "Configure Lighting System");
 
-                lightingSystem.AmbientLightComputeMaterial = prefabConfig.AmbientLightComputeMaterial;
-                lightingSystem.LightOverlayMaterial = prefabConfig.LightOverlayMaterial;
-                lightingSystem.AmbientLightBlurMaterial = lightingSystem.LightSourcesBlurMaterial = prefabConfig.BlurMaterial;
+                lightingSystem.AmbientLightComputeMaterial = defaults.AmbientLightComputeMaterial;
+                lightingSystem.LightOverlayMaterial = defaults.LightOverlayMaterial;
+                lightingSystem.AmbientLightBlurMaterial = lightingSystem.LightSourcesBlurMaterial = defaults.BlurMaterial;
 
                 if (PrefabUtility.IsPartOfPrefabInstance(lightingSystem))
                     PrefabUtility.RecordPrefabInstancePropertyModifications(lightingSystem);

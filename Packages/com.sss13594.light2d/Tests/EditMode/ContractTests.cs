@@ -58,8 +58,7 @@ namespace Light2D.Tests
                 "Light2D.LightObstacleMesh",
                 "Light2D.LightObstacleSprite",
                 "Light2D.LightSprite",
-                "Light2D.LightingSystem",
-                "Light2D.LightingSystemPrefabConfig"
+                "Light2D.LightingSystem"
             };
 
             var exportedTypes = typeof(LightingSystem).Assembly.GetExportedTypes()
