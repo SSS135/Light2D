@@ -85,7 +85,7 @@ Use the ray-marching materials named `Light2D/Light 20 Points` through `Light2D/
 carrying the emission geometry and supports two modes: a sprite-mirroring mode that
 bakes `EmissionColor` into an owned mesh, and a self-mesh mode (both sprite sources
 empty) that draws the object's externally authored mesh untouched, preserving
-per-vertex emission colors. It replaces the pre-3.0 convention of placing any
+per-vertex emission colors. It replaces the pre-2.0 convention of placing any
 renderer on an ambient layer.
 
 ### `CustomSprite`

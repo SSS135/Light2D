@@ -6,7 +6,7 @@
 - Built-in Render Pipeline or Universal Render Pipeline 17.3.
 - Optional: `com.unity.2d.tilemap` for the `LightObstacleTilemap` occluder.
 
-The package declares URP 17.3 and uGUI 2.0 dependencies. Do not remove or change those dependencies when installing from source. Light2D 3.0 has no layer requirement — lighting roles are expressed as components (see [Add Content](#add-content)).
+The package declares URP 17.3 and uGUI 2.0 dependencies. Do not remove or change those dependencies when installing from source. Light2D 2.0 has no layer requirement — lighting roles are expressed as components (see [Add Content](#add-content)).
 
 ## Install from Git
 
@@ -36,7 +36,7 @@ Unity’s package cache is read-only in normal use. Use a Git or local-disk pack
 
 ## Roles, Not Layers
 
-Light2D 3.0 has no layers to create and no camera culling mask to edit. Each
+Light2D 2.0 has no layers to create and no camera culling mask to edit. Each
 lighting input is a component that registers itself when enabled and is drawn only
 into Light2D's internal textures — never into the game image. Add the component for
 the role you want (light source, ambient emitter, or obstacle); remove or disable it

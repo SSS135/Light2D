@@ -2,14 +2,14 @@
 
 This guide covers two moves:
 
-- **Upgrading an existing Light2D install from 2.x to 3.0** — the breaking architecture change (below).
+- **Upgrading an existing (legacy, layer-based) Light2D install to 2.0.0** — the breaking architecture change (below).
 - **Migrating a legacy `Assets/Light2D` project into the UPM package** — the folder-to-package move (from [Legacy `Assets/Light2D` Migration](#legacy-assetslight2d-migration) onward).
 
-## Upgrading from 2.x to 3.0
+## Upgrading to 2.0.0
 
-The upcoming 3.0 major release (version bump pending) is a breaking rewrite of the
-render architecture. It removes the three-layer model and the Built-in helper
-camera. There is no automatic upgrade — update existing scenes by hand:
+Light2D 2.0.0 is a breaking rewrite of the render architecture. It removes the
+three-layer model and the Built-in helper camera. There is no automatic upgrade —
+update existing scenes by hand:
 
 1. The serialized `LightingSystem` fields `LightSourcesLayer`, `AmbientLightLayer`,
    and `LightObstaclesLayer` are gone. You no longer create Light2D layers or edit
@@ -35,7 +35,7 @@ The package retains the legacy GUIDs where assets were moved, so serialized refe
 ## Before Migrating
 
 1. Commit or back up the complete project, including `.meta` files.
-2. Record the active render pipeline and any modified Light2D materials or shaders. (3.0 has no Light2D layers to record.)
+2. Record the active render pipeline and any modified Light2D materials or shaders. (2.0 has no Light2D layers to record.)
 3. Move custom code and assets out of `Assets/Light2D`. The old folder is removed during migration.
 4. Save every open scene and prefab.
 5. Close Unity.
@@ -47,7 +47,7 @@ The package retains the legacy GUIDs where assets were moved, so serialized refe
 3. Reopen the project in Unity 6000.5.4f1 and allow package import and script compilation to finish.
 4. Resolve compilation errors before opening and saving production scenes.
 5. Verify that `LightingSystem`, `LightSprite`, obstacle components, materials, and shader references resolve. Do not remove missing components until you have checked whether the package failed to import.
-6. Re-add Light2D components where scenes previously relied on the legacy setup: a `LightSprite` for lights, an obstacle component for occluders, and a `LightAmbientEmitter` for ambient emission. The current package has no layers or helper camera to restore (see [Upgrading from 2.x to 3.0](#upgrading-from-2x-to-30)).
+6. Re-add Light2D components where scenes previously relied on the legacy setup: a `LightSprite` for lights, an obstacle component for occluders, and a `LightAmbientEmitter` for ambient emission. The current package has no layers or helper camera to restore (see [Upgrading to 2.0.0](#upgrading-to-200)).
 7. Follow the Built-in or URP setup in [INSTALLATION.md](INSTALLATION.md).
 8. Import **Examples** through Package Manager if the project used the old example assets. Do not restore `Assets/Light2D/Examples` from backup.
 9. Open and save migrated scenes and prefabs only after references and rendering have been verified.

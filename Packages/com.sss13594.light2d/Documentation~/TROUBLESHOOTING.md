@@ -15,7 +15,7 @@ The renderer data must be a persistent writable asset. A camera can override the
 
 ## Light Inputs Are Visible as Ordinary Sprites
 
-This does not happen in Light2D 3.0. Each input component keeps its own `MeshRenderer` disabled and is drawn only into Light2D's textures, so lighting-input geometry never leaks into the game image — there are no layers to exclude. If an obstacle or light source is visibly rendering as an ordinary sprite, the visible renderer is a separate, still-enabled component on the object (for example the original `SpriteRenderer` you want the obstacle to mirror). Disable or remove that renderer if it should not appear.
+This does not happen in Light2D 2.0. Each input component keeps its own `MeshRenderer` disabled and is drawn only into Light2D's textures, so lighting-input geometry never leaks into the game image — there are no layers to exclude. If an obstacle or light source is visibly rendering as an ordinary sprite, the visible renderer is a separate, still-enabled component on the object (for example the original `SpriteRenderer` you want the obstacle to mirror). Disable or remove that renderer if it should not appear.
 
 ## Small Obstacles or Edge Lights Disappear
 

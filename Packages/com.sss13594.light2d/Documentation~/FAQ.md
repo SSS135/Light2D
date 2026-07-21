@@ -15,7 +15,7 @@ need no colliders.
 
 ## How do I exclude an object from lighting? I remember setting up layers.
 
-Light2D 3.0 removed the three-layer model. There are no "light source", "ambient",
+Light2D 2.0 removed the three-layer model. There are no "light source", "ambient",
 or "light obstacle" layers to create, no `LightingSystem` layer fields to assign,
 and no source-camera culling mask to edit. An object participates in lighting
 **only if it carries a Light2D component**:
@@ -32,7 +32,7 @@ disabled, so lighting-input geometry never appears in the game image. That is wh
 the old "exclude these layers from the camera" step is gone — there is nothing to
 exclude.
 
-## What are the "roles" in Light2D 3.0?
+## What are the "roles" in Light2D 2.0?
 
 Three roles, each expressed as a component that self-registers with the render core:
 
@@ -77,7 +77,7 @@ art. (This is the substance of issue #7.)
 Yes. Instantiate a prefab that carries a `LightSprite`, an obstacle component, or a
 `LightAmbientEmitter`, and it registers itself in `OnEnable` — no layer assignment,
 no camera reconfiguration, no manual registration call. This is a direct
-consequence of the 3.0 register-and-draw model and specifically fixes the old
+consequence of the 2.0 register-and-draw model and specifically fixes the old
 failure where a spawned object produced no light because its layer was never set
 (issue #2). For obstacles, make sure the source is wired (a `SpriteRenderer`/
 `CustomSprite` for `LightObstacleSprite`, a parent mesh for `LightObstacleMesh`, or
@@ -87,10 +87,10 @@ be enabled to render.
 ## What is the status of this project? Should I use it?
 
 Light2D is an MIT-licensed, community-maintained 2D lighting package. The original
-repository was archived in 2018; it was later modernized to Unity 6 (2.0) and then
-rebuilt in 3.0 with a clean register-and-draw architecture (no layers, no helper
-cameras), Tilemap obstacle support, and a settings panel. It is not an officially
-supported Unity product and carries no support guarantee.
+repository was archived in 2018; it was later modernized to Unity 6 and rebuilt as
+2.0 with a clean register-and-draw architecture (no layers, no helper cameras),
+Tilemap obstacle support, and a settings panel. It is not an officially supported
+Unity product and carries no support guarantee.
 
 Reach for Light2D when you want its specific look and constraints:
 
