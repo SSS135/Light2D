@@ -37,22 +37,37 @@ namespace Light2D.TestProject.Editor
         }
 
         // Non-importing lookup used by the sample PlayMode tests; returns project-relative
-        // (Assets/...) paths for the already-imported sample scenes.
+        // (Assets/...) paths for the committed dev-mirror sample scenes.
         public static string[] GetImportedScenePaths()
         {
-            var sample = FindExamplesSample();
-            var scenePaths = GetScenePaths(sample.importPath);
+            var scenePaths = GetScenePaths(GetDevMirrorExamplesPath());
             foreach (var scenePath in scenePaths)
             {
                 if (!File.Exists(scenePath))
                 {
                     throw new InvalidOperationException(
-                        $"Imported sample scene is missing: '{scenePath}'. " +
-                        "Run SampleAutomation.ImportExamples outside play mode to import the package sample first.");
+                        $"Dev-mirror sample scene is missing: '{scenePath}'. " +
+                        "The committed sample under Assets/Samples/<package>/Examples was not found.");
                 }
             }
 
             return scenePaths.Select(ToAssetDatabasePath).ToArray();
+        }
+
+        // Absolute path of the committed dev-mirror copy of the Examples sample. Unity's
+        // Sample.importPath places a fresh consumer import under
+        // Assets/Samples/<displayName>/<version>/<sample>, but this repo keeps its tracked mirror
+        // at the version-free Assets/Samples/<displayName>/<sample> so the committed path stays
+        // stable across package-version bumps. The sample smoke tests read this mirror directly
+        // instead of re-importing; the import/validate/reserialize helpers still use
+        // Sample.importPath because they genuinely import through the Package Manager.
+        private static string GetDevMirrorExamplesPath()
+        {
+            var package = UnityEditor.PackageManager.PackageInfo.FindForPackageName(PackageName);
+            if (package == null)
+                throw new InvalidOperationException($"Package '{PackageName}' is not registered. Refresh the package manifest first.");
+
+            return Path.GetFullPath(Path.Combine(Application.dataPath, "Samples", package.displayName, SampleName));
         }
 
         public static void ReserializeExamplesSource()

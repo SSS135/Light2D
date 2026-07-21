@@ -115,7 +115,7 @@ ambient emitter.
 
 ## Samples
 
-Open Package Manager, select **Light2D**, expand **Samples**, and import **Examples**. Unity copies the sample to `Assets/Samples/Light2D/2.0.0/Examples`. It contains the **Small Examples**, **Rocket**, and **Rocket Tilemap** scenes and their supporting assets.
+Open Package Manager, select **Light2D**, expand **Samples**, and import **Examples**. Unity copies the sample to `Assets/Samples/Light2D/<version>/Examples`. It contains the **Small Examples**, **Rocket**, and **Rocket Tilemap** scenes and their supporting assets.
 
 The sample scenes register their lights, obstacles, and ambient emitters through
 the Light2D components automatically. For URP, (re)install the renderer feature on

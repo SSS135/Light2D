@@ -14,7 +14,7 @@
 - [ ] Relevant PlayMode tests pass (or known-blocked cases noted)
 - [ ] Built-in rendering verified (if runtime or shader behavior changed)
 - [ ] `.meta` files and asset GUIDs preserved
-- [ ] Sample changes mirrored between `Packages/com.sss13594.light2d/Samples~/Examples/` and `Assets/Samples/Light2D/2.0.0/Examples/` (if applicable)
+- [ ] Sample changes mirrored between `Packages/com.sss13594.light2d/Samples~/Examples/` and `Assets/Samples/Light2D/Examples/` (if applicable)
 
 ## AI assistance disclosure
 

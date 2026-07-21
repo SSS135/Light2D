@@ -90,6 +90,6 @@ Add a `LightAmbientEmitter` with **GameObject > Light2D > Ambient Emitter** (or 
 1. Open Package Manager and select **Light2D**.
 2. Open the **Samples** section.
 3. Select **Import** beside **Examples**.
-4. Open a scene from `Assets/Samples/Light2D/2.0.0/Examples` (the **Small Examples**, **Rocket**, or **Rocket Tilemap** scene).
+4. Open a scene from `Assets/Samples/Light2D/<version>/Examples` (the **Small Examples**, **Rocket**, or **Rocket Tilemap** scene).
 
 Imported samples are project-owned copies that register their lights, obstacles, and ambient emitters through the Light2D components automatically. The active pipeline asset is a project setting, so for URP verify or (re)install the renderer feature on the renderer used by the sample camera after import.
