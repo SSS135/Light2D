@@ -11,21 +11,29 @@ using UnityEngine.Tilemaps;
 namespace Light2D.Examples
 {
     /// <summary>
-    /// One-time editor bake that authors the static "Rocket Tilemap" sample scene and its Tile assets
-    /// (Phase 2, §5). It does NOT ship a runtime generator: it reproduces MapGenerator's procedural
-    /// block field for a fixed seed over a fixed window (mirroring SampleTestSupport.MapProbe's exact
-    /// selection), turns each eligible cell into a Tilemap tile that REUSES the sample block sprites
-    /// (no new textures), and assembles a Grid+Tilemap+LightObstacleTilemap cave lit by a few colored
-    /// crystal lights plus one bright central light. The visible TilemapRenderer stays enabled (OQ-T1):
-    /// it draws the dark cave while LightObstacleTilemap emits the texture-aware occluder as draw
-    /// entries only. The output (scene + Tiles/*.asset + metas) is written into the imported sample
-    /// tree and mirrored byte-identically into Samples~/Examples so both trees match.
+    /// Editor bake that authors the PLAYABLE "Rocket Tilemap" sample scene. It starts from a copy of the
+    /// procedural Rocket scene (keeping the flyable Spacecraft, its controls, camera-follow, touch UI and
+    /// the ship-carried light), removes MapGenerator's runtime terrain, and drops a fixed Tilemap cave in
+    /// its place. The cave REUSES the four existing Tile assets under Examples/Tiles (matched by sprite +
+    /// collider type, never recreated, so their .meta GUIDs are preserved) and reproduces MapGenerator's
+    /// deterministic block field for a fixed seed over a fixed window (mirroring SampleTestSupport.MapProbe's
+    /// exact selection). The visible TilemapRenderer stays enabled (OQ-T1): it draws the dark cave while
+    /// LightObstacleTilemap emits the texture-aware occluder as draw entries only. A TilemapCollider2D +
+    /// static Rigidbody2D + CompositeCollider2D give the ship solid cave walls (Tile.ColliderType.Sprite
+    /// walls occlude AND collide; Background tiles pass light and do not collide). The ship spawns in an
+    /// open pocket (never inside a wall), and the Main Camera (with its LightingSystem + CameraFollower) is
+    /// reframed on that pocket, lit by a bright warm central light plus two distinctly coloured crystal
+    /// lights. The camera clears to a dark solid colour instead of Rocket's bright nebula skybox so empty
+    /// cave/void cells read dark for the dark-cave gate.
+    ///
+    /// The output scene (+ meta) is written into the imported sample tree and mirrored byte-identically into
+    /// Samples~/Examples so both trees match. The Tiles assets are untouched by the bake and stay identical
+    /// in both trees.
     ///
     /// Run headlessly with:
     ///   -executeMethod Light2D.Examples.RocketTilemapBaker.Bake
-    /// or via the menu "Light2D/Samples/Bake Rocket Tilemap Scene". The bake is a single-shot editor
-    /// step; it replaces any previously baked scene/tiles. This whole file is gated on LIGHT2D_TILEMAP,
-    /// which the sample Editor asmdef defines only when com.unity.2d.tilemap is installed.
+    /// or via the menu "Light2D/Samples/Bake Rocket Tilemap Scene". This whole file is gated on
+    /// LIGHT2D_TILEMAP, which the sample Editor asmdef defines only when com.unity.2d.tilemap is installed.
     /// </summary>
     internal static class RocketTilemapBaker
     {
@@ -48,25 +56,23 @@ namespace Light2D.Examples
         // floor). Balanced value; a verify-time fix pass may retune it against the captured statistics.
         private const float TargetWallFraction = 0.6f;
 
+        // The ship spawn pocket must be a clear disk of open (non-colliding) cells so the articulated craft
+        // (hull + deployed legs, scaled 0.75) never overlaps a wall. Larger disks are preferred; the search
+        // relaxes only if the dense cave has no room for one.
+        private static readonly int[] SpawnPocketRadii = { 4, 3, 2 };
+
         // Package default obstacle material (Runtime/Materials/DualColor.mat) — the material
         // LightObstacleTilemap loads by default; assigned explicitly so the serialized scene is
         // deterministic and works outside the editor default-load path.
         private const string ObstacleMaterialGuid = "0a8c132f813f5514b9f5b48ff3956482";
         private const string BlockSetProfileGuid = "99b2aa50cb51ad9409451b6056775bd6";
-        private const string RocketAmbientLightMaterialGuid = "a1a7a1f483ec2844fb07f8ad165328c3";
-        private const string RocketLightOverlayMaterialGuid = "7683540b59b5765439da1f6cab25c7a9";
         private const string LightingCrystalsPrefabGuid = "9f10243117669f046af3db5fc661dc8d";
         private const string PointLightPrefabGuid = "f1f87948c09d89b48acf75b3f771eece";
 
         private const string PackageName = "com.sss13594.light2d";
         private const string SceneFileName = "Rocket Tilemap.unity";
+        private const string SourceSceneFileName = "Rocket.unity";
         private const string TilesFolderName = "Tiles";
-
-        // Custom layers defined by the project's TagManager (LightSources/LightObstacles/AmbientLight);
-        // a source camera must exclude all three so the light meshes never reach the game image.
-        private const int LightSourcesLayer = 9;
-        private const int LightObstaclesLayer = 10;
-        private const int AmbientLightLayer = 11;
 
         [MenuItem("Light2D/Samples/Bake Rocket Tilemap Scene")]
         public static void Bake()
@@ -99,10 +105,20 @@ namespace Light2D.Examples
                 throw new InvalidOperationException($"Failed to load BlockSetProfile at '{blockSetPath}'.");
 
             var obstacleMaterial = LoadRequired<Material>(ObstacleMaterialGuid, "obstacle material");
-            var ambientMaterial = LoadRequired<Material>(RocketAmbientLightMaterialGuid, "ambient light material");
-            var overlayMaterial = LoadRequired<Material>(RocketLightOverlayMaterialGuid, "light overlay material");
             var crystalPrefab = LoadRequired<GameObject>(LightingCrystalsPrefabGuid, "LightingCrystals prefab");
             var pointLightPrefab = LoadRequired<GameObject>(PointLightPrefabGuid, "PointLight prefab");
+
+            var sourceScenePath = examplesRoot + "/" + SourceSceneFileName;
+            if (string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(sourceScenePath)))
+                throw new InvalidOperationException(
+                    $"Source scene '{sourceScenePath}' is missing; import the Light2D 'Examples' sample first.");
+
+            // 0. Load the four existing Tile assets (Wall_*/Background_*). They are REUSED by reference so
+            //    their .meta GUIDs never churn; the bake never creates or deletes tile assets.
+            var tilesFolderAsset = examplesRoot + "/" + TilesFolderName;
+            var wallTiles = new Dictionary<Sprite, Tile>();
+            var backgroundTiles = new Dictionary<Sprite, Tile>();
+            LoadExistingTiles(tilesFolderAsset, wallTiles, backgroundTiles);
 
             // 1. Reproduce the deterministic block field for the fixed seed over the window.
             var seedRandom = new SimpleRNG(Seed);
@@ -116,9 +132,6 @@ namespace Light2D.Examples
             var isWall = new bool[width, height];
             var positions = new List<Vector3Int>(width * height);
             var placedTiles = new List<TileBase>(width * height);
-            var tileCache = new Dictionary<TileKey, Tile>();
-            var createdTiles = new List<Tile>();
-            var usedNames = new HashSet<string>(StringComparer.Ordinal);
 
             for (var ix = 0; ix < width; ix++)
             {
@@ -138,65 +151,103 @@ namespace Light2D.Examples
                     if (sprite == null)
                         continue;
 
-                    var tile = GetOrCreateTile(tileCache, createdTiles, usedNames, sprite, colliding);
+                    var tile = ResolveTile(colliding ? wallTiles : backgroundTiles, sprite, colliding);
                     positions.Add(new Vector3Int(x, y, 0));
                     placedTiles.Add(tile);
                 }
             }
 
-            if (createdTiles.Count == 0)
+            if (placedTiles.Count == 0)
                 throw new InvalidOperationException("The block field produced no tiles; nothing to bake.");
 
-            // 2. Pick a rock-dense-but-not-buried framing centre.
-            FindFocus(isWall, out var focusX, out var focusY);
+            // 2. Pick the ship's spawn: an open pocket (clear disk of non-wall cells) whose framed view is a
+            //    dark, rock-dense cave. The camera and the central light both frame this pocket.
+            FindSpawnPocket(isWall, out var spawnX, out var spawnY, out var spawnRadius);
+            Debug.Log($"Rocket Tilemap spawn pocket: cell ({spawnX}, {spawnY}) with clear radius {spawnRadius}.");
 
-            // 3. Persist the Tile assets under Examples/Tiles.
-            var tilesFolderAsset = examplesRoot + "/" + TilesFolderName;
-            if (AssetDatabase.IsValidFolder(tilesFolderAsset))
-                AssetDatabase.DeleteAsset(tilesFolderAsset);
-            var sceneAsset = examplesRoot + "/" + SceneFileName;
-            if (!string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(sceneAsset)))
-                AssetDatabase.DeleteAsset(sceneAsset);
-            AssetDatabase.CreateFolder(examplesRoot, TilesFolderName);
+            // 3. Start from the procedural Rocket scene, then swap terrain for the fixed cave.
+            var scene = EditorSceneManager.OpenScene(sourceScenePath, OpenSceneMode.Single);
 
-            AssetDatabase.StartAssetEditing();
-            try
-            {
-                foreach (var tile in createdTiles)
-                    AssetDatabase.CreateAsset(tile, tilesFolderAsset + "/" + tile.name + ".asset");
-            }
-            finally
-            {
-                AssetDatabase.StopAssetEditing();
-            }
+            var lightingSystem = UnityEngine.Object.FindFirstObjectByType<LightingSystem>();
+            if (lightingSystem == null)
+                throw new InvalidOperationException("The Rocket scene has no LightingSystem to reuse.");
+            var mainCamera = lightingSystem.GetComponent<Camera>();
+            if (mainCamera == null)
+                throw new InvalidOperationException("The Rocket LightingSystem has no Camera on its GameObject.");
+            var spacecraft = UnityEngine.Object.FindFirstObjectByType<Spacecraft>();
+            if (spacecraft == null || spacecraft.MainRigidbody == null)
+                throw new InvalidOperationException("The Rocket scene has no Spacecraft with a MainRigidbody.");
 
-            // AssetDatabase.Refresh below reimports the freshly created Tile assets and invalidates these
-            // managed wrappers, so capture their asset names now for the byte-identical package mirror (step 5).
-            var createdTileNames = new List<string>(createdTiles.Count);
-            foreach (var tile in createdTiles)
-                createdTileNames.Add(tile.name);
+            // Remove only the procedural terrain generator: MapGenerator is a component on "Globals"
+            // (shared with InputManager, which must stay), and it fills the "StaticObjects" Container at
+            // runtime. Delete the component and the empty Container root; keep everything else.
+            RemoveProceduralTerrain();
 
-            AssetDatabase.SaveAssets();
+            var spawnWorld = new Vector2(spawnX + 0.5f, spawnY + 0.5f);
+            ReframeCamera(mainCamera, spawnWorld);
+            RepositionSpacecraft(spacecraft, spawnWorld);
 
-            // 4. Author the scene.
-            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-
-            var lightingSystem = BuildCamera(scene, ambientMaterial, overlayMaterial, focusX, focusY);
             BuildTilemap(scene, positions, placedTiles, obstacleMaterial, lightingSystem);
-            SpawnLights(scene, crystalPrefab, pointLightPrefab, isWall, focusX, focusY, lightingSystem);
+            SpawnLights(scene, crystalPrefab, pointLightPrefab, isWall, spawnX, spawnY, lightingSystem);
 
             EditorSceneManager.MarkSceneDirty(scene);
+            var sceneAsset = examplesRoot + "/" + SceneFileName;
+            // Save-As to the tilemap path: writes the tilemap scene and leaves the source Rocket.unity
+            // untouched. The existing tilemap scene asset (and its .meta GUID) is overwritten in place.
             if (!EditorSceneManager.SaveScene(scene, sceneAsset))
                 throw new InvalidOperationException($"Failed to save the baked scene to '{sceneAsset}'.");
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
-            // 5. Mirror scene + tiles + metas into the package Samples~ source, byte-identical.
-            MirrorToPackage(examplesRoot, createdTileNames);
+            // 4. Normalize the serialized scene to the repo convention (trailing whitespace stripped,
+            //    LF-only, trailing newline) so this machine-generated scene matches the hand-maintained
+            //    sample scenes and passes git's whitespace checks.
+            NormalizeSerializedScene(Path.GetFullPath(examplesRoot + "/" + SceneFileName));
 
-            Debug.Log($"Baked '{SceneFileName}' with {placedTiles.Count} tiles ({createdTiles.Count} distinct) " +
-                      $"framed at cell ({focusX}, {focusY}); mirrored to Samples~/Examples.");
+            // 5. Mirror the scene (+meta) into the package Samples~ source, byte-identical. The Tiles assets
+            //    are unchanged by the bake, so they are not touched and stay identical in both trees.
+            MirrorSceneToPackage(examplesRoot);
+
+            Debug.Log($"Baked playable '{SceneFileName}' with {placedTiles.Count} tiles, ship spawned at " +
+                      $"({spawnWorld.x}, {spawnWorld.y}); mirrored to Samples~/Examples.");
+        }
+
+        // Loads every Tile asset already present under Examples/Tiles and indexes it by its sprite, split by
+        // collider type. The bake reuses these (never recreates them) so the four Tile .meta GUIDs persist.
+        private static void LoadExistingTiles(string tilesFolderAsset, Dictionary<Sprite, Tile> wallTiles,
+            Dictionary<Sprite, Tile> backgroundTiles)
+        {
+            if (!AssetDatabase.IsValidFolder(tilesFolderAsset))
+                throw new InvalidOperationException(
+                    $"Tiles folder '{tilesFolderAsset}' is missing; the baked Tile assets are required.");
+
+            foreach (var guid in AssetDatabase.FindAssets("t:Tile", new[] { tilesFolderAsset }))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                var tile = AssetDatabase.LoadAssetAtPath<Tile>(path);
+                if (tile == null || tile.sprite == null)
+                    continue;
+
+                if (tile.colliderType == Tile.ColliderType.Sprite)
+                    wallTiles[tile.sprite] = tile;
+                else
+                    backgroundTiles[tile.sprite] = tile;
+            }
+
+            if (wallTiles.Count == 0 || backgroundTiles.Count == 0)
+                throw new InvalidOperationException(
+                    $"Tiles folder '{tilesFolderAsset}' did not contain both wall and background Tile assets.");
+        }
+
+        private static Tile ResolveTile(Dictionary<Sprite, Tile> tiles, Sprite sprite, bool colliding)
+        {
+            if (tiles.TryGetValue(sprite, out var tile))
+                return tile;
+
+            throw new InvalidOperationException(
+                $"No existing {(colliding ? "wall" : "background")} Tile asset reuses sprite '{sprite.name}'. " +
+                "The Tiles folder is out of sync with the block field; re-bake the Tile assets first.");
         }
 
         // Reproduces MapGenerator.GetNoise for the live seed.
@@ -260,89 +311,69 @@ namespace Light2D.Examples
             }
         }
 
-        private readonly struct TileKey : IEquatable<TileKey>
+        // Chooses the ship spawn: the largest available clear disk of non-wall cells whose framed view is
+        // closest to TargetWallFraction (a dark, rock-dense cave). The disk keeps the articulated craft off
+        // the walls; the framing keeps the shot dark for the mean-luminance gate.
+        private static void FindSpawnPocket(bool[,] isWall, out int spawnX, out int spawnY, out int spawnRadius)
         {
-            private readonly Sprite _sprite;
-            private readonly bool _colliding;
-
-            internal TileKey(Sprite sprite, bool colliding)
+            foreach (var radius in SpawnPocketRadii)
             {
-                _sprite = sprite;
-                _colliding = colliding;
+                if (TryFindOpenPocket(isWall, radius, out spawnX, out spawnY))
+                {
+                    spawnRadius = radius;
+                    return;
+                }
             }
 
-            public bool Equals(TileKey other) => ReferenceEquals(_sprite, other._sprite) &&
-                                                 _colliding == other._colliding;
-
-            public override bool Equals(object obj) => obj is TileKey other && Equals(other);
-
-            public override int GetHashCode() =>
-                (_sprite != null ? _sprite.GetEntityId().GetHashCode() : 0) * 397 ^ (_colliding ? 1 : 0);
+            throw new InvalidOperationException(
+                "The block field has no open spawn pocket; the cave is too dense to place the ship.");
         }
 
-        private static Tile GetOrCreateTile(Dictionary<TileKey, Tile> cache, List<Tile> created,
-            HashSet<string> usedNames, Sprite sprite, bool colliding)
-        {
-            var key = new TileKey(sprite, colliding);
-            if (cache.TryGetValue(key, out var existing))
-                return existing;
-
-            var tile = ScriptableObject.CreateInstance<Tile>();
-            tile.sprite = sprite;
-            tile.color = Color.white;
-            // Only colliding walls occlude; background tiles stay visible but pass light (Tile.ColliderType.None).
-            tile.colliderType = colliding ? Tile.ColliderType.Sprite : Tile.ColliderType.None;
-            tile.name = UniqueName((colliding ? "Wall_" : "Background_") + MakeSafeName(sprite.name), usedNames);
-
-            cache[key] = tile;
-            created.Add(tile);
-            return tile;
-        }
-
-        private static string MakeSafeName(string raw)
-        {
-            if (string.IsNullOrEmpty(raw))
-                return "Tile";
-            var builder = new System.Text.StringBuilder(raw.Length);
-            foreach (var character in raw)
-                builder.Append(char.IsLetterOrDigit(character) || character == '_' || character == '-'
-                    ? character
-                    : '_');
-            return builder.ToString();
-        }
-
-        private static string UniqueName(string baseName, HashSet<string> used)
-        {
-            var candidate = baseName;
-            var suffix = 1;
-            while (!used.Add(candidate))
-                candidate = baseName + "_" + suffix++;
-            return candidate;
-        }
-
-        // Chooses the framing whose framed wall fraction is closest to TargetWallFraction, inside a scan
-        // region kept far enough from the window edge that the whole framed view stays tiled.
-        private static void FindFocus(bool[,] isWall, out int focusX, out int focusY)
+        private static bool TryFindOpenPocket(bool[,] isWall, int clearRadius, out int px, out int py)
         {
             var scanHalfWidth = WindowHalfWidth - Mathf.CeilToInt(ViewHalfWidth) - 2;
             var scanHalfHeight = WindowHalfHeight - Mathf.CeilToInt(ViewHalfHeight) - 2;
-            focusX = 0;
-            focusY = 0;
+            px = 0;
+            py = 0;
+            var found = false;
             var bestDelta = float.MaxValue;
-            for (var y = -scanHalfHeight; y <= scanHalfHeight; y += 3)
+            for (var y = -scanHalfHeight; y <= scanHalfHeight; y++)
             {
-                for (var x = -scanHalfWidth; x <= scanHalfWidth; x += 3)
+                for (var x = -scanHalfWidth; x <= scanHalfWidth; x++)
                 {
+                    if (!IsClearDisk(isWall, x, y, clearRadius))
+                        continue;
+
                     var fraction = FramedWallFraction(isWall, x, y);
                     var delta = Mathf.Abs(fraction - TargetWallFraction);
                     if (delta < bestDelta)
                     {
                         bestDelta = delta;
-                        focusX = x;
-                        focusY = y;
+                        px = x;
+                        py = y;
+                        found = true;
                     }
                 }
             }
+
+            return found;
+        }
+
+        private static bool IsClearDisk(bool[,] isWall, int centreX, int centreY, int radius)
+        {
+            var radiusSquared = radius * radius;
+            for (var dy = -radius; dy <= radius; dy++)
+            {
+                for (var dx = -radius; dx <= radius; dx++)
+                {
+                    if (dx * dx + dy * dy > radiusSquared)
+                        continue;
+                    if (WallAt(isWall, centreX + dx, centreY + dy))
+                        return false;
+                }
+            }
+
+            return true;
         }
 
         private static float FramedWallFraction(bool[,] isWall, int centreX, int centreY)
@@ -373,47 +404,47 @@ namespace Light2D.Examples
             return isWall[ix, iy];
         }
 
-        private static LightingSystem BuildCamera(Scene scene, Material ambientMaterial, Material overlayMaterial,
-            int focusX, int focusY)
+        // Removes MapGenerator's runtime terrain: the MapGenerator component (not its "Globals" host, which
+        // also carries InputManager) and the empty "StaticObjects" Container root it fills at runtime.
+        private static void RemoveProceduralTerrain()
         {
-            var cameraObject = new GameObject("Main Camera");
-            SceneManager.MoveGameObjectToScene(cameraObject, scene);
-            cameraObject.tag = "MainCamera";
-            cameraObject.transform.position = new Vector3(focusX + 0.5f, focusY + 0.5f, -100f);
+            var generator = UnityEngine.Object.FindFirstObjectByType<MapGenerator>();
+            if (generator == null)
+                return;
 
-            var camera = cameraObject.AddComponent<Camera>();
+            var container = generator.Container;
+            UnityEngine.Object.DestroyImmediate(generator);
+            if (container != null)
+                UnityEngine.Object.DestroyImmediate(container.gameObject);
+        }
+
+        // Keeps Rocket's Main Camera (LightingSystem + CameraFollower + AudioListener) but frames it on the
+        // spawn pocket and clears to a dark solid colour so empty cave/void cells read dark for the gate
+        // instead of showing Rocket's bright nebula skybox.
+        private static void ReframeCamera(Camera camera, Vector2 spawnWorld)
+        {
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = new Color(0.02f, 0.02f, 0.03f, 0f);
             camera.orthographic = true;
             camera.orthographicSize = OrthographicSize;
-            camera.clearFlags = CameraClearFlags.SolidColor;
-            // Dark clear so sky/void pockets and unlit rock read dark for the dark-cave gate.
-            camera.backgroundColor = new Color(0.02f, 0.02f, 0.03f, 0f);
-            camera.nearClipPlane = 0.3f;
-            camera.farClipPlane = 1000f;
-            camera.depth = 0f;
-            // Exclude the three Light2D layers (LightSources/LightObstacles/AmbientLight) from the source view.
-            camera.cullingMask = ~((1 << LightSourcesLayer) | (1 << LightObstaclesLayer) | (1 << AmbientLightLayer));
-            cameraObject.AddComponent<AudioListener>();
+            var cameraTransform = camera.transform;
+            var position = cameraTransform.position;
+            cameraTransform.position = new Vector3(spawnWorld.x, spawnWorld.y, position.z);
 
-            var lightingSystem = cameraObject.AddComponent<LightingSystem>();
-            // Values mirror the migrated Rocket.unity LightingSystem.
-            lightingSystem.LightPixelSize = 0.5f;
-            lightingSystem.LightCameraSizeAdd = 8f;
-            lightingSystem.LightCameraFovAdd = 30f;
-            lightingSystem.EnableAmbientLight = true;
-            lightingSystem.BlurLightSources = false;
-            lightingSystem.BlurAmbientLight = false;
-            lightingSystem.HDR = true;
-            lightingSystem.LightObstaclesAntialiasing = false;
-            lightingSystem.LightObstaclesDistance = 10f;
-            lightingSystem.LightTexturesFilterMode = FilterMode.Bilinear;
-            lightingSystem.EnableNormalMapping = false;
-            lightingSystem.AffectOnlyThisCamera = false;
-            lightingSystem.AmbientLightComputeMaterial = ambientMaterial;
-            lightingSystem.LightOverlayMaterial = overlayMaterial;
-            lightingSystem.LightSourcesBlurMaterial = null;
-            lightingSystem.AmbientLightBlurMaterial = null;
-            lightingSystem.XZPlane = false;
-            return lightingSystem;
+            // The per-camera Skybox component only renders under Skybox clear flags; disable it so nothing
+            // reintroduces the bright nebula into the dark cave.
+            var skybox = camera.GetComponent<Skybox>();
+            if (skybox != null)
+                skybox.enabled = false;
+        }
+
+        // Moves the whole articulated craft so its hull (MainRigidbody) sits at the spawn pocket centre,
+        // keeping its rotation, scale and internal joint layout intact.
+        private static void RepositionSpacecraft(Spacecraft spacecraft, Vector2 spawnWorld)
+        {
+            var hullPosition = spacecraft.MainRigidbody.transform.position;
+            var delta = new Vector3(spawnWorld.x - hullPosition.x, spawnWorld.y - hullPosition.y, 0f);
+            spacecraft.transform.position += delta;
         }
 
         private static void BuildTilemap(Scene scene, List<Vector3Int> positions, List<TileBase> tiles,
@@ -432,6 +463,16 @@ namespace Light2D.Examples
             tilemap.SetTiles(positions.ToArray(), tiles.ToArray());
             tilemap.CompressBounds();
 
+            // Solid cave walls for the ship: a static Rigidbody2D plus a TilemapCollider2D merged into a
+            // CompositeCollider2D. Only Tile.ColliderType.Sprite (wall) tiles contribute shapes; Background
+            // tiles are ColliderType.None and stay pass-through, mirroring MapGenerator's colliding walls.
+            var rigidbody = tilemapObject.AddComponent<Rigidbody2D>();
+            rigidbody.bodyType = RigidbodyType2D.Static;
+            var tilemapCollider = tilemapObject.AddComponent<TilemapCollider2D>();
+            var composite = tilemapObject.AddComponent<CompositeCollider2D>();
+            composite.geometryType = CompositeCollider2D.GeometryType.Polygons;
+            tilemapCollider.compositeOperation = Collider2D.CompositeOperation.Merge;
+
             // The obstacle companion owns no scene renderer; it emits the texture-aware occluder as
             // draw entries into the obstacle snapshot only.
             var obstacle = tilemapObject.AddComponent<LightObstacleTilemap>();
@@ -442,28 +483,27 @@ namespace Light2D.Examples
             obstacle.SortingOrder = 0;
         }
 
-        // A bright central light plus two distinctly coloured crystal lights, all inside the central
-        // third of the framed view, satisfy the gate's central-peak and >=2-hue-bucket requirements.
-        // Radii are sized well above the source prefabs' natural LightSprite scales (PointLight authored
-        // at 35, LightingCrystals' Light child at 20) so three static lights deliver enough energy for
-        // the dark-cave mean-luminance floor against the dense, texture-occluding tilemap. The radii were
-        // retuned upward (central 66->165, crystals 48->120) after the Built-in vertical-flip fix (3e447ad):
-        // that correction landed the light textures upright instead of mirrored, which lowered the framed
-        // mean luminance to ~0.0149 (just under the [0.015, 0.2] dark-cave floor). The larger radii lift the
-        // corrected render comfortably into band (~0.03-0.05) without loosening the gate; they raise the mean
-        // mainly by lighting more occluding rock faces, so the bright-core fraction stays small.
+        // A bright warm central light on the spawn pocket plus two distinctly coloured crystal lights offset
+        // into nearby open cells satisfy the gate's central-peak and >=2-hue-bucket requirements and keep the
+        // ship's spawn area visible. Radii are sized well above the source prefabs' natural LightSprite scales
+        // (PointLight authored at 35, LightingCrystals' Light child at 20) so three static lights deliver
+        // enough energy for the dark-cave mean-luminance floor against the dense, texture-occluding tilemap.
+        // The values match the tuning verified after the Built-in vertical-flip fix (central 165, crystals
+        // 120): they lift the corrected render into the [0.015, 0.2] band by lighting more occluding rock
+        // faces, so the bright-core fraction stays small. Retune the radii here (never the gate) if verify
+        // shows the mean drifting out of band.
         private static void SpawnLights(Scene scene, GameObject crystalPrefab, GameObject pointLightPrefab,
-            bool[,] isWall, int focusX, int focusY, LightingSystem lightingSystem)
+            bool[,] isWall, int spawnX, int spawnY, LightingSystem lightingSystem)
         {
-            var central = NearestOpenCell(isWall, focusX, focusY);
+            var central = NearestOpenCell(isWall, spawnX, spawnY);
             SpawnLight(scene, pointLightPrefab, central, new Color(1f, 0.82f, 0.5f, 1f), 165f,
                 lightingSystem, "Central Light");
 
-            var crystalOne = NearestOpenCell(isWall, focusX + 6, focusY + 3);
+            var crystalOne = NearestOpenCell(isWall, spawnX + 6, spawnY + 3);
             SpawnLight(scene, crystalPrefab, crystalOne, new Color(0.25f, 0.8f, 1f, 0.95f), 120f,
                 lightingSystem, "Crystal Light Cyan");
 
-            var crystalTwo = NearestOpenCell(isWall, focusX - 6, focusY - 3);
+            var crystalTwo = NearestOpenCell(isWall, spawnX - 6, spawnY - 3);
             SpawnLight(scene, crystalPrefab, crystalTwo, new Color(1f, 0.25f, 0.7f, 0.95f), 120f,
                 lightingSystem, "Crystal Light Magenta");
         }
@@ -517,7 +557,18 @@ namespace Light2D.Examples
             return new Vector2Int(x, y);
         }
 
-        private static void MirrorToPackage(string examplesRoot, List<string> createdTileNames)
+        // Matches SampleAutomation.NormalizeSerializedText: trims trailing whitespace from every line and
+        // writes canonical LF-only text with a trailing newline. Trailing whitespace after a YAML value is
+        // insignificant, so trimming keeps the scene semantically identical while matching the repo norm.
+        private static void NormalizeSerializedScene(string path)
+        {
+            var lines = File.ReadAllLines(path);
+            for (var index = 0; index < lines.Length; index++)
+                lines[index] = lines[index].TrimEnd(' ', '\t');
+            File.WriteAllText(path, string.Join("\n", lines) + "\n");
+        }
+
+        private static void MirrorSceneToPackage(string examplesRoot)
         {
             var package = UnityEditor.PackageManager.PackageInfo.FindForPackageName(PackageName);
             if (package == null)
@@ -526,23 +577,8 @@ namespace Light2D.Examples
             var importedRoot = Path.GetFullPath(examplesRoot).Replace('\\', '/');
             var packageRoot = Path.Combine(package.resolvedPath, "Samples~", "Examples").Replace('\\', '/');
 
-            // A clean rebake: drop the previous mirrored tiles/scene so stale files never linger.
-            var packageTilesDirectory = Path.Combine(packageRoot, TilesFolderName);
-            if (Directory.Exists(packageTilesDirectory))
-                Directory.Delete(packageTilesDirectory, true);
-            var packageTilesMeta = packageTilesDirectory + ".meta";
-            if (File.Exists(packageTilesMeta))
-                File.Delete(packageTilesMeta);
-
             MirrorFile(importedRoot, packageRoot, SceneFileName);
             MirrorFile(importedRoot, packageRoot, SceneFileName + ".meta");
-            MirrorFile(importedRoot, packageRoot, TilesFolderName + ".meta");
-            foreach (var tileName in createdTileNames)
-            {
-                var relative = TilesFolderName + "/" + tileName + ".asset";
-                MirrorFile(importedRoot, packageRoot, relative);
-                MirrorFile(importedRoot, packageRoot, relative + ".meta");
-            }
 
             // A lighting-settings sidecar is only produced when the scene carries baked lighting data;
             // mirror it if SaveScene created one so the trees stay identical.

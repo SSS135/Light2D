@@ -4,6 +4,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 #if UNITY_EDITOR
+using Light2D.Examples;
 using Light2D.TestProject.Editor;
 #endif
 
@@ -24,8 +25,13 @@ namespace Light2D.TestProject.Tests
     {
         private const int TargetWidth = 640;
         private const int TargetHeight = 360;
-        // The scene is static, so a short warmup is enough for the first lit frames.
-        private const int WarmupFrames = 30;
+        // A short warmup lets the scene's Awake/Start run and the first frames render; the ship is then
+        // frozen at the start of the scenario phase so the long ambient settle and the capture stay
+        // deterministic (a physics-driven ship would move out of frame and make the capture non-repeatable).
+        private const int WarmupFrames = 5;
+        // A few frames after freezing let physics register the kinematic state and the tilemap collider
+        // generate its composite geometry before the no-wall-overlap check reads it.
+        private const int FreezeSettleFrames = 5;
         // Ambient light converges iteratively; accelerate it through the sample API and capture once the
         // rendered mean luminance stabilises (two consecutive small deltas) or a hard frame cap.
         private const int AmbientSampleIntervalFrames = 30;
@@ -41,7 +47,7 @@ namespace Light2D.TestProject.Tests
 #if UNITY_EDITOR
             IEnumerator run = SampleTestSupport.RunSampleScene(
                 SampleAutomation.RocketTilemapSceneName, TargetWidth, TargetHeight, WarmupFrames,
-                AssertTilemapVisualState, SettleAmbientLight);
+                AssertTilemapVisualState, FreezeShipThenSettle);
             try
             {
                 while (run.MoveNext())
@@ -59,6 +65,83 @@ namespace Light2D.TestProject.Tests
         }
 
 #if UNITY_EDITOR
+        // Freezes the flyable ship at its spawn (disables its input/thrust, makes every body kinematic, and
+        // pins the camera) so the physics-driven craft cannot drift out of frame, THEN settles the ambient
+        // light. Freezing before the settle is what keeps the visual capture deterministic and repeatable.
+        private static IEnumerator FreezeShipThenSettle(SampleTestSupport.SampleSceneRunContext context)
+        {
+            FreezeScene(context);
+            for (var frame = 0; frame < FreezeSettleFrames; frame++)
+                yield return null;
+
+            IEnumerator settle = SettleAmbientLight(context);
+            while (settle.MoveNext())
+                yield return settle.Current;
+        }
+
+        // Stops the scripted intro (which would otherwise flip the craft to Dynamic after one second),
+        // cancels input-driven thrust, makes every craft body kinematic with zeroed velocities, and pins the
+        // camera on the spawn so nothing moves during the settle/capture.
+        private static void FreezeScene(SampleTestSupport.SampleSceneRunContext context)
+        {
+            Spacecraft spacecraft = Object.FindAnyObjectByType<Spacecraft>();
+            Assert.That(spacecraft, Is.Not.Null, "The Rocket Tilemap scene has no active Spacecraft.");
+            Assert.That(spacecraft.MainRigidbody, Is.Not.Null, "The Spacecraft has no MainRigidbody assigned.");
+
+            InputManager inputManager = Object.FindAnyObjectByType<InputManager>();
+            if (inputManager != null)
+            {
+                inputManager.StopAllCoroutines();
+                inputManager.enabled = false;
+            }
+
+            foreach (RocketEngine engine in spacecraft.GetComponentsInChildren<RocketEngine>(true))
+            {
+                engine.ForcePercent = 0f;
+                engine.IsEnabled = false;
+            }
+
+            foreach (Rigidbody2D body in spacecraft.GetComponentsInChildren<Rigidbody2D>(true))
+            {
+                body.linearVelocity = Vector2.zero;
+                body.angularVelocity = 0f;
+                body.bodyType = RigidbodyType2D.Kinematic;
+            }
+
+            CameraFollower follower = Object.FindAnyObjectByType<CameraFollower>();
+            if (follower != null)
+                follower.enabled = false;
+
+            Vector2 focus = spacecraft.MainRigidbody.position;
+            Transform cameraTransform = context.SourceCamera.transform;
+            Vector3 cameraPosition = cameraTransform.position;
+            cameraTransform.position = new Vector3(focus.x, focus.y, cameraPosition.z);
+        }
+
+        // Playability guard: the ship must spawn in an OPEN pocket, not wedged inside a cave wall. Every ship
+        // collider is checked against the tilemap's composite wall collider; any overlap fails the test
+        // (catches "spawned inside a wall").
+        private static void AssertShipClearOfWalls()
+        {
+            Spacecraft spacecraft = Object.FindAnyObjectByType<Spacecraft>();
+            Assert.That(spacecraft, Is.Not.Null, "The Rocket Tilemap scene has no active Spacecraft.");
+
+            var wallCollider = (Collider2D)Object.FindAnyObjectByType<CompositeCollider2D>();
+            Assert.That(wallCollider, Is.Not.Null,
+                "The tilemap cave has no CompositeCollider2D; the ship would have no walls to collide with.");
+
+            foreach (Collider2D shipCollider in spacecraft.GetComponentsInChildren<Collider2D>(true))
+            {
+                if (!shipCollider.enabled)
+                    continue;
+
+                ColliderDistance2D separation = Physics2D.Distance(shipCollider, wallCollider);
+                Assert.That(separation.isOverlapped, Is.False,
+                    $"The ship spawned overlapping a cave wall: collider '{shipCollider.name}' overlaps the " +
+                    $"tilemap walls (overlap depth {-separation.distance:F3}). The spawn pocket is not clear.");
+            }
+        }
+
         // Adaptive ambient convergence: sample the rendered mean luminance periodically and stop once it
         // is stable or at the frame cap; the full curve is logged so a bright plateau proves steady-state
         // emission rather than insufficient settling.
@@ -107,6 +190,9 @@ namespace Light2D.TestProject.Tests
 
         private static void AssertTilemapVisualState(SampleTestSupport.SampleSceneRunContext context)
         {
+            // Playability first: the frozen ship must not be spawned inside a wall.
+            AssertShipClearOfWalls();
+
             Texture2D capture = SampleTestSupport.CaptureTexture(context.Target);
             try
             {
