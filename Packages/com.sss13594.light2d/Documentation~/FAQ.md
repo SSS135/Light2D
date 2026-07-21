@@ -60,6 +60,36 @@ sample is exactly this look: a bright central light in a dark, obstacle-walled
 cave. Tune `LightPixelSize` (lower = sharper, costlier) and `LightCameraSizeAdd`
 so off-screen lights still contribute at the edges.
 
+## How do I make a bright world with a dark cave?
+
+Flip the world's lighting baseline and re-enable Light2D only inside the cave. On
+the camera's `LightingSystem`, set `DefaultCoverage = 0`: every pixel now shows the
+raw game image at full brightness (Light2D is bypassed everywhere). Then confine
+Light2D to the cave with a coverage volume:
+
+1. **GameObject > Light2D > Light Volume** creates a `Light2DVolume`. Set
+   `Shape = Box` and size it (`Size`) to cover the cave — or use `Circle` (`Radius`)
+   or a `Sprite` outline if that fits the space better.
+2. Set the volume's `Coverage = 1` so Light2D applies inside it. The cave goes dark
+   until something lights it.
+3. Put torches (`LightSprite`) and walls (`LightObstacleSprite` /
+   `LightObstacleMesh` / `LightObstacleTilemap`) inside the volume. The cave now
+   reads as dark with lit pools and cast shadows, while the world outside the volume
+   stays full-bright.
+
+Use `BlendDistance` for a soft transition at the cave mouth and `Priority` to
+resolve overlapping volumes (higher wins). If you would rather keep the baseline in
+the scene as an object than as a field on the `LightingSystem`, leave
+`DefaultCoverage = 1` and add a low-priority `Shape = Global, Coverage = 0` volume
+instead — the local `Coverage = 1` cave volume paints over it the same way. Leaving
+`DefaultCoverage` at its default 1 with no volumes lights the whole world exactly as
+before, at no cost.
+
+If you instead want a region that stays *lit* but stylized — a soft ambient floor
+rather than the raw art showing through — use a `LightAmbientEmitter` in `Fill` mode
+(`Box` or `Circle`) to emit a flat, shaped ambient region there, rather than a
+coverage volume that bypasses Light2D.
+
 ## Can I use Light2D for fog-of-war or gameplay visibility?
 
 Only for the *look*, not as a gameplay query. Light2D is a rendering system: it

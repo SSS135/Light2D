@@ -24,6 +24,10 @@ Render Pipelines are not supported.
   Tilemap occluder is even texture-aware, so transparent tile pixels pass light.
 - **One package, both pipelines.** The same components drive the Built-in Render
   Pipeline and URP 17.3+.
+- **Scoped lighting with coverage volumes.** Drop a `Light2DVolume` to confine
+  Light2D to a region — the classic "bright overworld, dark cave" look — or set
+  `LightingSystem.DefaultCoverage` to flip the whole world's lighting baseline. With
+  no volumes, the render is unchanged.
 
 ## When to use Unity's built-in 2D lights instead
 
@@ -139,6 +143,10 @@ into Light2D's internal textures through a command buffer.
   texture-aware obstacle.
 - `LightAmbientEmitter` contributes ambient emission when ambient lighting is
   enabled, replacing the old "any renderer on the ambient layer" convention.
+- `Light2DVolume` scopes how much Light2D applies inside a region, so lighting can be
+  confined to caves or interiors while the rest of the world shows its raw art.
+  `LightingSystem.DefaultCoverage` sets the world-wide baseline, and with no volumes
+  present the frame is unchanged.
 - Obstacle RGB controls transmitted light by channel. Dark values block more light;
   colored obstacles filter channels. Alpha participates in obstacle rendering
   according to the selected material.
@@ -187,7 +195,7 @@ The package name is `com.sss13594.light2d`. Runtime types are in the `Light2D` n
 
 ## Public API Policy
 
-The supported public runtime API is limited to the scene components (`LightingSystem`, `LightSprite`, `CustomSprite`, `LightObstacleSprite`, `LightObstacleMesh`, `LightObstacleGenerator`, `LightAmbientEmitter`, and — when `com.unity.2d.tilemap` is installed — `LightObstacleTilemap`), the `Light2DUniversalRendererFeature`, the diagnostics surface (`Light2DProfiling`, `Light2DDiagnostics`, `Light2DFrameMetrics`), and the `Light2DPipeline` readiness classification exposed through `LightingSystem.ActivePipeline` and `LightingSystem.IsRenderingReady`. Serialized field names on these components are compatibility contracts and are preserved across releases. Everything else is internal implementation and may change without notice; a contract test enforces the exported type list. The legacy `Util` and `Point2` helpers were removed in 2.0.0.
+The supported public runtime API is limited to the scene components (`LightingSystem`, `LightSprite`, `CustomSprite`, `LightObstacleSprite`, `LightObstacleMesh`, `LightObstacleGenerator`, `LightAmbientEmitter`, `Light2DVolume`, and — when `com.unity.2d.tilemap` is installed — `LightObstacleTilemap`), the `Light2DUniversalRendererFeature`, the diagnostics surface (`Light2DProfiling`, `Light2DDiagnostics`, `Light2DFrameMetrics`), and the `Light2DPipeline` readiness classification exposed through `LightingSystem.ActivePipeline` and `LightingSystem.IsRenderingReady`. Serialized field names on these components are compatibility contracts and are preserved across releases. Everything else is internal implementation and may change without notice; a contract test enforces the exported type list. The legacy `Util` and `Point2` helpers were removed in 2.0.0.
 
 ## License
 

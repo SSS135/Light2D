@@ -41,6 +41,18 @@ host is 6000.5.4f1.
   geometry never leaks into the game image.
 - `LightAmbientEmitter` component, replacing the old "any renderer on the ambient
   layer" convention. Add it with **GameObject > Light2D > Ambient Emitter**.
+- `Light2DVolume` component and coverage volumes: a world-space region (`Box`,
+  `Circle`, `Sprite`, or `Global` shape) that scopes how much Light2D applies via
+  `final = lerp(rawGame, composite, coverage)`. `Coverage` ranges from 1 (lighting
+  applies) to 0 (raw game image passes through); `Priority` resolves overlaps and
+  `BlendDistance` softens edges. The new `LightingSystem.DefaultCoverage` sets the
+  world-wide baseline — 1 is lighting everywhere (the legacy default, allocation-free
+  when no volumes exist), and 0 gives a bright world in which volumes carve lit
+  "caves". With no volumes and a full-coverage baseline the render is byte-identical
+  to before. Add one with **GameObject > Light2D > Light Volume**.
+- `LightAmbientEmitter` `Fill` mode (`None`/`Box`/`Circle`): emits a flat,
+  primitive-shaped ambient region through the existing ambient path, for a
+  lit-but-stylized area or a soft ambient floor without a coverage bypass.
 - `LightObstacleTilemap` component (#8): a texture-aware Tilemap obstacle that maps
   each cell to its tile sprite so transparent tile pixels pass light, rebuilt on
   tile change. Requires `com.unity.2d.tilemap`; compiled under `LIGHT2D_TILEMAP`.

@@ -12,6 +12,7 @@ frame it:
 3. Renders ambient emitters and advances a persistent ambient-propagation history.
 4. Optionally blurs direct and ambient textures.
 5. Composites the lighting textures over the source camera color.
+6. When coverage volumes are present, or `LightingSystem.DefaultCoverage` is below 1, blends that composite back toward the raw camera color through a coverage mask (see [Coverage Volumes](#coverage-volumes)).
 
 The extended texture covers more world space than the source view so lights and obstacles just outside the screen can contribute. The small texture covers the visible camera area. Sampling positions are snapped to the lighting pixel grid to reduce shimmer while the camera moves.
 
@@ -54,6 +55,75 @@ Do not route Built-in work through the renderer feature or URP work through `OnR
 
 `LightingSystem.ActivePipeline` classifies the active pipeline as `Light2DPipeline.BuiltIn`, `Light2DPipeline.UniversalRenderPipeline`, or `Light2DPipeline.UnsupportedScriptableRenderPipeline`. `IsRenderingReady` reports false under an unsupported SRP, and enabling a `LightingSystem` there logs one actionable warning. XR cameras, URP Overlay cameras, and URP Base cameras with an active Overlay stack are rejected by the renderer feature with one warning per camera; independent Base cameras, including split screen, are supported.
 
+## Coverage Volumes
+
+By default Light2D composites its lighting over the whole camera image. *Coverage
+volumes* scope that composition to regions. The final pixel is
+
+```
+final = lerp(rawGameImage, light2dComposite, coverage)
+```
+
+where `coverage` is read from a per-frame *coverage mask*. Coverage `1` shows the
+Light2D composite (the lit-and-shadowed result); coverage `0` lets the raw game
+image pass through untouched (Light2D is bypassed there); intermediate values
+cross-fade between the two.
+
+Both backends implement coverage as an additive stage after the existing overlay
+composition, with no change to the frozen overlay shaders: the volumes rasterize
+their shapes into the coverage mask, the overlay writes into an intermediate
+composite target, and one final blit blends the raw color and the composite by the
+mask. The Built-in path is behaviorally verified; the URP path is a structural
+mirror of it (see [TESTING.md](TESTING.md#urp-verification-status) for the current
+URP verification status).
+
+### DefaultCoverage baseline
+
+`LightingSystem.DefaultCoverage` (range `0`–`1`, default `1`) clears the coverage
+mask before any volume draws — it is the world-wide baseline:
+
+- `DefaultCoverage = 1` (default): lighting everywhere. `lerp(raw, composite, 1)` is
+  exactly the composite, identical to the pre-volume behavior. When no volumes exist
+  and the baseline is 1, the entire coverage stage is skipped and **no coverage
+  textures are allocated** — the render is byte-identical to before and costs
+  nothing. This is what keeps the feature backward compatible.
+- `DefaultCoverage = 0`: the world shows the raw game image at full brightness, and
+  Light2D applies only where a volume paints coverage back up. This is the
+  "bright world, dark cave" recipe — set the baseline to 0, drop a `Light2DVolume`
+  with `Coverage = 1` over the cave, and place lights and obstacles inside it. The
+  overworld stays bright while the cave is dark and locally lit.
+
+The same "carve lit islands out of a bright world" result can also be authored
+purely with volumes by adding a `Shape = Global, Coverage = 0` volume at a low
+priority; `DefaultCoverage` is the convenience that expresses that baseline without
+a scene object.
+
+### `Light2DVolume`
+
+`Light2DVolume` is a world-space component that paints a coverage value into a
+region. Like every other lighting-input component it owns no scene renderer: it
+builds a procedural shape mesh (coverage value in vertex-color RGB, blend-distance
+falloff in vertex alpha) and is drawn only into the coverage mask through the
+register-and-draw core, so its shape can never leak into the game image.
+
+- `Coverage` (`0`–`1`): how much Light2D applies inside the region — `1` = lit and
+  shadowed, `0` = raw game image shows through.
+- `Shape`: `Box` (`Size` in world units), `Circle` (`Radius`), `Sprite` (the
+  sprite's outline, with the sprite-texture alpha shaping the region; blend distance
+  is approximated for arbitrary outlines), or `Global` (an unbounded region that
+  fills the whole view at its priority — the global-fallback shape).
+- `Priority`: where volumes overlap, the highest priority wins. The mask is painted
+  low-to-high priority, so a higher-priority region overwrites lower ones in its
+  interior.
+- `BlendDistance`: soft-edge width in world units. The region feathers from full
+  effect to none across this band, so overlaps and nested regions blend smoothly —
+  for example a `Coverage = 0` lit room carved inside a `Coverage = 1` cave.
+- `Owner`: leave empty to affect any `LightingSystem`, or set it to scope the volume
+  to one system when several exist.
+
+Create one with **GameObject > Light2D > Light Volume**. With no volumes present and
+`DefaultCoverage` left at 1, nothing about the composited frame changes.
+
 ## Runtime Components
 
 ### `LightingSystem`
@@ -87,6 +157,13 @@ bakes `EmissionColor` into an owned mesh, and a self-mesh mode (both sprite sour
 empty) that draws the object's externally authored mesh untouched, preserving
 per-vertex emission colors. It replaces the pre-2.0 convention of placing any
 renderer on an ambient layer.
+
+An optional `Fill` mode (`None`, `Box`, or `Circle`) makes the emitter emit a flat,
+primitive-shaped ambient region instead of mirroring a sprite or mesh. It flows
+through the same ambient-propagation path, so it needs no coverage mask or extra
+composition. Use it for a region that should stay *lit* but stylized — a soft
+ambient floor over an area — as opposed to a coverage volume, which bypasses Light2D
+to reveal the raw art.
 
 ### `CustomSprite`
 
