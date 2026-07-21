@@ -175,6 +175,7 @@ namespace Light2D
             internal Material NormalLightMaterial;
             internal Mesh BorderMesh;
             internal Material BorderMaterial;
+            internal Material CoverageBlendMaterial;
             internal RTHandle AmbientA;
             internal RTHandle AmbientB;
             internal bool AmbientReadIsA = true;
@@ -269,6 +270,19 @@ namespace Light2D
                     _borderHeight = -1;
                 }
 
+                if (CoverageBlendMaterial == null)
+                {
+                    var coverageShader = Shader.Find("Light2D/Coverage Blend");
+                    if (coverageShader == null)
+                    {
+                        if (!ValidationErrorIssued)
+                            Debug.LogError("Light2D coverage blend shader was not found.", Lighting);
+                        ValidationErrorIssued = true;
+                        return false;
+                    }
+                    EnsureMaterial(ref CoverageBlendMaterial, coverageShader, "Coverage Blend");
+                }
+
                 ValidationErrorIssued = false;
                 return true;
             }
@@ -353,6 +367,7 @@ namespace Light2D
                 Destroy(ref AmbientBlurMaterial);
                 Destroy(ref NormalLightMaterial);
                 Destroy(ref BorderMaterial);
+                Destroy(ref CoverageBlendMaterial);
                 if (BorderMesh != null)
                     CoreUtils.Destroy(BorderMesh);
                 BorderMesh = null;
@@ -480,6 +495,8 @@ namespace Light2D
             private static readonly int UrpObstacleTex = Shader.PropertyToID("_Light2DURPObstacleTex");
             private static readonly int UrpMainTex = Shader.PropertyToID("_Light2DURPMainTex");
             private static readonly int UrpGameTex = Shader.PropertyToID("_Light2DURPGameTex");
+            private static readonly int UrpCompositeTex = Shader.PropertyToID("_Light2DURPCompositeTex");
+            private static readonly int UrpCoverageTex = Shader.PropertyToID("_Light2DURPCoverageTex");
             private static readonly int UrpAmbientLightTex = Shader.PropertyToID("_Light2DURPAmbientLightTex");
             private static readonly int UrpLightSourcesTex = Shader.PropertyToID("_Light2DURPLightSourcesTex");
             private static readonly int UrpNormalsBuffer = Shader.PropertyToID("_Light2DURPNormalsBuffer");
@@ -507,6 +524,7 @@ namespace Light2D
             // raster render funcs. Obstacles/ambient/sources each own a list; the normals pass reuses the
             // obstacle snapshot. Frustum planes are cached into reusable arrays to avoid per-frame allocation.
             private readonly List<Light2DDrawEntry> _obstacleSnapshot = new List<Light2DDrawEntry>();
+            private readonly List<Light2DDrawEntry> _coverageSnapshot = new List<Light2DDrawEntry>();
             private readonly List<Light2DDrawEntry> _ambientSnapshot = new List<Light2DDrawEntry>();
             private readonly List<Light2DDrawEntry> _sourceEntries = new List<Light2DDrawEntry>();
             private readonly Plane[] _extendedPlanes = new Plane[6];
@@ -616,6 +634,7 @@ namespace Light2D
                 GeometryUtility.CalculateFrustumPlanes(smallProjection * smallView, _smallPlanes);
                 var extendedContext = new Light2DCullContext(_extendedPlanes, _lighting);
                 Light2DRenderRegistry.PrepareObstacleSnapshot(_obstacleSnapshot, extendedContext);
+                Light2DRenderRegistry.PrepareCoverageSnapshot(_coverageSnapshot, extendedContext);
                 LightSprite.PrepareSnapshot(_lightSprites, _lighting.XZPlane, _lighting, _extendedPlanes);
                 BuildSourceEntries(_lightSprites, _sourceEntries);
 
@@ -710,7 +729,39 @@ namespace Light2D
                 TextureHandle output = renderGraph.CreateTexture(outputDesc);
                 AddOverlayPass(renderGraph, context, camera, cameraSource, output, ambient, finalSources, sizes,
                     smallCamera, black, hdrActive);
-                resourceData.cameraColor = output;
+
+                // Coverage blends the raw camera color back in where volumes (or a sub-1 DefaultCoverage) mask
+                // Light2D out: final = lerp(rawGame, composite, coverage). Structural mirror of the Built-in
+                // coverage flow (§5.2) — URP behavioral/pixel correctness is BLOCKED on this host, not claimed.
+                // With no coverage present the branch is skipped entirely so cameraColor = output, byte-identical
+                // to today's path (backward compat).
+                float defaultCoverage = _lighting.DefaultCoverage;
+                bool coverageActive = _coverageSnapshot.Count > 0 || defaultCoverage < 1f;
+                if (coverageActive)
+                {
+                    // Coverage mask: extended-size, light-format target cleared to DefaultCoverage everywhere,
+                    // then volumes paint their per-region coverage over it. Identical shape to the ambient
+                    // emission draw pass (extended view/projection, SRPDefaultUnlit-resolved pass).
+                    TextureHandle coverage = CreateTexture(renderGraph, sizes.Extended.x, sizes.Extended.y,
+                        lightFormat, _lighting.LightTexturesFilterMode, "Light2D Coverage");
+                    int coveragePass = ResolvePassForSnapshot(_coverageSnapshot, ForwardLightMode);
+                    AddDrawPass(renderGraph, "Light2D Coverage Mask", Light2DProfiling.Composition, coverage,
+                        _coverageSnapshot, coveragePass, extendedView, extendedProjection, cameraView,
+                        cameraProjection,
+                        new Color(defaultCoverage, defaultCoverage, defaultCoverage, defaultCoverage), context,
+                        false, default(TextureHandle), default(TextureHandle), black);
+
+                    TextureDesc coverageOutputDesc = outputDesc;
+                    coverageOutputDesc.name = "Light2D Coverage Color";
+                    TextureHandle coverageOutput = renderGraph.CreateTexture(coverageOutputDesc);
+                    AddCoverageBlendPass(renderGraph, context, camera, output, cameraSource, coverage,
+                        coverageOutput, sizes, smallCamera, black);
+                    resourceData.cameraColor = coverageOutput;
+                }
+                else
+                {
+                    resourceData.cameraColor = output;
+                }
 
                 var metrics = new Light2DFrameMetrics(sizes.Extended.x, sizes.Extended.y,
                     Light2DDiagnostics.OwnedTextureBytes, _lightSprites.Count, ambientCycles,
@@ -1096,6 +1147,59 @@ namespace Light2D
                 }
             }
 
+            // Coverage blend: final = lerp(rawGame, composite, coverage). Runs after AddOverlayPass only when
+            // coverage is active. The _Scale/_Offset/_ExtendedToSmallTextureScale globals reproduce the overlay's
+            // small-light -> extended UV mapping (§1.4) so the coverage RT samples aligned with the composite.
+            // The coverage-blend shader (Light2D/Coverage Blend) samples _Light2DURPGameTex/_Light2DURPCompositeTex/
+            // _Light2DURPCoverageTex declared in the self-contained CoverageBlend.hlsl.
+            private void AddCoverageBlendPass(RenderGraph graph, CameraContext context, Camera camera,
+                TextureHandle composite, TextureHandle game, TextureHandle coverage, TextureHandle destination,
+                Sizes sizes, Light2DCameraGeometry lightCamera, TextureHandle black)
+            {
+                using (var builder = graph.AddRasterRenderPass<CoveragePassData>("Light2D Coverage Blend", out var data,
+                           profilingSampler))
+                {
+                    data.Composite = composite;
+                    data.Game = game;
+                    data.Coverage = coverage;
+                    data.Material = context.CoverageBlendMaterial;
+                    data.ExtendedScale = new Vector2(sizes.Small.x / (float)sizes.Extended.x,
+                        sizes.Small.y / (float)sizes.Extended.y);
+                    // Scale/Offset mirror AddOverlayPass exactly so coverageUV == the overlay's ambientUV mapping.
+                    float sourceSize = camera.orthographic
+                        ? camera.orthographicSize
+                        : Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * _lighting.LightObstaclesDistance;
+                    float scaleY = sourceSize / Mathf.Max(0.00001f, lightCamera.OrthographicSize);
+                    data.Scale = new Vector2(scaleY * camera.aspect / lightCamera.Aspect, scaleY);
+                    Vector3 worldOffset = Quaternion.Inverse(camera.transform.rotation) *
+                                          (lightCamera.Position - camera.transform.position);
+                    data.Offset = Vector2.Scale(new Vector2(1f / sizes.Small.x, 1f / sizes.Small.y),
+                        -(Vector2)worldOffset * _lighting.LightPixelsPerUnityMeter);
+                    data.Black = black;
+                    builder.UseTexture(composite, AccessFlags.Read);
+                    builder.UseTexture(game, AccessFlags.Read);
+                    builder.UseTexture(coverage, AccessFlags.Read);
+                    builder.UseTexture(black, AccessFlags.Read);
+                    builder.SetRenderAttachment(destination, 0, AccessFlags.Write);
+                    builder.AllowGlobalStateModification(true);
+                    builder.SetRenderFunc(static (CoveragePassData pass, RasterGraphContext rg) =>
+                    {
+                        Light2DProfiling.Composition.Begin();
+                        rg.cmd.SetGlobalTexture(UrpCompositeTex, pass.Composite);
+                        rg.cmd.SetGlobalTexture(UrpGameTex, pass.Game);
+                        rg.cmd.SetGlobalTexture(UrpCoverageTex, pass.Coverage);
+                        rg.cmd.SetGlobalVector(ExtendedScale, pass.ExtendedScale);
+                        rg.cmd.SetGlobalVector(Scale, pass.Scale);
+                        rg.cmd.SetGlobalVector(Offset, pass.Offset);
+                        Blitter.BlitTexture(rg.cmd, pass.Composite, Vector2.one, pass.Material, 0);
+                        rg.cmd.SetGlobalTexture(UrpCompositeTex, pass.Black);
+                        rg.cmd.SetGlobalTexture(UrpCoverageTex, pass.Black);
+                        ClearTextureGlobals(rg.cmd, pass.Black);
+                        Light2DProfiling.Composition.End();
+                    });
+                }
+            }
+
             // Resolves the DrawMesh pass index for a snapshot from a representative material. Obstacle, source
             // and ambient materials within one role share a shader family, so the first entry's pass layout
             // applies to the whole snapshot. Returns 0 for an empty snapshot (no draw happens anyway).
@@ -1346,6 +1450,18 @@ namespace Light2D
                 internal TextureHandle Sources;
                 internal Material Material;
                 internal bool Hdr;
+                internal Vector2 ExtendedScale;
+                internal Vector2 Scale;
+                internal Vector2 Offset;
+                internal TextureHandle Black;
+            }
+
+            private sealed class CoveragePassData
+            {
+                internal TextureHandle Composite;
+                internal TextureHandle Game;
+                internal TextureHandle Coverage;
+                internal Material Material;
                 internal Vector2 ExtendedScale;
                 internal Vector2 Scale;
                 internal Vector2 Offset;

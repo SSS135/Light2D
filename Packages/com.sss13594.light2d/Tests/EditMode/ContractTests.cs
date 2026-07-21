@@ -54,6 +54,7 @@ namespace Light2D.Tests
                 "Light2D.Light2DPipeline",
                 "Light2D.Light2DProfiling",
                 "Light2D.Light2DUniversalRendererFeature",
+                "Light2D.Light2DVolume",
                 "Light2D.LightAmbientEmitter",
                 "Light2D.LightObstacleGenerator",
                 "Light2D.LightObstacleMesh",

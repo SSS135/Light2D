@@ -41,6 +41,34 @@ namespace Light2D
         [Tooltip("Draw order within the ambient emission pass; lower values draw first.")]
         public int SortingOrder;
 
+        /// <summary>
+        /// Optional procedural shaped-fill mode. <see cref="FillShape.None"/> keeps the existing
+        /// sprite-mirror / self-mesh behavior; <see cref="FillShape.Box"/> and <see cref="FillShape.Circle"/>
+        /// build a feathered primitive with <see cref="EmissionColor"/> baked into the vertex colors instead.
+        /// </summary>
+        public enum FillShape
+        {
+            None,
+            Box,
+            Circle
+        }
+
+        [Tooltip("Optional procedural fill shape. None keeps the sprite-mirror / self-mesh behavior. Box and " +
+                 "Circle instead draw a feathered primitive (EmissionColor baked into the vertex colors, alpha " +
+                 "ramped to zero across the blend band) straight into the ambient emission texture, giving a " +
+                 "shaped/blended regional fill or, at large size, a global 'never fully black' floor.")]
+        public FillShape Fill = FillShape.None;
+
+        [Tooltip("Box fill full size in local units (X,Y). Used when Fill is Box.")]
+        public Vector2 FillSize = Vector2.one;
+
+        [Tooltip("Circle fill radius in local units. Used when Fill is Circle.")]
+        public float FillRadius = 0.5f;
+
+        [Tooltip("Soft-edge width in local units. The fill fades from full EmissionColor to none across this " +
+                 "band. Used when Fill is Box or Circle.")]
+        public float FillBlendDistance = 0.5f;
+
         // GUID of the sample obstacle/emissive material, matching LightObstacleSprite's editor default.
         private const string DefaultMaterialGuid = "0a8c132f813f5514b9f5b48ff3956482";
         private const string GeneratedMeshName = "Generated Ambient Emission Mesh (DONT change it)";
@@ -57,6 +85,12 @@ namespace Light2D
         private Material _oldBaseMaterial;
         private Texture2D _oldTexture;
         private bool _meshDirty;
+
+        private FillShape _oldFill;
+        private Vector2 _oldFillSize;
+        private float _oldFillRadius;
+        private float _oldFillBlendDistance;
+        private Color _oldFillColor;
 
         private Renderer _sourceRenderer;
         private CustomSprite _sourceCustomSprite;
@@ -128,6 +162,13 @@ namespace Light2D
             // the emission mesh; it is drawn only through the ambient registry snapshot.
             _meshRenderer.enabled = false;
             _meshRenderer.sortingOrder = SortingOrder;
+
+            // Shaped-fill mode replaces the sprite-mirror / self-mesh path with an owned procedural primitive.
+            if (Fill != FillShape.None)
+            {
+                RefreshFillMode();
+                return;
+            }
 
             var source = ResolveSourceSprite();
             if (source != null)
@@ -206,6 +247,170 @@ namespace Light2D
             _mesh.vertices = vertices;
             _mesh.triangles = triangles;
             _mesh.uv = sprite.uv;
+            _mesh.colors = colors;
+        }
+
+        // Procedural shaped-fill mode: instead of mirroring a sprite or drawing an external mesh, build a
+        // feathered Box/Circle primitive with EmissionColor baked into the vertex colors and draw it through
+        // the existing ambient path. The primitive carries no sprite texture, so the base material is bound
+        // with a white main texture (col == white) and the vertex color alone drives the emission.
+        private void RefreshFillMode()
+        {
+            EnsureOwnedMesh();
+
+            if (Fill != _oldFill || FillSize != _oldFillSize ||
+                !Mathf.Approximately(FillRadius, _oldFillRadius) ||
+                !Mathf.Approximately(FillBlendDistance, _oldFillBlendDistance) ||
+                EmissionColor != _oldFillColor || _meshDirty)
+            {
+                BuildFillMesh(EmissionColor);
+                _oldFill = Fill;
+                _oldFillSize = FillSize;
+                _oldFillRadius = FillRadius;
+                _oldFillBlendDistance = FillBlendDistance;
+                _oldFillColor = EmissionColor;
+                _meshDirty = false;
+            }
+
+            var baseMaterial = Material != null ? Material : GetRuntimeDefaultMaterial();
+            var texture = Texture2D.whiteTexture;
+            if (baseMaterial == null || texture == null)
+            {
+                ReleaseMaterial();
+                _meshRenderer.sharedMaterial = null;
+                return;
+            }
+
+            if (_oldBaseMaterial != baseMaterial || _oldTexture != texture ||
+                !CustomSprite.IsGeneratedMaterial(_meshRenderer.sharedMaterial))
+            {
+                ReleaseMaterial();
+                _meshRenderer.sharedMaterial = CustomSprite.AcquireMaterial(baseMaterial, texture, false, out _materialKey);
+                _oldBaseMaterial = baseMaterial;
+                _oldTexture = texture;
+                // Invalidate the sprite-mode cache so a later switch back to sprite mode rebuilds the mesh.
+                _oldSprite = null;
+            }
+            else
+            {
+                CustomSprite.RefreshMaterial(_materialKey);
+            }
+        }
+
+        private void BuildFillMesh(Color color)
+        {
+            if (Fill == FillShape.Circle)
+                BuildCircleFillMesh(color);
+            else
+                BuildBoxFillMesh(color);
+        }
+
+        // Feathered box: a full-emission inner quad expanded by FillBlendDistance to an outer ring whose
+        // vertex alpha is zero, so the SrcAlpha blend fades the emission to nothing across the border band.
+        // Corners fade diagonally (a minor cosmetic simplification vs a rounded feather).
+        private void BuildBoxFillMesh(Color color)
+        {
+            var hx = Mathf.Max(0f, FillSize.x * 0.5f);
+            var hy = Mathf.Max(0f, FillSize.y * 0.5f);
+            var b = Mathf.Max(0f, FillBlendDistance);
+            var edge = new Color(color.r, color.g, color.b, 0f);
+
+            var vertices = new[]
+            {
+                new Vector3(-hx, -hy, 0f),                 // 0 inner BL
+                new Vector3(hx, -hy, 0f),                  // 1 inner BR
+                new Vector3(hx, hy, 0f),                   // 2 inner TR
+                new Vector3(-hx, hy, 0f),                  // 3 inner TL
+                new Vector3(-(hx + b), -(hy + b), 0f),     // 4 outer BL
+                new Vector3(hx + b, -(hy + b), 0f),        // 5 outer BR
+                new Vector3(hx + b, hy + b, 0f),           // 6 outer TR
+                new Vector3(-(hx + b), hy + b, 0f)         // 7 outer TL
+            };
+
+            var colors = new[] { color, color, color, color, edge, edge, edge, edge };
+
+            var uv = new Vector2[8];
+            for (var i = 0; i < uv.Length; i++)
+                uv[i] = new Vector2(0.5f, 0.5f);
+
+            var triangles = new[]
+            {
+                0, 1, 2, 0, 2, 3,   // full-emission inner quad
+                4, 5, 1, 4, 1, 0,   // bottom feather band
+                5, 6, 2, 5, 2, 1,   // right feather band
+                6, 7, 3, 6, 3, 2,   // top feather band
+                7, 4, 0, 7, 0, 3    // left feather band
+            };
+
+            _mesh.Clear();
+            _mesh.vertices = vertices;
+            _mesh.triangles = triangles;
+            _mesh.uv = uv;
+            _mesh.colors = colors;
+        }
+
+        // Feathered circle: a full-emission disc (triangle fan) ringed by a feathered rim whose outer
+        // vertices have zero alpha, giving a smooth radial falloff across FillBlendDistance.
+        private void BuildCircleFillMesh(Color color)
+        {
+            const int segments = 48;
+            var r = Mathf.Max(0f, FillRadius);
+            var outer = r + Mathf.Max(0f, FillBlendDistance);
+            var edge = new Color(color.r, color.g, color.b, 0f);
+
+            var vertexCount = 1 + segments * 2;
+            var vertices = new Vector3[vertexCount];
+            var colors = new Color[vertexCount];
+            var uv = new Vector2[vertexCount];
+
+            vertices[0] = Vector3.zero;
+            colors[0] = color;
+            uv[0] = new Vector2(0.5f, 0.5f);
+
+            for (var i = 0; i < segments; i++)
+            {
+                var angle = i / (float)segments * Mathf.PI * 2f;
+                var cos = Mathf.Cos(angle);
+                var sin = Mathf.Sin(angle);
+                var innerIndex = 1 + i;
+                var outerIndex = 1 + segments + i;
+                vertices[innerIndex] = new Vector3(cos * r, sin * r, 0f);
+                vertices[outerIndex] = new Vector3(cos * outer, sin * outer, 0f);
+                colors[innerIndex] = color;
+                colors[outerIndex] = edge;
+                uv[innerIndex] = new Vector2(0.5f, 0.5f);
+                uv[outerIndex] = new Vector2(0.5f, 0.5f);
+            }
+
+            var triangles = new int[segments * 9];
+            var t = 0;
+            for (var i = 0; i < segments; i++)
+            {
+                var next = (i + 1) % segments;
+                var innerI = 1 + i;
+                var innerNext = 1 + next;
+                var outerI = 1 + segments + i;
+                var outerNext = 1 + segments + next;
+
+                // Inner disc fan triangle.
+                triangles[t++] = 0;
+                triangles[t++] = innerI;
+                triangles[t++] = innerNext;
+
+                // Feathered rim (two triangles bridging the inner ring to the zero-alpha outer ring).
+                triangles[t++] = innerI;
+                triangles[t++] = outerI;
+                triangles[t++] = outerNext;
+
+                triangles[t++] = innerI;
+                triangles[t++] = outerNext;
+                triangles[t++] = innerNext;
+            }
+
+            _mesh.Clear();
+            _mesh.vertices = vertices;
+            _mesh.triangles = triangles;
+            _mesh.uv = uv;
             _mesh.colors = colors;
         }
 

@@ -108,6 +108,44 @@ namespace Light2D.Tests
             }
         }
 
+        [UnityTest, Timeout(60000)]
+        public IEnumerator ShapedBoxFillKeepsRegionAboveDarkFloor()
+        {
+            RenderPipelineAsset oldDefault = GraphicsSettings.defaultRenderPipeline;
+            RenderPipelineAsset oldQuality = QualitySettings.renderPipeline;
+            AlignmentFixture fixture = null;
+            try
+            {
+                QualitySettings.renderPipeline = null;
+                GraphicsSettings.defaultRenderPipeline = null;
+                yield return WaitForBuiltInPipeline();
+                fixture = new AlignmentFixture(enableAmbient: true, useBoxFill: true);
+                yield return null;
+
+                // Push the point light off-screen so the frame centre is lit ONLY by the procedural box fill,
+                // not by the light source. A working shaped fill still raises the centre above the dark floor.
+                fixture.SetLightWorldPosition(new Vector3(1000f, 1000f, 0f));
+
+                // Warm the temporal ambient propagation, then measure the centre of the box interior.
+                float centreLuminance = 0f;
+                for (int frame = 0; frame < 24; frame++)
+                {
+                    centreLuminance = fixture.RenderAndMeasureCentreLuminance(new Vector3(0f, 0f, -10f));
+                    yield return null;
+                }
+
+                Assert.That(centreLuminance, Is.GreaterThan(0.03f),
+                    "The shaped Box fill did not raise its region above the dark floor; it rendered near-black " +
+                    "(centre luminance=" + centreLuminance.ToString("F4") + "). Procedural ambient fill is missing.");
+            }
+            finally
+            {
+                fixture?.Dispose();
+                QualitySettings.renderPipeline = oldQuality;
+                GraphicsSettings.defaultRenderPipeline = oldDefault;
+            }
+        }
+
         private static IEnumerator WaitForBuiltInPipeline()
         {
             const int frameLimit = 30;
@@ -168,7 +206,7 @@ namespace Light2D.Tests
             private readonly Material _emitterMaterial;
             private readonly Material _blurMaterial;
 
-            internal AlignmentFixture(bool enableAmbient)
+            internal AlignmentFixture(bool enableAmbient, bool useBoxFill = false)
             {
                 _cameraObject = new GameObject("Alignment Light2D Camera");
                 _cameraObject.SetActive(false);
@@ -221,11 +259,22 @@ namespace Light2D.Tests
                 {
                     _ambientObject = new GameObject("Alignment Ambient Emitter");
                     var emitter = _ambientObject.AddComponent<LightAmbientEmitter>();
-                    emitter.Sprite = sprite;
                     emitter.EmissionColor = Color.white;
                     _emitterMaterial = new Material(Shader.Find("Light2D/Transparent Dual Color Normal Mapped"));
                     emitter.Material = _emitterMaterial;
-                    _ambientObject.transform.localScale = Vector3.one * 8f;
+                    if (useBoxFill)
+                    {
+                        // Procedural shaped-fill emitter: a feathered box centred on the frame, drawn straight
+                        // into the ambient emission texture with no mirrored sprite.
+                        emitter.Fill = LightAmbientEmitter.FillShape.Box;
+                        emitter.FillSize = new Vector2(6f, 6f);
+                        emitter.FillBlendDistance = 1f;
+                    }
+                    else
+                    {
+                        emitter.Sprite = sprite;
+                        _ambientObject.transform.localScale = Vector3.one * 8f;
+                    }
                     emitter.enabled = false;
                     emitter.enabled = true;
                 }

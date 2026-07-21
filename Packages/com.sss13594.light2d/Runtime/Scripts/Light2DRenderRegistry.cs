@@ -5,16 +5,17 @@ using UnityEngine;
 namespace Light2D
 {
     /// <summary>
-    /// Static register-and-draw surface for the obstacle and ambient-emitter roles. Light sources keep
-    /// their existing registry on <see cref="LightSprite"/>, so this class only owns the two new roles.
-    /// Mirrors the lifecycle of <see cref="LightSprite"/>: components self-register in OnEnable and
-    /// deregister in OnDisable/OnDestroy, and a SubsystemRegistration reset clears then re-finds active
-    /// instances after a domain reload.
+    /// Static register-and-draw surface for the obstacle, ambient-emitter and coverage-volume roles.
+    /// Light sources keep their existing registry on <see cref="LightSprite"/>, so this class only owns
+    /// those roles. Mirrors the lifecycle of <see cref="LightSprite"/>: components self-register in
+    /// OnEnable and deregister in OnDisable/OnDestroy, and a SubsystemRegistration reset clears then
+    /// re-finds active instances after a domain reload.
     /// </summary>
     internal static class Light2DRenderRegistry
     {
         private static readonly HashSet<ILight2DObstacle> Obstacles = new HashSet<ILight2DObstacle>();
         private static readonly HashSet<ILight2DAmbientEmitter> AmbientEmitters = new HashSet<ILight2DAmbientEmitter>();
+        private static readonly HashSet<ILight2DCoverage> CoverageVolumes = new HashSet<ILight2DCoverage>();
 
         // Reused across snapshots so per-frame preparation allocates nothing steady-state.
         private static readonly List<Sortable> Scratch = new List<Sortable>();
@@ -45,6 +46,17 @@ namespace Light2D
             AmbientEmitters.Remove(emitter);
         }
 
+        internal static void RegisterCoverage(ILight2DCoverage coverage)
+        {
+            if (coverage != null)
+                CoverageVolumes.Add(coverage);
+        }
+
+        internal static void DeregisterCoverage(ILight2DCoverage coverage)
+        {
+            CoverageVolumes.Remove(coverage);
+        }
+
         // Membership probes for tests; not part of the drawing path.
         internal static bool ContainsObstacle(ILight2DObstacle obstacle)
         {
@@ -56,11 +68,17 @@ namespace Light2D
             return AmbientEmitters.Contains(emitter);
         }
 
+        internal static bool ContainsCoverage(ILight2DCoverage coverage)
+        {
+            return CoverageVolumes.Contains(coverage);
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetRegistry()
         {
             Obstacles.Clear();
             AmbientEmitters.Clear();
+            CoverageVolumes.Clear();
 
             // FindObjectsByType cannot take an interface, so scan every active MonoBehaviour once and
             // route each into the roles it implements. Snapshot preparation re-checks isActiveAndEnabled
@@ -71,6 +89,8 @@ namespace Light2D
                     Obstacles.Add(obstacle);
                 if (behaviour is ILight2DAmbientEmitter emitter)
                     AmbientEmitters.Add(emitter);
+                if (behaviour is ILight2DCoverage coverage)
+                    CoverageVolumes.Add(coverage);
             }
         }
 
@@ -88,6 +108,14 @@ namespace Light2D
         internal static void PrepareAmbientSnapshot(List<Light2DDrawEntry> dst, in Light2DCullContext ctx)
         {
             PrepareSnapshot(AmbientEmitters, dst, ctx);
+        }
+
+        /// <summary>
+        /// Culls, owner-filters and orders the coverage-volume registry into <paramref name="dst"/>.
+        /// </summary>
+        internal static void PrepareCoverageSnapshot(List<Light2DDrawEntry> dst, in Light2DCullContext ctx)
+        {
+            PrepareSnapshot(CoverageVolumes, dst, ctx);
         }
 
         private static void PrepareSnapshot<T>(HashSet<T> registry, List<Light2DDrawEntry> dst,

@@ -127,6 +127,17 @@ namespace Light2D
             Selection.activeGameObject = obj;
         }
 
+        [MenuItem("GameObject/Light2D/Light Volume", false, 6)]
+        public static void CreateLightVolume()
+        {
+            var obj = new GameObject("Light Volume");
+            Undo.RegisterCreatedObjectUndo(obj, "Create Light Volume");
+            // The volume owns a procedural shape mesh and an internal coverage material, so nothing to
+            // seed here; the default Box shape is visible through the component's authoring gizmo.
+            Undo.AddComponent<Light2DVolume>(obj);
+            Selection.activeGameObject = obj;
+        }
+
         private static bool IsSupportedObstacleRenderer(Renderer renderer)
         {
             return renderer is SpriteRenderer ||

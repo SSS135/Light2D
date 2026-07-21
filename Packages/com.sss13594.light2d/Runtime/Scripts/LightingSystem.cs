@@ -77,6 +77,13 @@ namespace Light2D
                  "compositing to the screen (default off).")]
         public bool AffectOnlyThisCamera;
 
+        [Range(0f, 1f)]
+        [Tooltip("World coverage baseline used as the coverage-mask clear value. 1 = Light2D applies " +
+                 "everywhere (default, identical to the legacy behavior and allocation-free); 0 = the " +
+                 "world shows the raw game image and Light2DVolumes with higher coverage re-enable " +
+                 "lighting locally (the 'bright world, dark caves' flow).")]
+        public float DefaultCoverage = 1f;
+
         [Tooltip("Material running the ambient-light propagation pass; leave empty to use the packaged " +
                  "ambient compute material.")]
         public Material AmbientLightComputeMaterial;
@@ -105,6 +112,7 @@ namespace Light2D
         private readonly List<Light2DDrawEntry> _sourceSnapshot = new List<Light2DDrawEntry>();
         private readonly List<Light2DDrawEntry> _obstacleSnapshot = new List<Light2DDrawEntry>();
         private readonly List<Light2DDrawEntry> _ambientSnapshot = new List<Light2DDrawEntry>();
+        private readonly List<Light2DDrawEntry> _coverageSnapshot = new List<Light2DDrawEntry>();
         private readonly Plane[] _extendedPlanes = new Plane[6];
         private readonly Plane[] _smallPlanes = new Plane[6];
         private MaterialPropertyBlock _normalLightProperties;
@@ -136,6 +144,9 @@ namespace Light2D
         private bool _urpNoFeatureWarningIssued;
         private int _validationDiagnosticHash;
         private int _frameReallocations;
+        // Whether the most recent frame took the coverage-composition path; drives the next frame's
+        // release of the on-demand coverage render targets when coverage becomes inactive.
+        private bool _coverageActive;
 
         private static readonly int ObstacleTexId = Shader.PropertyToID("_ObstacleTex");
         private static readonly int NormalsBufferId = Shader.PropertyToID("_NormalsBuffer");
@@ -151,6 +162,8 @@ namespace Light2D
         private static readonly int OffsetId = Shader.PropertyToID("_Offset");
         private static readonly int ScaleId = Shader.PropertyToID("_Scale");
         private static readonly int LightPosId = Shader.PropertyToID("_LightPos");
+        private static readonly int CompositeTexId = Shader.PropertyToID("_CompositeTex");
+        private static readonly int CoverageTexId = Shader.PropertyToID("_CoverageTex");
         private const string DefaultUnlitMode = "SRPDefaultUnlit";
 
         public static LightingSystem Instance
@@ -314,6 +327,7 @@ namespace Light2D
                     LightSprite.PrepareSnapshot(_lightSpritesCache, XZPlane, this, _smallPlanes);
                     BuildSourceEntries();
                     Light2DRenderRegistry.PrepareObstacleSnapshot(_obstacleSnapshot, extendedContext);
+                    Light2DRenderRegistry.PrepareCoverageSnapshot(_coverageSnapshot, extendedContext);
                     if (EnableAmbientLight)
                         Light2DRenderRegistry.PrepareAmbientSnapshot(_ambientSnapshot, extendedContext);
                     else
@@ -329,7 +343,24 @@ namespace Light2D
                 RenderLightSourcesBlur();
                 ResetAmbientHistoryForUnsupportedTransform(extendedGeom);
                 int ambientCyclesConsumed = RenderAmbientLight(extendedGeom);
-                RenderLightOverlay(src, dest, smallGeom);
+                _coverageActive = _coverageSnapshot.Count > 0 || DefaultCoverage < 1f;
+                if (!_coverageActive)
+                {
+                    // Backward-compat skip (design 1.3(1)): no volumes and a full-coverage world default
+                    // take the original overlay-to-destination path verbatim - pixel-identical, and no
+                    // coverage render target or material is ever allocated.
+                    RenderLightOverlay(src, dest, smallGeom);
+                }
+                else
+                {
+                    // Coverage composition (design 1.2): draw the volumes into the coverage mask (cleared
+                    // to the world baseline DefaultCoverage), composite the overlay into an intermediate,
+                    // then blend final = lerp(rawGame, composite, coverage) into dest.
+                    EnsureCoverageTextures(src.descriptor);
+                    RenderCoverageMask(extendedGeom);
+                    RenderLightOverlay(src, _resources.CompositeTexture, smallGeom);
+                    RenderCoverageBlend(src, dest, smallGeom);
+                }
                 ReportBuiltInFrame(ambientCyclesConsumed);
             }
             catch (Exception exception)
@@ -597,6 +628,12 @@ namespace Light2D
                 {
                     _resources.ReleaseCameraTargetTexture();
                 }
+
+                // Coverage render targets are allocated on demand by the active coverage branch (see
+                // EnsureCoverageTextures). When the previous frame was not coverage-active, reclaim them
+                // here so the no-volume path keeps its zero-allocation backward-compat cost.
+                if (!_coverageActive)
+                    _resources.ReleaseCoverageTextures();
 
                 _frameReallocations += reallocations;
             }
@@ -937,30 +974,102 @@ namespace Light2D
             }
         }
 
+        // Computes the game->light-texture sampling transform (offset + scale) from the small light-camera
+        // geometry. Shared by the overlay and the coverage blend so the coverage mask is sampled through
+        // the exact same _Offset/_Scale the overlay used (design risk R1: value identity by construction).
+        private void ComputeOverlayTransform(in Light2DCameraGeometry geometry, out Vector2 offset,
+            out Vector2 scale)
+        {
+            var texelSize = new Vector2(1f / _smallLightTextureSize.x, 1f / _smallLightTextureSize.y);
+            Vector2 worldOffset = Quaternion.Inverse(_camera.transform.rotation) *
+                                  (geometry.Position - _camera.transform.position);
+            offset = Vector2.Scale(texelSize, -worldOffset * LightPixelsPerUnityMeter);
+            float sourceOrthographicSize = _camera.orthographic
+                ? SourceOrthographicSize
+                : Mathf.Tan(_camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * LightObstaclesDistance;
+            float scaleY = sourceOrthographicSize / geometry.OrthographicSize;
+            scale = new Vector2(scaleY * _camera.aspect / geometry.Aspect, scaleY);
+        }
+
         private void RenderLightOverlay(RenderTexture src, RenderTexture dest, in Light2DCameraGeometry geometry)
         {
             using (Light2DProfiling.Composition.Auto())
             {
-                var texelSize = new Vector2(1f / _smallLightTextureSize.x, 1f / _smallLightTextureSize.y);
-                Vector2 worldOffset = Quaternion.Inverse(_camera.transform.rotation) *
-                                      (geometry.Position - _camera.transform.position);
-                Vector2 offset = Vector2.Scale(texelSize, -worldOffset * LightPixelsPerUnityMeter);
+                ComputeOverlayTransform(geometry, out var offset, out var scale);
                 var lightSources = BlurLightSources && _resources.LightSourcesBlurMaterial != null &&
                                    LightTexturesFilterMode != FilterMode.Point
                     ? _resources.BlurredLightTexture
                     : _resources.LightSourcesTexture;
-                float sourceOrthographicSize = _camera.orthographic
-                    ? SourceOrthographicSize
-                    : Mathf.Tan(_camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * LightObstaclesDistance;
-                float scaleY = sourceOrthographicSize / geometry.OrthographicSize;
                 var overlay = _resources.LightOverlayMaterial;
                 overlay.SetTexture(AmbientLightTexId, EnableAmbientLight ? _resources.AmbientTexture : null);
                 overlay.SetTexture(LightSourcesTexId, lightSources);
                 overlay.SetTexture(GameTexId, src);
                 overlay.SetVector(OffsetId, offset);
-                overlay.SetVector(ScaleId, new Vector2(scaleY * _camera.aspect / geometry.Aspect, scaleY));
+                overlay.SetVector(ScaleId, scale);
                 Graphics.Blit(null, dest, overlay);
             }
+        }
+
+        // Draws the coverage volumes into the coverage mask (design 1.2). Clears to the world baseline
+        // DefaultCoverage (1 = lighting everywhere, 0 = raw game) so unpainted regions blend to that
+        // baseline, then rasterizes each volume shape - higher priority last - through the shared
+        // raw-projection snapshot pass, exactly like the obstacle/ambient extended passes.
+        private void RenderCoverageMask(in Light2DCameraGeometry geometry)
+        {
+            var clear = new Color(DefaultCoverage, DefaultCoverage, DefaultCoverage, DefaultCoverage);
+            RunSnapshotPass("Light2D Coverage Mask", _resources.CoverageTexture, clear,
+                geometry, _coverageSnapshot, DefaultUnlitMode);
+        }
+
+        // Coverage composite (design 1.2): dest = lerp(rawGame, composite, coverage). Binds the raw game
+        // image (_GameTex = src), the overlay's intermediate composite and the coverage mask, using the
+        // same offset/scale the overlay used plus the extended->small mapping the mask is stored at, then
+        // blits into dest. AffectOnlyThisCamera is preserved: the blend consumes the same (src, dest) the
+        // overlay path did, so the single-camera intermediate-target flow is unchanged.
+        private void RenderCoverageBlend(RenderTexture src, RenderTexture dest, in Light2DCameraGeometry geometry)
+        {
+            using (Light2DProfiling.Composition.Auto())
+            {
+                var blend = _resources.CoverageBlendMaterial;
+                if (blend == null)
+                {
+                    // The coverage-blend shader failed to load; fall back to the plain lit composite so the
+                    // frame still shows lighting rather than throwing out of the render path.
+                    BlitToDestination(_resources.CompositeTexture, dest);
+                    return;
+                }
+                ComputeOverlayTransform(geometry, out var offset, out var scale);
+                blend.SetTexture(GameTexId, src);
+                blend.SetTexture(CompositeTexId, _resources.CompositeTexture);
+                blend.SetTexture(CoverageTexId, _resources.CoverageTexture);
+                blend.SetVector(OffsetId, offset);
+                blend.SetVector(ScaleId, scale);
+                blend.SetVector(ExtendedToSmallTextureScaleId, new Vector2(
+                    _smallLightTextureSize.x / (float)_extendedLightTextureSize.x,
+                    _smallLightTextureSize.y / (float)_extendedLightTextureSize.y));
+                Graphics.Blit(null, dest, blend);
+            }
+        }
+
+        // Allocates the coverage mask (extended light size, light format) and the overlay-intermediate
+        // composite (source descriptor + format) on demand. Only ever reached from the active coverage
+        // branch, so the no-volume path never allocates them; EnsureTexture is idempotent, so re-calling
+        // each active frame is a no-op once the targets are sized.
+        private void EnsureCoverageTextures(RenderTextureDescriptor sourceDescriptor)
+        {
+            var coverageDescriptor = sourceDescriptor;
+            coverageDescriptor.colorFormat = _texFormat;
+            coverageDescriptor.depthBufferBits = 0;
+            coverageDescriptor.msaaSamples = 1;
+            SetSize(ref coverageDescriptor, _extendedLightTextureSize.x, _extendedLightTextureSize.y);
+            _resources.EnsureTexture(ref _resources.CoverageTexture, coverageDescriptor,
+                LightTexturesFilterMode, "Coverage");
+
+            var compositeDescriptor = sourceDescriptor;
+            compositeDescriptor.depthBufferBits = 0;
+            compositeDescriptor.msaaSamples = 1;
+            _resources.EnsureTexture(ref _resources.CompositeTexture, compositeDescriptor,
+                FilterMode.Point, "Composite");
         }
 
         public void LoopAmbientLight(int cycles)

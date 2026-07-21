@@ -12,6 +12,7 @@ namespace Light2D
         private Material _normalMappedLightMaterial;
         private Material _normalMapDrawerMaterial;
         private Material _alphaBlendedMaterial;
+        private Material _coverageBlendMaterial;
         private readonly int _diagnosticsGeneration;
         private bool _disposed;
 
@@ -25,6 +26,8 @@ namespace Light2D
         internal RenderTexture NormalMapBuffer;
         internal RenderTexture SingleLightSourceTexture;
         internal RenderTexture CameraTargetTexture;
+        internal RenderTexture CoverageTexture;
+        internal RenderTexture CompositeTexture;
 
         internal Material AmbientLightComputeMaterial { get { return _ambientLightComputeClone.Clone; } }
         internal Material LightOverlayMaterial { get { return _lightOverlayClone.Clone; } }
@@ -33,6 +36,20 @@ namespace Light2D
         internal Material NormalMappedLightMaterial { get { return _normalMappedLightMaterial; } }
         internal Material NormalMapDrawerMaterial { get { return _normalMapDrawerMaterial; } }
         internal Material AlphaBlendedMaterial { get { return _alphaBlendedMaterial; } }
+
+        // Lazily created from the packaged coverage-blend shader; the shader is found only on the first
+        // coverage-active access so the no-volume backward-compat path never touches it. Reuses the
+        // shared internal-material ensure so the clone name keeps the "Generated Light2D " prefix.
+        internal Material CoverageBlendMaterial
+        {
+            get
+            {
+                if (_coverageBlendMaterial == null)
+                    EnsureInternalMaterial(ref _coverageBlendMaterial,
+                        Shader.Find("Light2D/Coverage Blend"), "Coverage Blend");
+                return _coverageBlendMaterial;
+            }
+        }
 
         internal LightingRenderResources()
         {
@@ -110,6 +127,8 @@ namespace Light2D
             ReleaseTexture(ref NormalMapBuffer);
             ReleaseTexture(ref SingleLightSourceTexture);
             ReleaseTexture(ref CameraTargetTexture);
+            ReleaseTexture(ref CoverageTexture);
+            ReleaseTexture(ref CompositeTexture);
         }
 
         internal void ReleaseAmbientTextures()
@@ -140,6 +159,12 @@ namespace Light2D
             ReleaseTexture(ref CameraTargetTexture);
         }
 
+        internal void ReleaseCoverageTextures()
+        {
+            ReleaseTexture(ref CoverageTexture);
+            ReleaseTexture(ref CompositeTexture);
+        }
+
         public void Dispose()
         {
             if (_disposed)
@@ -153,6 +178,7 @@ namespace Light2D
             Destroy(ref _normalMappedLightMaterial);
             Destroy(ref _normalMapDrawerMaterial);
             Destroy(ref _alphaBlendedMaterial);
+            Destroy(ref _coverageBlendMaterial);
             Light2DDiagnostics.UnregisterContext(_diagnosticsGeneration);
         }
 

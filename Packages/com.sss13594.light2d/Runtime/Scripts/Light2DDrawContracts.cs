@@ -32,6 +32,13 @@ namespace Light2D
     }
 
     /// <summary>
+    /// Role marker for components that draw into the coverage mask render target.
+    /// </summary>
+    internal interface ILight2DCoverage : ILight2DDrawable
+    {
+    }
+
+    /// <summary>
     /// Optional capability for producers that contribute MORE THAN ONE draw entry per frame (e.g. a
     /// texture-aware Tilemap occluder that emits one single-submesh mesh + material per source texture).
     /// The registry prefers this over ILight2DDrawable.TryGetDrawEntry when a producer implements it.
