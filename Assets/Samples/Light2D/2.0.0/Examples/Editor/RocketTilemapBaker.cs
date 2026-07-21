@@ -444,22 +444,27 @@ namespace Light2D.Examples
 
         // A bright central light plus two distinctly coloured crystal lights, all inside the central
         // third of the framed view, satisfy the gate's central-peak and >=2-hue-bucket requirements.
-        // Radii are sized at/above the source prefabs' natural LightSprite scales (PointLight authored
+        // Radii are sized well above the source prefabs' natural LightSprite scales (PointLight authored
         // at 35, LightingCrystals' Light child at 20) so three static lights deliver enough energy for
-        // the dark-cave mean-luminance floor against the dense, texture-occluding tilemap.
+        // the dark-cave mean-luminance floor against the dense, texture-occluding tilemap. The radii were
+        // retuned upward (central 66->165, crystals 48->120) after the Built-in vertical-flip fix (3e447ad):
+        // that correction landed the light textures upright instead of mirrored, which lowered the framed
+        // mean luminance to ~0.0149 (just under the [0.015, 0.2] dark-cave floor). The larger radii lift the
+        // corrected render comfortably into band (~0.03-0.05) without loosening the gate; they raise the mean
+        // mainly by lighting more occluding rock faces, so the bright-core fraction stays small.
         private static void SpawnLights(Scene scene, GameObject crystalPrefab, GameObject pointLightPrefab,
             bool[,] isWall, int focusX, int focusY, LightingSystem lightingSystem)
         {
             var central = NearestOpenCell(isWall, focusX, focusY);
-            SpawnLight(scene, pointLightPrefab, central, new Color(1f, 0.82f, 0.5f, 1f), 66f,
+            SpawnLight(scene, pointLightPrefab, central, new Color(1f, 0.82f, 0.5f, 1f), 165f,
                 lightingSystem, "Central Light");
 
             var crystalOne = NearestOpenCell(isWall, focusX + 6, focusY + 3);
-            SpawnLight(scene, crystalPrefab, crystalOne, new Color(0.25f, 0.8f, 1f, 0.95f), 48f,
+            SpawnLight(scene, crystalPrefab, crystalOne, new Color(0.25f, 0.8f, 1f, 0.95f), 120f,
                 lightingSystem, "Crystal Light Cyan");
 
             var crystalTwo = NearestOpenCell(isWall, focusX - 6, focusY - 3);
-            SpawnLight(scene, crystalPrefab, crystalTwo, new Color(1f, 0.25f, 0.7f, 0.95f), 48f,
+            SpawnLight(scene, crystalPrefab, crystalTwo, new Color(1f, 0.25f, 0.7f, 0.95f), 120f,
                 lightingSystem, "Crystal Light Magenta");
         }
 
