@@ -620,8 +620,12 @@ namespace Light2D
                     commands.SetRenderTarget(obstacleTarget);
                     commands.ClearRenderTarget(true, true, new Color(1, 1, 1, 0));
                     var raster = CommandBufferHelpers.GetRasterCommandBuffer(commands);
-                    raster.SetViewProjectionMatrices(geometry.View,
-                        GL.GetGPUProjectionMatrix(geometry.Projection, true));
+                    // Pass the raw (OpenGL-convention) projection: the command buffer applies the
+                    // platform/render-texture GPU adjustment itself when it executes into the bound texture,
+                    // exactly as the retired helper camera's Render() did. Pre-applying
+                    // GL.GetGPUProjectionMatrix(..., true) here double-adjusts on flipped-UV platforms (D3D)
+                    // and renders the light textures vertically mirrored relative to the game image.
+                    raster.SetViewProjectionMatrices(geometry.View, geometry.Projection);
                     Light2DDraw.Draw(raster, _obstacleSnapshot, pass);
                     // One-pixel white border so lights with off-screen origins keep sampling obstacles.
                     // The border shader emits clip-space vertices directly, so it ignores view/projection.
@@ -673,8 +677,9 @@ namespace Light2D
                     commands.SetRenderTarget(_resources.NormalMapBuffer);
                     commands.ClearRenderTarget(true, true, new Color(0.5f, 0.5f, 0, 1));
                     var raster = CommandBufferHelpers.GetRasterCommandBuffer(commands);
-                    raster.SetViewProjectionMatrices(geometry.View,
-                        GL.GetGPUProjectionMatrix(geometry.Projection, true));
+                    // Raw projection; the command buffer applies the render-texture GPU adjustment itself
+                    // (see RenderObstacles). Pre-adjusting here mirrors the normal buffer vertically.
+                    raster.SetViewProjectionMatrices(geometry.View, geometry.Projection);
                     // Draw every obstacle with the shared normal-map drawer, feeding each obstacle's own
                     // base/normal textures through a property block. This is the DrawMesh equivalent of the
                     // retired camera RenderWithShader "LightObstacle" replacement, which pulled the same
@@ -723,7 +728,9 @@ namespace Light2D
             if (normalMaterial == null)
                 return;
             int normalPass = Light2DDraw.ResolvePass(normalMaterial, DefaultUnlitMode);
-            var projection = GL.GetGPUProjectionMatrix(geometry.Projection, true);
+            // Raw projection; the command buffer applies the render-texture GPU adjustment itself
+            // (see RenderObstacles), so light sources render upright rather than vertically mirrored.
+            var projection = geometry.Projection;
             var commands = CommandBufferPool.Get("Light2D Normal-Mapped Sources");
             try
             {
@@ -782,7 +789,9 @@ namespace Light2D
                 commands.SetRenderTarget(target);
                 commands.ClearRenderTarget(true, true, clear);
                 var raster = CommandBufferHelpers.GetRasterCommandBuffer(commands);
-                raster.SetViewProjectionMatrices(geometry.View, GL.GetGPUProjectionMatrix(geometry.Projection, true));
+                // Raw projection; the command buffer applies the render-texture GPU adjustment itself
+                // (see RenderObstacles). Pre-adjusting here mirrors light sources/ambient vertically.
+                raster.SetViewProjectionMatrices(geometry.View, geometry.Projection);
                 Light2DDraw.Draw(raster, snapshot, pass);
                 Graphics.ExecuteCommandBuffer(commands);
             }
