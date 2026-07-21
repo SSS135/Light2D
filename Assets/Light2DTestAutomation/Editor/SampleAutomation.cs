@@ -23,6 +23,7 @@ namespace Light2D.TestProject.Editor
         internal const string SmallExamplesSceneName = "Small Examples.unity";
         internal const string RocketSceneName = "Rocket.unity";
         internal const string RocketTilemapSceneName = "Rocket Tilemap.unity";
+        internal const string LightVolumeSceneName = "Light Volume.unity";
 
         public static void ImportExamples()
         {
@@ -173,7 +174,8 @@ namespace Light2D.TestProject.Editor
             {
                 Path.Combine(importPath, SmallExamplesSceneName).Replace('\\', '/'),
                 Path.Combine(importPath, RocketSceneName).Replace('\\', '/'),
-                Path.Combine(importPath, RocketTilemapSceneName).Replace('\\', '/')
+                Path.Combine(importPath, RocketTilemapSceneName).Replace('\\', '/'),
+                Path.Combine(importPath, LightVolumeSceneName).Replace('\\', '/')
             };
         }
 
