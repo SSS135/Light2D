@@ -33,6 +33,10 @@ sysinfo.txt
 # metas are kept; the restored assemblies inside are regenerated on import).
 /Assets/Plugins/NuGet/
 
+# Embedded editor-automation MCP host: a separate, unrelated dev tool kept on disk
+# (Unity auto-discovers embedded packages under Packages/) but not committed here.
+/Packages/com.sss135.editor-automation-mcp/
+
 # Numbered URP global-settings copies that URP regenerates. NEVER the unnumbered
 # sentinel Assets/UniversalRenderPipelineGlobalSettings.asset.
 /Assets/UniversalRenderPipelineGlobalSettings [0-9]*.asset
