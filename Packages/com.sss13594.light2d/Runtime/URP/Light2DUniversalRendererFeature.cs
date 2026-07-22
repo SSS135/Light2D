@@ -61,6 +61,13 @@ namespace Light2D
                 pass = new Light2DPass(_contexts, lighting, WarnOnce);
                 pass.renderPassEvent = _settings.RenderPassEvent;
                 pass.requiresIntermediateTexture = true;
+                // Declaring a Color input is the only per-pass lever the 2D renderer (Renderer2DData) honors to
+                // create an intermediate camera-color texture: it ignores requiresIntermediateTexture, so an
+                // offscreen/no-post render (e.g. a SingleCameraRequest to a RenderTexture) otherwise renders
+                // straight to the backbuffer, activeColorID stays BackBuffer, and the feature's intermediate
+                // guard drops the composite. This forces the intermediate on both renderers; on-screen it is a
+                // no-op wherever the intermediate already exists (the composite requires it, so it always does).
+                pass.ConfigureInput(ScriptableRenderPassInput.Color);
                 _passes.Add(lighting, pass);
             }
             renderer.EnqueuePass(pass);
