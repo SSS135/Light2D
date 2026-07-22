@@ -529,7 +529,7 @@ namespace Light2D.Examples
             {
                 light.Color = color;
                 light.Owner = lightingSystem;
-                light.transform.localScale = Vector3.one * radius;
+                light.Radius = radius;
             }
         }
 

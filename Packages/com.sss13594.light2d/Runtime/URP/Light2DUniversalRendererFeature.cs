@@ -510,13 +510,9 @@ namespace Light2D
             private static readonly int ViewportToWorldX = Shader.PropertyToID("_ViewportToWorldX");
             private static readonly int ViewportToWorldY = Shader.PropertyToID("_ViewportToWorldY");
             private static readonly int MainTexTexelSize = Shader.PropertyToID("_Light2DURPMainTex_TexelSize");
-            // Ambient-bounce tuning uniforms shared by both pipelines (declared on the ambient material). Pushed
-            // onto the cloned URP ambient material each frame so the LightingSystem knobs behave identically to
-            // the Built-in backend; _AmbientBounceTint is the colored-bounce knob (0 = neutral).
-            private static readonly int AmbientObstacleMul = Shader.PropertyToID("_ObstacleMul");
-            private static readonly int AmbientObstacleAdd = Shader.PropertyToID("_ObstacleAdd");
-            private static readonly int AmbientEmissionColorMul = Shader.PropertyToID("_EmissionColorMul");
-            private static readonly int AmbientSamplingDist = Shader.PropertyToID("_SamplingDist");
+            // Colored-bounce knob shared by both pipelines (declared on the ambient material). Pushed onto the
+            // cloned URP ambient material each frame so it matches the Built-in backend; default 0 = the shader's
+            // neutral default. Obstacle/emission/sampling tuning is left to the material's own serialized values.
             private static readonly int AmbientBounceTint = Shader.PropertyToID("_AmbientBounceTint");
             private static readonly GlobalKeyword HdrKeyword = new GlobalKeyword("HDR");
             private static readonly GlobalKeyword XzKeyword = new GlobalKeyword("LIGHT2D_XZ_PLANE");
@@ -814,13 +810,9 @@ namespace Light2D
                 if (context.AmbientMaterial == null)
                     return read;
 
-                // Push the exposed ambient-bounce tuning onto the cloned URP ambient material each frame so the
-                // LightingSystem knobs drive URP identically to the Built-in RenderAmbientLight path (neutral at
-                // defaults: bounce 0, the rest the shader's own defaults, so existing URP scenes are unchanged).
-                context.AmbientMaterial.SetFloat(AmbientObstacleMul, _lighting.AmbientObstacleMultiplier);
-                context.AmbientMaterial.SetFloat(AmbientObstacleAdd, _lighting.AmbientObstacleAdd);
-                context.AmbientMaterial.SetFloat(AmbientEmissionColorMul, _lighting.AmbientEmissionColorMultiplier);
-                context.AmbientMaterial.SetFloat(AmbientSamplingDist, _lighting.AmbientSamplingDistance);
+                // Drive only the colored-bounce tint from C# so it matches the Built-in RenderAmbientLight path
+                // (default 0 = the shader's neutral default). The obstacle/emission/sampling tuning is left to
+                // the cloned material's own serialized values so per-scene ambient tuning is honored.
                 context.AmbientMaterial.SetFloat(AmbientBounceTint, _lighting.AmbientColoredBounce);
 
                 context.WarmupCycles = AddWithoutOverflow(context.WarmupCycles,

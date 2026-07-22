@@ -14,7 +14,6 @@ namespace Light2D
     public class LightSprite : CustomSprite
     {
         private static readonly HashSet<LightSprite> LightSprites = new HashSet<LightSprite>();
-        private static readonly Plane[] FrustumPlanes = new Plane[6];
         private static readonly Comparison<LightSprite> CompareByEntityId = CompareLights;
         private static readonly Predicate<LightSprite> IsMissing = light => light == null;
 
@@ -145,34 +144,8 @@ namespace Light2D
                 snapshot[i].PrepareForLighting(xzPlane);
         }
 
-        internal static void PrepareSnapshot(List<LightSprite> snapshot, bool xzPlane, int layer, Camera camera)
-        {
-            if (snapshot == null)
-                throw new ArgumentNullException("snapshot");
-
-            LightSprites.RemoveWhere(IsMissing);
-            snapshot.Clear();
-            var owner = ResolveCameraOwner(camera);
-            if (camera != null)
-                GeometryUtility.CalculateFrustumPlanes(camera, FrustumPlanes);
-
-            foreach (var light in LightSprites)
-            {
-                if (!IsRenderable(light) || light.gameObject.layer != layer ||
-                    (light.Owner != null && light.Owner != owner) ||
-                    (camera != null && !GeometryUtility.TestPlanesAABB(FrustumPlanes, light.Renderer.bounds)))
-                    continue;
-                snapshot.Add(light);
-            }
-
-            snapshot.Sort(CompareByEntityId);
-            for (var i = 0; i < snapshot.Count; i++)
-                snapshot[i].PrepareForLighting(xzPlane);
-        }
-
-        // Additive owner-filtered overload for the v3 register-and-draw backends: no layer filter, an
-        // explicit Owner scope, and caller-cached frustum planes (null skips frustum culling). The
-        // layer-based overload above stays for the current backends until they switch over.
+        // Owner-filtered snapshot for the register-and-draw backends: no layer filter, an explicit Owner
+        // scope, and caller-cached frustum planes (null skips frustum culling).
         internal static void PrepareSnapshot(List<LightSprite> snapshot, bool xzPlane, LightingSystem owner,
             Plane[] planes)
         {
@@ -227,19 +200,6 @@ namespace Light2D
         private static int CompareLights(LightSprite left, LightSprite right)
         {
             return left.GetEntityId().CompareTo(right.GetEntityId());
-        }
-
-        private static LightingSystem ResolveCameraOwner(Camera camera)
-        {
-            if (camera == null)
-                return null;
-            var instances = LightingSystem.Instances;
-            for (var i = 0; i < instances.Count; i++)
-            {
-                if (instances[i] != null && instances[i].SourceCamera == camera)
-                    return instances[i];
-            }
-            return null;
         }
 
         public void PrepareForLighting(bool xzPlane)
@@ -386,43 +346,6 @@ namespace Light2D
                 var right = transform.TransformPoint(Vector3.Scale(new Vector3(0.5f, LightOrigin.y), size));
                 Gizmos.DrawLine(left, right);
             }
-        }
-
-        public void DrawLightingNow(Vector2 lightCamLocalPos)
-        {
-            var material = _meshRenderer != null ? _meshRenderer.sharedMaterial : null;
-            if (material == null || !material.SetPass(0))
-                return;
-
-            GL.Begin(GL.TRIANGLES);
-            GL.Color(Color * Intensity);
-            for (var i = 0; i < _triangles.Length; i++)
-            {
-                var index = _triangles[i];
-                var vertex = _modelMatrix.MultiplyPoint(_vertices[index]) - (Vector3)lightCamLocalPos;
-                GL.MultiTexCoord(0, _uv0[index]);
-                GL.MultiTexCoord(1, _uv1[index] - lightCamLocalPos);
-                GL.Vertex(vertex);
-            }
-            GL.End();
-        }
-
-        public void DrawLightNormalsNow(Material material)
-        {
-            var sprite = ActiveSprite;
-            if (material == null || sprite == null)
-                return;
-
-            var size = sprite.bounds.size * MeshScale;
-            var center = _modelMatrix.MultiplyPoint3x4(Vector2.Scale((Vector2)LightOrigin, size));
-            material.SetVector("_LightPos", new Vector4(center.x, center.y, LightOrigin.z));
-            if (!material.SetPass(0))
-                return;
-
-            GL.Begin(GL.TRIANGLES);
-            for (var i = 0; i < _triangles.Length; i++)
-                GL.Vertex(_modelMatrix.MultiplyPoint3x4(_vertices[_triangles[i]]));
-            GL.End();
         }
 
         // Exact component comparison; Matrix4x4.operator== is epsilon-based and would miss tiny transform changes.

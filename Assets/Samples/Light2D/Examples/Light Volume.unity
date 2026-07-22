@@ -1085,15 +1085,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: m_LocalScale.x
-      value: 4
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: m_LocalScale.y
-      value: 4
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: m_LocalScale.z
-      value: 4
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1159,6 +1159,10 @@ PrefabInstance:
       propertyPath: Material
       value:
       objectReference: {fileID: 2100000, guid: ab37f3042fbc56e4b9288c3ba9cd32d8, type: 2}
+    - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
+      propertyPath: Radius
+      value: 4
+      objectReference: {fileID: 0}
     - target: {fileID: 2104127587542181660, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: m_Enabled
       value: 0

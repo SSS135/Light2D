@@ -19,7 +19,7 @@ namespace Light2D.Examples
 
         private void Start()
         {
-            _light.transform.localScale = Vector3.one*Random.Range(MinRadius, MaxRadius);
+            _light.Radius = Random.Range(MinRadius, MaxRadius);
             var c = new Vector4(Random.value, Random.value, Random.value, Random.Range(MinLightAlpha, MaxLightAlpha));
             var maxc = Mathf.Max(c.x, c.y, c.z);
             _light.Color = new Color(c.x/maxc, c.y/maxc, c.z/maxc, c.w);

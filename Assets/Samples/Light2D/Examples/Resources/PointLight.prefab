@@ -29,7 +29,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: -40}
-  m_LocalScale: {x: 35, y: 35, z: 35}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -47,11 +47,12 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   Color: {r: 1, g: 1, b: 1, a: 0.5019608}
-  Sprite: {fileID: 21300000, guid: 5ab76b236a24d3d438b5523b794eeea6, type: 3}
+  Sprite: {fileID: 0}
   SortingOrder: 0
   Material: {fileID: 2100000, guid: 04a39e1d85156e34bb45d05db1a5eb00, type: 2}
   LightOrigin: {x: 0, y: 0, z: 1}
   Shape: 0
+  Radius: 35
 --- !u!23 &2104127587542181660
 MeshRenderer:
   m_ObjectHideFlags: 0

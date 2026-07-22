@@ -53,22 +53,6 @@ namespace Light2D
         [Tooltip("Blurs the ambient-light texture each propagation cycle for smoother ambient (default on).")]
         public bool BlurAmbientLight = true;
 
-        [Tooltip("Ambient bounce: how strongly obstacles attenuate the propagated ambient light; higher " +
-                 "darkens faster behind obstacles (default 1.5, the ambient shader's original value).")]
-        public float AmbientObstacleMultiplier = 1.5f;
-
-        [Tooltip("Ambient bounce: constant obstacle attenuation added everywhere, raising how quickly the " +
-                 "ambient fill decays (default 0.1, the ambient shader's original value).")]
-        public float AmbientObstacleAdd = 0.1f;
-
-        [Tooltip("Ambient bounce: how much light-source emission feeds the ambient propagation (default 0.1, " +
-                 "the ambient shader's original value).")]
-        public float AmbientEmissionColorMultiplier = 0.1f;
-
-        [Tooltip("Ambient bounce: neighbor sampling distance in UV space controlling how far ambient light " +
-                 "spreads per propagation step (default 0.01, the ambient shader's original value).")]
-        public float AmbientSamplingDistance = 0.01f;
-
         [Range(0f, 1f)]
         [Tooltip("Ambient bounce tint: how much a colored obstacle tints the indirect ambient fill instead " +
                  "of only darkening it; 0 = off (neutral, existing behavior), 1 = full colored bounce.")]
@@ -196,10 +180,6 @@ namespace Light2D
         private static readonly int LightPosId = Shader.PropertyToID("_LightPos");
         private static readonly int CompositeTexId = Shader.PropertyToID("_CompositeTex");
         private static readonly int CoverageTexId = Shader.PropertyToID("_CoverageTex");
-        private static readonly int AmbientObstacleMulId = Shader.PropertyToID("_ObstacleMul");
-        private static readonly int AmbientObstacleAddId = Shader.PropertyToID("_ObstacleAdd");
-        private static readonly int AmbientEmissionColorMulId = Shader.PropertyToID("_EmissionColorMul");
-        private static readonly int AmbientSamplingDistId = Shader.PropertyToID("_SamplingDist");
         private static readonly int AmbientBounceTintId = Shader.PropertyToID("_AmbientBounceTint");
         private const string DefaultUnlitMode = "SRPDefaultUnlit";
 
@@ -1011,13 +991,9 @@ namespace Light2D
                 return 0;
             using (Light2DProfiling.Ambient.Auto())
             {
-                // Push the exposed ambient-bounce tuning onto the compute material each frame so inspector
-                // edits take effect live (the runtime already mutates this material's textures/vectors below,
-                // so it is the safe-to-mutate instance, not the untouched serialized asset).
-                computeMaterial.SetFloat(AmbientObstacleMulId, AmbientObstacleMultiplier);
-                computeMaterial.SetFloat(AmbientObstacleAddId, AmbientObstacleAdd);
-                computeMaterial.SetFloat(AmbientEmissionColorMulId, AmbientEmissionColorMultiplier);
-                computeMaterial.SetFloat(AmbientSamplingDistId, AmbientSamplingDistance);
+                // Drive only the colored-bounce tint from C# (default 0 = the shader's neutral default, which
+                // materials without a _AmbientBounceTint entry also resolve to). The obstacle/emission/sampling
+                // tuning is left to the material's own serialized values so per-scene ambient tuning is honored.
                 computeMaterial.SetFloat(AmbientBounceTintId, AmbientColoredBounce);
 
                 RunSnapshotPass("Light2D Ambient Emission", _resources.AmbientEmissionTexture, Color.clear,

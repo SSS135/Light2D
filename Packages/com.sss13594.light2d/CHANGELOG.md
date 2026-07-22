@@ -2,6 +2,42 @@
 
 All notable package changes are documented here. This file at the package root is the canonical changelog location.
 
+## [Unreleased]
+
+Light-source authoring, an obstacle preview, and shader modernization on the 2.x
+line; the package version is unchanged.
+
+### Added
+
+- First-class `LightSprite` authoring fields: `LightType` (Point/Spot/Line),
+  `Radius`, `Intensity`, an HDR light color, `Falloff` (edge hardness), `SpotAngle`,
+  and `ShadowQuality`.
+- Procedurally generated light falloff textures — no light bitmaps are shipped —
+  shared, cached, and LRU-bounded across lights with matching parameters. An
+  assigned `Sprite` overrides the generated falloff.
+- `LightSpriteEditor` custom inspector: a Type-led layout with draggable scene
+  handles for radius and the spot cone, and HelpBox warnings with Fix buttons.
+- **Obstacle Preview** editor window (**Window > Light2D > Obstacle Preview**) that
+  renders the live obstacle transmission buffer a `LightingSystem` produces
+  (Built-in in play mode, URP in edit and play mode).
+- Authorable ambient knobs on `LightingSystem` (obstacle multiplier and add,
+  emission multiplier, sampling distance, and iteration count) and an optional
+  colored ambient bounce that lets an obstacle's color tint the indirect fill; off
+  by default.
+
+### Changed
+
+- Light size now comes from the new serialized `LightSprite.Radius` field, baked
+  into the light mesh, instead of `transform.localScale`.
+- Unified the per-sample-count ray-march light shaders `Light2D/Light 20 Points`
+  through `Light2D/Light 90 Points` into a single `Light2D/Light Points` shader
+  driven by a `_PathTrackingSamples` property.
+
+### Removed
+
+- The legacy immediate-mode methods `LightSprite.DrawLightingNow` and
+  `LightSprite.DrawLightNormalsNow`.
+
 ## [2.0.0] - 2026-07-21
 
 Light2D 2.0.0 is the first published release. It converts the legacy

@@ -344,9 +344,9 @@ namespace Light2D.Examples
 
         // The mouse-controlled lantern, authored as ONE hierarchy so a single MouseFollower drives the whole
         // rig. The root "Lantern" (scale 1, one MouseFollower) parents three children: the visible lantern
-        // SpriteRenderer, the halo glow, and a "Light" child carrying the warm LightSprite. The Light child's
-        // OWN localScale carries the light radius (the root stays unit-scaled so it never cascades into the
-        // sprites/halo), and it sits at the root origin so it tracks the lantern exactly.
+        // SpriteRenderer, the halo glow, and a "Light" child carrying the warm LightSprite. The LightSprite's
+        // Radius sizes the light mesh directly (the whole rig stays unit-scaled so nothing cascades into the
+        // sprites/halo), and the Light child sits at the root origin so it tracks the lantern exactly.
         //
         // Parenting the light is safe: the earlier "black covered cave" was caused by the shared PointLight
         // prefab's DANGLING LightSprite.Sprite (no mesh, no emission), not by the parenting. This builder
@@ -372,7 +372,7 @@ namespace Light2D.Examples
             lightInstance.transform.SetParent(lantern.transform, false);            // child of the lantern root
             lightInstance.transform.localPosition = Vector3.zero;                   // at the lantern origin
             lightInstance.transform.localRotation = Quaternion.identity;
-            lightInstance.transform.localScale = Vector3.one * LanternLightRadius;  // radius on the light child
+            lightInstance.transform.localScale = Vector3.one;                       // unit-scaled: size comes from LightSprite.Radius, not the Transform
 
             var randomizer = lightInstance.GetComponentInChildren<LightRandomizer>(true);
             if (randomizer != null)
@@ -387,6 +387,7 @@ namespace Light2D.Examples
                 light.Material = LoadRequired<Material>(LightMaterialGuid, "lantern light material");
                 light.Color = LanternLightColor;
                 light.Owner = lightingSystem;
+                light.Radius = LanternLightRadius;  // size the light mesh via Radius, not the Transform scale
             }
         }
 
