@@ -9,16 +9,20 @@ using Light2D.TestProject.Editor;
 
 namespace Light2D.TestProject.Tests
 {
-    // Spatial visual regression for the authored "Light Volume" sample scene (design §7). The scene is a
-    // large bright world (LightingSystem.DefaultCoverage = 0, so the world baseline shows the raw, full
-    // brightness game image) with a small dark cave carved out by a Shape=Box, Coverage=1 Light2DVolume and
-    // lit only by two torches inside it. Unlike a mean-only gate this test asserts a SPATIAL property: the
-    // bypassed WORLD region (left of the volume) samples bright while the covered CAVE region (inside the
-    // volume) samples dark-with-a-bright-core. A bright cave or a dark world fails the gate — that is the
-    // coverage regression guard, not a threshold to loosen. The PNG artifact is written before any assertion
-    // so a failing run still leaves an image for review. The scene asset is produced by
-    // LightVolumeDemoBuilder; run "Light2D/Samples/Build Light Volume Scene" (or -executeMethod
-    // Light2D.Examples.LightVolumeDemoBuilder.Build) before this test.
+    // Spatial visual regression for the authored "Light Volume" sample scene. The scene is a bright side-view
+    // SQUARE-BLOCK world (LightingSystem.DefaultCoverage = 0, so the above-ground baseline shows the raw,
+    // full-brightness game image: blue sky, sun, clouds, and a grass-topped static Tilemap of 1x1 earth blocks)
+    // with a blocky cave chamber + entrance shaft carved into the terrain — the solid Terrain tiles are a
+    // LightObstacleTilemap, so the lantern casts real block-shaped shadows in the cave rather than filling a
+    // flat box. The cave is covered by a single Shape=Box, Coverage=1 Light2DVolume and lit only by a warm
+    // lantern inside it. Unlike a mean-only gate this test asserts a
+    // SPATIAL property: the bypassed WORLD region (left surface+sky) samples bright while the covered CAVE
+    // region (cave void) samples dark-with-a-bright-core (the lantern). A bright cave or a dark world fails the
+    // gate — that is the coverage regression guard, not a threshold to loosen. For a deterministic capture the
+    // scenario pins the lantern in the cave and disables its MouseFollower so the cursor cannot move it. The PNG
+    // artifact is written before any assertion so a failing run still leaves an image for review. The scene
+    // asset is produced by LightVolumeDemoBuilder; run "Light2D/Samples/Build Light Volume Scene" (or
+    // -executeMethod Light2D.Examples.LightVolumeDemoBuilder.Build) before this test.
     public class LightVolumeVisualSmokeTest
     {
         private const int TargetWidth = 640;
@@ -33,19 +37,24 @@ namespace Light2D.TestProject.Tests
         private const int AmbientCyclesPerFrameRequest = 8;
         private const int ConvergedSampleStreak = 2;
 
-        // Pixel regions sampled from the 640x360 capture. These rectangles are COUPLED to the scene layout
-        // authored by LightVolumeDemoBuilder (orthographic size 5 -> 36 px/world-unit; the cave box is a
-        // 5x5 region centred at world (5, 0), i.e. box pixels x[410,590] y[90,270]). The world rect stays
-        // fully left of the box (raw bright); the cave rect stays inside the box, with the warm torch at the
-        // cave-rect centre so its bright core lands in the central-third max.
-        private static readonly RectInt WorldRegion = new RectInt(20, 40, 310, 280);
-        private static readonly RectInt CaveRegion = new RectInt(425, 105, 150, 150);
+        // Pixel regions sampled from the 640x360 capture, in GetPixels row space (row 0 = bottom, so a world
+        // point maps to px = 320 + wx*36, row = 180 + wy*36 at orthographic size 5 -> 36 px/world-unit). These
+        // rectangles are COUPLED to the square-block cave layout authored by LightVolumeDemoBuilder. The WORLD
+        // rect covers the left surface+sky (world x[-8,-1.06] y[-1.17,+3]) and stays raw bright; the CAVE rect
+        // covers the carved cave void (world x[3.0,6.2] y[-3.0,0.0]) and stays dark, with the pinned lantern at
+        // world (4.6,-1.2) landing in the rect's central third so its warm core drives the central-third max.
+        private static readonly RectInt WorldRegion = new RectInt(32, 138, 250, 150);
+        private static readonly RectInt CaveRegion = new RectInt(428, 72, 115, 108);
 
         // Spatial gates. The bypassed world is raw-bright; the covered cave is mostly dark with a bright
-        // torch core. Do NOT loosen these to accommodate a rendering regression.
-        private const float WorldMinMeanLuminance = 0.6f;
+        // lantern core. Do NOT loosen these to accommodate a rendering regression.
+        private const float WorldMinMeanLuminance = 0.45f;
         private const float CaveMaxMeanLuminance = 0.25f;
         private const float CaveMinCoreLuminance = 0.4f;
+
+        // The lantern is pinned here (and its MouseFollower disabled) for a deterministic capture; it matches
+        // the builder's LanternStartPosition inside the block-world cave chamber.
+        private static readonly Vector3 PinnedLanternPosition = new Vector3(4.6f, -1.2f, 0f);
 
         [UnityTest, Timeout(240000)]
         public IEnumerator LightVolumeSceneRendersBrightWorldAndDarkCave()
@@ -53,7 +62,7 @@ namespace Light2D.TestProject.Tests
 #if UNITY_EDITOR
             IEnumerator run = SampleTestSupport.RunSampleScene(
                 SampleAutomation.LightVolumeSceneName, TargetWidth, TargetHeight, WarmupFrames,
-                AssertVolumeVisualState, SettleAmbientLight);
+                AssertVolumeVisualState, PinLanternAndSettle);
             try
             {
                 while (run.MoveNext())
@@ -71,6 +80,29 @@ namespace Light2D.TestProject.Tests
         }
 
 #if UNITY_EDITOR
+        // Deterministic-capture scenario: pin the single "Lantern" root (whose warm LightSprite is now a child)
+        // in the cave and disable its one MouseFollower (so the batch cursor cannot drag the rig out of the
+        // cave), then run the ambient settle loop so the capture reflects a steady rendered frame. Moving the
+        // root carries the child light with it and refreshes its cull bounds so it stays in the light-source
+        // snapshot.
+        private static IEnumerator PinLanternAndSettle(SampleTestSupport.SampleSceneRunContext context)
+        {
+            GameObject lantern = GameObject.Find("Lantern");
+            Assert.That(lantern, Is.Not.Null, "The Light Volume scene has no 'Lantern' GameObject to pin.");
+
+            var follower = lantern.GetComponent<Light2D.Examples.MouseFollower>();
+            if (follower != null)
+                follower.enabled = false;
+
+            Vector3 position = lantern.transform.position;
+            lantern.transform.position = new Vector3(PinnedLanternPosition.x, PinnedLanternPosition.y, position.z);
+            yield return null;
+
+            IEnumerator settle = SettleAmbientLight(context);
+            while (settle.MoveNext())
+                yield return settle.Current;
+        }
+
         // Adaptive ambient convergence: sample the rendered mean luminance periodically and stop once it is
         // stable or at the frame cap; the full curve is logged so a bright plateau proves steady-state
         // emission rather than insufficient settling.
@@ -136,16 +168,16 @@ namespace Light2D.TestProject.Tests
                     "The bypassed world region should read bright (raw game image); a dim world means coverage " +
                     "is being applied where DefaultCoverage = 0 should pass the raw image through. " + worldStats);
 
-                // The covered cave (Coverage = 1) is mostly dark: Light2D applies and there is little light
-                // away from the torches.
+                // The covered cave void (Coverage = 1) is mostly dark: Light2D applies and there is little
+                // light away from the lantern.
                 Assert.That(caveStats.MeanLuminance, Is.LessThan(CaveMaxMeanLuminance),
-                    "The covered cave region should read dark overall; a bright cave means the coverage volume " +
-                    "is not enabling Light2D over the region or a torch is flooding it. " + caveStats);
+                    "The covered cave void should read dark overall; a bright cave means the Box-coverage " +
+                    "volume is not enabling Light2D over the cave or the lantern is flooding it. " + caveStats);
 
-                // ...but a torch keeps a bright core inside the cave, proving local lighting is present.
+                // ...but the lantern keeps a bright core inside the cave, proving local lighting is present.
                 Assert.That(caveStats.CentralThirdMaxLuminance, Is.GreaterThan(CaveMinCoreLuminance),
-                    "The cave should keep a bright torch core in its centre; a missing core means the local " +
-                    "lights are not being composited inside the coverage region. " + caveStats);
+                    "The cave should keep a bright lantern core in its centre; a missing core means the local " +
+                    "light is not being composited inside the coverage region. " + caveStats);
             }
             finally
             {
