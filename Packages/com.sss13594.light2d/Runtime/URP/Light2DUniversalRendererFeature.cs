@@ -20,14 +20,6 @@ namespace Light2D
         {
             [Tooltip("Render event used to compose Light2D over the camera color.")]
             public RenderPassEvent RenderPassEvent = RenderPassEvent.AfterRenderingTransparents;
-
-            [Min(0)]
-            [Tooltip("Extra ambient propagation steps when a camera context is created or resized.")]
-            public int AmbientWarmupCycles = 8;
-
-            [Min(1)]
-            [Tooltip("Maximum ambient propagation steps recorded in one frame.")]
-            public int MaximumAmbientCyclesPerFrame = 16;
         }
 
         [SerializeField] private FeatureSettings _settings = new FeatureSettings();
@@ -66,7 +58,7 @@ namespace Light2D
             Light2DPass pass;
             if (!_passes.TryGetValue(lighting, out pass))
             {
-                pass = new Light2DPass(_contexts, _settings, lighting, WarnOnce);
+                pass = new Light2DPass(_contexts, lighting, WarnOnce);
                 pass.renderPassEvent = _settings.RenderPassEvent;
                 pass.requiresIntermediateTexture = true;
                 _passes.Add(lighting, pass);
@@ -514,15 +506,29 @@ namespace Light2D
             // cloned URP ambient material each frame so it matches the Built-in backend; default 0 = the shader's
             // neutral default. Obstacle/emission/sampling tuning is left to the material's own serialized values.
             private static readonly int AmbientBounceTint = Shader.PropertyToID("_AmbientBounceTint");
-            private static readonly GlobalKeyword HdrKeyword = new GlobalKeyword("HDR");
-            private static readonly GlobalKeyword XzKeyword = new GlobalKeyword("LIGHT2D_XZ_PLANE");
-            private static readonly GlobalKeyword XyKeyword = new GlobalKeyword("LIGHT2D_XY_PLANE");
-            private static readonly GlobalKeyword PerspectiveKeyword = new GlobalKeyword("PERSPECTIVE_CAMERA");
-            private static readonly GlobalKeyword OrthographicKeyword = new GlobalKeyword("ORTHOGRAPHIC_CAMERA");
-            private const long MaximumLightTexturePixels = 16L * 1024L * 1024L;
-
+            // URP-parity material "feel" knobs, mirrored from the Built-in LightingSystem push. Pushed onto the
+            // cloned URP materials only when the matching Override bool is set (anti-clobber); otherwise the
+            // clone keeps its serialized-source value. Names match the shared shader property identifiers.
+            private static readonly int ObstacleMul = Shader.PropertyToID("_ObstacleMul");
+            private static readonly int ObstacleAdd = Shader.PropertyToID("_ObstacleAdd");
+            private static readonly int EmissionColorMul = Shader.PropertyToID("_EmissionColorMul");
+            private static readonly int SamplingDist = Shader.PropertyToID("_SamplingDist");
+            private static readonly int AmbientAdaptSpeed = Shader.PropertyToID("_AmbientAdaptSpeed");
+            private static readonly int LightMul = Shader.PropertyToID("_LightMul");
+            private static readonly int LightSourcesMul = Shader.PropertyToID("_LightSourcesMul");
+            private static readonly int AdditiveLightPow = Shader.PropertyToID("_AdditiveLightPow");
+            private static readonly int AdditiveLightAdd = Shader.PropertyToID("_AdditiveLightAdd");
+            private static readonly int Distance = Shader.PropertyToID("_Distance");
+            // Use GlobalKeyword.Create (not `new GlobalKeyword`) so the keyword is registered if no declaring
+            // shader has been loaded yet. `new GlobalKeyword(name)` only references an existing global keyword and
+            // logs "Global keyword X doesn't exist" when the first URP frame runs before any Light2D shader is
+            // resident (e.g. an isolated test scene) - Create() registers and returns the same shared keyword.
+            private static readonly GlobalKeyword HdrKeyword = GlobalKeyword.Create("HDR");
+            private static readonly GlobalKeyword XzKeyword = GlobalKeyword.Create("LIGHT2D_XZ_PLANE");
+            private static readonly GlobalKeyword XyKeyword = GlobalKeyword.Create("LIGHT2D_XY_PLANE");
+            private static readonly GlobalKeyword PerspectiveKeyword = GlobalKeyword.Create("PERSPECTIVE_CAMERA");
+            private static readonly GlobalKeyword OrthographicKeyword = GlobalKeyword.Create("ORTHOGRAPHIC_CAMERA");
             private readonly Dictionary<LightingSystem, CameraContext> _contexts;
-            private readonly FeatureSettings _settings;
             private readonly List<LightSprite> _lightSprites = new List<LightSprite>();
             // Register-and-draw snapshots captured on the main thread in RecordRenderGraph and read by the
             // raster render funcs. Obstacles/ambient/sources each own a list; the normals pass reuses the
@@ -536,11 +542,10 @@ namespace Light2D
             private readonly LightingSystem _lighting;
             private readonly Action<Camera, LightingSystem, string> _warnOnce;
 
-            internal Light2DPass(Dictionary<LightingSystem, CameraContext> contexts, FeatureSettings settings,
+            internal Light2DPass(Dictionary<LightingSystem, CameraContext> contexts,
                 LightingSystem lighting, Action<Camera, LightingSystem, string> warnOnce)
             {
                 _contexts = contexts;
-                _settings = settings;
                 _lighting = lighting;
                 _warnOnce = warnOnce;
                 profilingSampler = new ProfilingSampler("Light2D URP");
@@ -588,7 +593,7 @@ namespace Light2D
                         context = new CameraContext(_lighting);
                         _contexts.Add(_lighting, context);
                     }
-                    contextIsReady = context.ValidateAndUpdate(_settings.AmbientWarmupCycles);
+                    contextIsReady = context.ValidateAndUpdate(_lighting.AmbientWarmupCycles);
                 }
                 if (!contextIsReady)
                     return;
@@ -710,6 +715,11 @@ namespace Light2D
                 TextureHandle finalSources = sources;
                 if (_lighting.BlurLightSources && context.SourceBlurMaterial != null)
                 {
+                    // URP parity for the blur distance knob (mirrors LightingSystem's Built-in blur push).
+                    // Anti-clobber: only when OverrideBlur is set; otherwise the cloned blur material keeps its
+                    // serialized _Distance value.
+                    if (_lighting.OverrideBlur)
+                        context.SourceBlurMaterial.SetFloat(Distance, _lighting.BlurDistance);
                     int blurWidth = _lighting.EnableNormalMapping ? lightWidth : lightWidth * 2;
                     int blurHeight = _lighting.EnableNormalMapping ? lightHeight : lightHeight * 2;
                     finalSources = CreateTexture(renderGraph, blurWidth, blurHeight, lightFormat, FilterMode.Bilinear,
@@ -731,7 +741,7 @@ namespace Light2D
                     {
                         // Both ambient history handles are reallocated together on a descriptor change.
                         if (context.EnsureHistory(historyDescriptor, _lighting.LightTexturesFilterMode,
-                                _settings.AmbientWarmupCycles))
+                                _lighting.AmbientWarmupCycles))
                             historyReallocations = 2;
                     }
                     TextureHandle ambientEmission = CreateTexture(renderGraph, sizes.Extended.x, sizes.Extended.y,
@@ -741,7 +751,7 @@ namespace Light2D
                     AddDrawPass(renderGraph, "Light2D Ambient Emission", Light2DProfiling.Ambient, ambientEmission,
                         _ambientSnapshot, ambientPass, extendedView, extendedProjection, cameraView, cameraProjection,
                         Color.clear, context, false, default(TextureHandle), default(TextureHandle), black);
-                    context.ResetHistoryForUnsupportedTransform(camera, _settings.AmbientWarmupCycles);
+                    context.ResetHistoryForUnsupportedTransform(camera, _lighting.AmbientWarmupCycles);
                     ambient = RecordAmbient(renderGraph, context, obstacles, ambientEmission, sizes, black,
                         extendedCamera.Position, extendedCamera.OrthographicSize, out ambientCycles);
                 }
@@ -815,9 +825,26 @@ namespace Light2D
                 // the cloned material's own serialized values so per-scene ambient tuning is honored.
                 context.AmbientMaterial.SetFloat(AmbientBounceTint, _lighting.AmbientColoredBounce);
 
+                // URP parity for the ambient "feel" knobs (mirrors LightingSystem's Built-in RenderAmbientLight
+                // push). Anti-clobber: only when the user opts in via OverrideAmbientFeel; otherwise the cloned
+                // compute material keeps its serialized obstacle/emission/sampling values (CRC-gated CloneMaterial).
+                if (_lighting.OverrideAmbientFeel)
+                {
+                    context.AmbientMaterial.SetFloat(ObstacleMul, _lighting.AmbientObstacleMul);
+                    context.AmbientMaterial.SetFloat(ObstacleAdd, _lighting.AmbientObstacleAdd);
+                    context.AmbientMaterial.SetFloat(EmissionColorMul, _lighting.AmbientEmissionMul);
+                    context.AmbientMaterial.SetFloat(SamplingDist, _lighting.AmbientSamplingDistance);
+                    context.AmbientMaterial.SetFloat(AmbientAdaptSpeed, _lighting.AmbientAdaptSpeed);
+                }
+                // URP parity for the ambient-blur distance knob (mirrors the Built-in ambient blur push). Pushed
+                // once per frame before the propagation loop, which reuses AmbientBlurMaterial each cycle. Anti-
+                // clobber: only when OverrideBlur is set; otherwise the clone keeps its serialized _Distance.
+                if (_lighting.OverrideBlur && context.AmbientBlurMaterial != null)
+                    context.AmbientBlurMaterial.SetFloat(Distance, _lighting.BlurDistance);
+
                 context.WarmupCycles = AddWithoutOverflow(context.WarmupCycles,
                     _lighting.ConsumePendingAmbientLightCycles());
-                int maximumCycles = Mathf.Max(1, _settings.MaximumAmbientCyclesPerFrame);
+                int maximumCycles = Mathf.Max(1, _lighting.MaxAmbientCyclesPerFrame);
                 // Base propagation iterations come from the exposed AmbientIterations (default 1 = the original
                 // single-step behavior), clamped to the per-frame maximum; queued warmup cycles fill whatever
                 // budget remains. At AmbientIterations=1 this is identical to the previous 1 + warmup formula.
@@ -838,7 +865,7 @@ namespace Light2D
                     if (planarDelta.magnitude > 2f * extendedOrthographicSize)
                     {
                         context.HistoryNeedsClear = true;
-                        context.WarmupCycles = Mathf.Max(context.WarmupCycles, _settings.AmbientWarmupCycles);
+                        context.WarmupCycles = Mathf.Max(context.WarmupCycles, _lighting.AmbientWarmupCycles);
                     }
                     else
                     {
@@ -1169,6 +1196,16 @@ namespace Light2D
                     data.Ambient = ambient;
                     data.Sources = sources;
                     data.Material = context.OverlayMaterial;
+                    // URP parity for the overlay "look" knobs (mirrors LightingSystem's Built-in overlay push).
+                    // Anti-clobber: only when OverrideOverlayLook is set; otherwise the cloned overlay material
+                    // keeps its serialized brightness/bloom values (CRC-gated CloneMaterial preserves them).
+                    if (_lighting.OverrideOverlayLook)
+                    {
+                        context.OverlayMaterial.SetFloat(LightMul, _lighting.LightBrightness);
+                        context.OverlayMaterial.SetFloat(LightSourcesMul, _lighting.LightSourcesBrightness);
+                        context.OverlayMaterial.SetFloat(AdditiveLightPow, _lighting.BloomPower);
+                        context.OverlayMaterial.SetFloat(AdditiveLightAdd, _lighting.BloomAdd);
+                    }
                     data.Hdr = hdrActive;
                     data.ExtendedScale = new Vector2(sizes.Small.x / (float)sizes.Extended.x,
                         sizes.Small.y / (float)sizes.Extended.y);
@@ -1339,8 +1376,8 @@ namespace Light2D
                 long extendedHeight = (long)sizes.Extended.y * aa;
                 if (extendedWidth > maximumSize || extendedHeight > maximumSize ||
                     descriptor.width > maximumSize || descriptor.height > maximumSize ||
-                    extendedWidth * extendedHeight > MaximumLightTexturePixels ||
-                    (long)descriptor.width * descriptor.height > MaximumLightTexturePixels)
+                    extendedWidth * extendedHeight > lighting.MaxLightTexturePixels ||
+                    (long)descriptor.width * descriptor.height > lighting.MaxLightTexturePixels)
                 {
                     reason = "Light2D requested textures exceed the GPU size limit or the package pixel budget.";
                     return false;

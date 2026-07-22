@@ -25,6 +25,31 @@ namespace Light2D
         private SerializedProperty _enableNormalMapping;
         private SerializedProperty _affectOnlyThisCamera;
         private SerializedProperty _xzPlane;
+        private SerializedProperty _ambientColoredBounce;
+        private SerializedProperty _ambientIterations;
+        private SerializedProperty _defaultCoverage;
+        private SerializedProperty _maxAmbientCyclesPerFrame;
+        private SerializedProperty _ambientWarmupCycles;
+        private SerializedProperty _maxQueuedAmbientCycles;
+        private SerializedProperty _maxLightTexturePixels;
+        private SerializedProperty _overrideOverlayLook;
+        private SerializedProperty _lightBrightness;
+        private SerializedProperty _lightSourcesBrightness;
+        private SerializedProperty _bloomPower;
+        private SerializedProperty _bloomAdd;
+        private SerializedProperty _overrideAmbientFeel;
+        private SerializedProperty _ambientObstacleMul;
+        private SerializedProperty _ambientObstacleAdd;
+        private SerializedProperty _ambientEmissionMul;
+        private SerializedProperty _ambientSamplingDistance;
+        private SerializedProperty _ambientAdaptSpeed;
+        private SerializedProperty _overrideBlur;
+        private SerializedProperty _blurDistance;
+
+        private bool _showOverlayLook;
+        private bool _showAmbientFeel;
+        private bool _showBlur;
+        private bool _showAdvancedLimits;
 
         void OnEnable()
         {
@@ -45,6 +70,26 @@ namespace Light2D
             _enableNormalMapping = serializedObject.FindProperty("EnableNormalMapping");
             _affectOnlyThisCamera = serializedObject.FindProperty("AffectOnlyThisCamera");
             _xzPlane = serializedObject.FindProperty("XZPlane");
+            _ambientColoredBounce = serializedObject.FindProperty("AmbientColoredBounce");
+            _ambientIterations = serializedObject.FindProperty("AmbientIterations");
+            _defaultCoverage = serializedObject.FindProperty("DefaultCoverage");
+            _maxAmbientCyclesPerFrame = serializedObject.FindProperty("MaxAmbientCyclesPerFrame");
+            _ambientWarmupCycles = serializedObject.FindProperty("AmbientWarmupCycles");
+            _maxQueuedAmbientCycles = serializedObject.FindProperty("MaxQueuedAmbientCycles");
+            _maxLightTexturePixels = serializedObject.FindProperty("MaxLightTexturePixels");
+            _overrideOverlayLook = serializedObject.FindProperty("OverrideOverlayLook");
+            _lightBrightness = serializedObject.FindProperty("LightBrightness");
+            _lightSourcesBrightness = serializedObject.FindProperty("LightSourcesBrightness");
+            _bloomPower = serializedObject.FindProperty("BloomPower");
+            _bloomAdd = serializedObject.FindProperty("BloomAdd");
+            _overrideAmbientFeel = serializedObject.FindProperty("OverrideAmbientFeel");
+            _ambientObstacleMul = serializedObject.FindProperty("AmbientObstacleMul");
+            _ambientObstacleAdd = serializedObject.FindProperty("AmbientObstacleAdd");
+            _ambientEmissionMul = serializedObject.FindProperty("AmbientEmissionMul");
+            _ambientSamplingDistance = serializedObject.FindProperty("AmbientSamplingDistance");
+            _ambientAdaptSpeed = serializedObject.FindProperty("AmbientAdaptSpeed");
+            _overrideBlur = serializedObject.FindProperty("OverrideBlur");
+            _blurDistance = serializedObject.FindProperty("BlurDistance");
         }
 
         public override void OnInspectorGUI()
@@ -107,14 +152,83 @@ namespace Light2D
             EditorGUILayout.PropertyField(_ambientLightBlurMaterial, new GUIContent("   Ambient Light Blur Material"));
             GUI.enabled = oldEnabled;
             EditorGUILayout.PropertyField(_ambientLightComputeMaterial, new GUIContent("   Ambient Light Compute Material"));
+            EditorGUILayout.PropertyField(_ambientColoredBounce, new GUIContent("   Colored Bounce"));
+            EditorGUILayout.PropertyField(_ambientIterations, new GUIContent("   Ambient Iterations"));
             GUI.enabled = normalGuiEnableState;
 
+            EditorGUILayout.PropertyField(_defaultCoverage, new GUIContent("Default Coverage"));
+
             EditorGUILayout.PropertyField(_lightOverlayMaterial, new GUIContent("Light Overlay Material"));
+
+            DrawOverrideGroups(normalGuiEnableState);
+            DrawAdvancedLimits();
 
             DrawSizeEstimate(cam);
 
             // Apply changes to the serializedProperty - always do this in the end of OnInspectorGUI.
             serializedObject.ApplyModifiedProperties();
+        }
+
+        private void DrawOverrideGroups(bool baseEnabled)
+        {
+            // baseEnabled mirrors the surrounding GUI.enabled (Application.isPlaying) guard.
+            _showOverlayLook = EditorGUILayout.BeginFoldoutHeaderGroup(_showOverlayLook, "Overlay Look");
+            if (_showOverlayLook)
+            {
+                EditorGUILayout.PropertyField(_overrideOverlayLook, new GUIContent("Override Overlay Look"));
+                bool restore = GUI.enabled;
+                if (!_overrideOverlayLook.boolValue)
+                    GUI.enabled = false;
+                EditorGUILayout.PropertyField(_lightBrightness, new GUIContent("   Light Brightness"));
+                EditorGUILayout.PropertyField(_lightSourcesBrightness, new GUIContent("   Light Sources Brightness"));
+                EditorGUILayout.PropertyField(_bloomPower, new GUIContent("   Bloom Power"));
+                EditorGUILayout.PropertyField(_bloomAdd, new GUIContent("   Bloom Add"));
+                GUI.enabled = restore;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            _showAmbientFeel = EditorGUILayout.BeginFoldoutHeaderGroup(_showAmbientFeel, "Ambient Feel");
+            if (_showAmbientFeel)
+            {
+                EditorGUILayout.PropertyField(_overrideAmbientFeel, new GUIContent("Override Ambient Feel"));
+                bool restore = GUI.enabled;
+                if (!_overrideAmbientFeel.boolValue)
+                    GUI.enabled = false;
+                EditorGUILayout.PropertyField(_ambientObstacleMul, new GUIContent("   Obstacle Mul"));
+                EditorGUILayout.PropertyField(_ambientObstacleAdd, new GUIContent("   Obstacle Add"));
+                EditorGUILayout.PropertyField(_ambientEmissionMul, new GUIContent("   Emission Mul"));
+                EditorGUILayout.PropertyField(_ambientSamplingDistance, new GUIContent("   Sampling Distance"));
+                EditorGUILayout.PropertyField(_ambientAdaptSpeed, new GUIContent("   Adapt Speed"));
+                GUI.enabled = restore;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            _showBlur = EditorGUILayout.BeginFoldoutHeaderGroup(_showBlur, "Blur");
+            if (_showBlur)
+            {
+                EditorGUILayout.PropertyField(_overrideBlur, new GUIContent("Override Blur"));
+                bool restore = GUI.enabled;
+                if (!_overrideBlur.boolValue)
+                    GUI.enabled = false;
+                EditorGUILayout.PropertyField(_blurDistance, new GUIContent("   Blur Distance"));
+                GUI.enabled = restore;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+
+            GUI.enabled = baseEnabled;
+        }
+
+        private void DrawAdvancedLimits()
+        {
+            _showAdvancedLimits = EditorGUILayout.BeginFoldoutHeaderGroup(_showAdvancedLimits, "Advanced ▸ Limits");
+            if (_showAdvancedLimits)
+            {
+                EditorGUILayout.PropertyField(_maxAmbientCyclesPerFrame, new GUIContent("Max Cycles / Frame"));
+                EditorGUILayout.PropertyField(_ambientWarmupCycles, new GUIContent("Warm-up Cycles"));
+                EditorGUILayout.PropertyField(_maxQueuedAmbientCycles, new GUIContent("Max Queued Cycles"));
+                EditorGUILayout.PropertyField(_maxLightTexturePixels, new GUIContent("Max Light Texture Pixels"));
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
         }
 
         private void DrawSizeEstimate(Camera camera)

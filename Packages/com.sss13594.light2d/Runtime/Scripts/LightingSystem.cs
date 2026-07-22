@@ -25,12 +25,25 @@ namespace Light2D
     [HelpURL(Light2DDocs.HelpUrl)]
     public class LightingSystem : MonoBehaviour
     {
-        private const int MaximumAmbientCyclesPerFrame = 8;
-        private const int MaximumQueuedAmbientCycles = 64;
-        private const long MaximumOwnedTexturePixels = 16L * 1024L * 1024L;
-        // Warmup cycles queued when the ambient history is invalidated by a rotation/zoom/aspect change or a
-        // teleport; mirrors the resource-change warmup so the history re-propagates from the cleared state.
-        private const int AmbientHistoryResetWarmupCycles = 100;
+        [Min(1)]
+        [Tooltip("Maximum queued ambient warmup cycles processed in a single frame; caps the per-frame " +
+                 "propagation cost while the ambient history catches up (default 8).")]
+        public int MaxAmbientCyclesPerFrame = 8;
+
+        [Min(1)]
+        [Tooltip("Maximum number of ambient warmup cycles that can be queued at once; a longer queue lets the " +
+                 "ambient history re-propagate from further back at the cost of more catch-up frames (default 64).")]
+        public int MaxQueuedAmbientCycles = 64;
+
+        [Tooltip("Upper bound on the total pixels of the internal light textures; a frame whose requested " +
+                 "textures exceed this budget is skipped rather than allocated (default 16M).")]
+        public long MaxLightTexturePixels = 16L * 1024L * 1024L;
+
+        [Min(0)]
+        [Tooltip("Warmup cycles queued when the ambient history is invalidated by a rotation/zoom/aspect " +
+                 "change or a teleport; mirrors the resource-change warmup so the history re-propagates from " +
+                 "the cleared state (default 100).")]
+        public int AmbientWarmupCycles = 100;
 
         [Tooltip("World size of one lighting-texture pixel; larger values lower the lighting resolution " +
                  "and cost (default 0.05).")]
@@ -62,6 +75,72 @@ namespace Light2D
         [Tooltip("Ambient bounce: base propagation iterations run each frame; higher spreads ambient farther " +
                  "per frame at more cost (default 1, matching the original single-step behavior).")]
         public int AmbientIterations = 1;
+
+        [Header("Overlay Look")]
+        [Tooltip("Enables the Overlay Look overrides below. When off, the cloned overlay material keeps the " +
+                 "values from its serialized source, so per-scene tuned materials are preserved (default off).")]
+        public bool OverrideOverlayLook = false;
+
+        [Min(0)]
+        [Tooltip("Overlay: overall brightness applied to the composited lighting result " +
+                 "(shader _LightMul, default 2).")]
+        public float LightBrightness = 2f;
+
+        [Min(0)]
+        [Tooltip("Overlay: brightness applied to the light-sources contribution " +
+                 "(shader _LightSourcesMul, default 1).")]
+        public float LightSourcesBrightness = 1f;
+
+        [Min(0)]
+        [Tooltip("Overlay: exponent shaping the additive bloom falloff of bright lights " +
+                 "(shader _AdditiveLightPow, default 4).")]
+        public float BloomPower = 4f;
+
+        [Min(0)]
+        [Tooltip("Overlay: additive bloom offset added to bright lights " +
+                 "(shader _AdditiveLightAdd, default 0.15).")]
+        public float BloomAdd = 0.15f;
+
+        [Header("Ambient Feel")]
+        [Tooltip("Enables the Ambient Feel overrides below. When off, the cloned ambient compute material " +
+                 "keeps the values from its serialized source, so per-scene tuned materials are preserved " +
+                 "(default off).")]
+        public bool OverrideAmbientFeel = false;
+
+        [Min(0)]
+        [Tooltip("Ambient: how strongly obstacles attenuate the ambient propagation " +
+                 "(shader _ObstacleMul, default 1.5).")]
+        public float AmbientObstacleMul = 1.5f;
+
+        [Min(0)]
+        [Tooltip("Ambient: additive term applied alongside the obstacle attenuation " +
+                 "(shader _ObstacleAdd, default 0.1).")]
+        public float AmbientObstacleAdd = 0.1f;
+
+        [Min(0)]
+        [Tooltip("Ambient: emission strength contributed by ambient emitters " +
+                 "(shader _EmissionColorMul, default 0.1).")]
+        public float AmbientEmissionMul = 0.1f;
+
+        [Min(0)]
+        [Tooltip("Ambient: world-space distance the propagation samples each cycle " +
+                 "(shader _SamplingDist, default 0.01).")]
+        public float AmbientSamplingDistance = 0.01f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Ambient: how quickly the ambient history adapts toward the new state each cycle " +
+                 "(shader _AmbientAdaptSpeed, default 0.2).")]
+        public float AmbientAdaptSpeed = 0.2f;
+
+        [Header("Blur")]
+        [Tooltip("Enables the Blur override below. When off, the cloned blur material(s) keep the values " +
+                 "from their serialized source, so per-scene tuned materials are preserved (default off).")]
+        public bool OverrideBlur = false;
+
+        [Min(0)]
+        [Tooltip("Blur: sampling distance of the light-sources and ambient blur passes " +
+                 "(shader _Distance, default 2.5).")]
+        public float BlurDistance = 2.5f;
 
         [Tooltip("Uses a half-float (ARGBHalf) light buffer for higher dynamic range when the platform " +
                  "supports it (default on).")]
@@ -181,6 +260,16 @@ namespace Light2D
         private static readonly int CompositeTexId = Shader.PropertyToID("_CompositeTex");
         private static readonly int CoverageTexId = Shader.PropertyToID("_CoverageTex");
         private static readonly int AmbientBounceTintId = Shader.PropertyToID("_AmbientBounceTint");
+        private static readonly int LightMulId = Shader.PropertyToID("_LightMul");
+        private static readonly int LightSourcesMulId = Shader.PropertyToID("_LightSourcesMul");
+        private static readonly int AdditiveLightPowId = Shader.PropertyToID("_AdditiveLightPow");
+        private static readonly int AdditiveLightAddId = Shader.PropertyToID("_AdditiveLightAdd");
+        private static readonly int ObstacleMulId = Shader.PropertyToID("_ObstacleMul");
+        private static readonly int ObstacleAddId = Shader.PropertyToID("_ObstacleAdd");
+        private static readonly int EmissionColorMulId = Shader.PropertyToID("_EmissionColorMul");
+        private static readonly int SamplingDistId = Shader.PropertyToID("_SamplingDist");
+        private static readonly int AmbientAdaptSpeedId = Shader.PropertyToID("_AmbientAdaptSpeed");
+        private static readonly int DistanceId = Shader.PropertyToID("_Distance");
         private const string DefaultUnlitMode = "SRPDefaultUnlit";
 
         public static LightingSystem Instance
@@ -478,7 +567,7 @@ namespace Light2D
                     enableAmbientLight: EnableAmbientLight,
                     obstacleAntialiasing: LightObstaclesAntialiasing,
                     normalMapping: BuiltInNormalMappingEnabled,
-                    maximumTexturePixels: MaximumOwnedTexturePixels);
+                    maximumTexturePixels: MaxLightTexturePixels);
                 if (!TryCreateFrameConfig(_camera, descriptor, settings, out frameConfig,
                         out var validationError))
                 {
@@ -564,7 +653,7 @@ namespace Light2D
                 _obstaclesPostProcessor = new ObstacleCameraPostPorcessor();
             _initialized = true;
             if (resourcesChanged && EnableAmbientLight)
-                LoopAmbientLight(100);
+                LoopAmbientLight(AmbientWarmupCycles);
             return true;
         }
 
@@ -937,6 +1026,10 @@ namespace Light2D
                 try
                 {
                     _resources.LightSourcesTexture.filterMode = FilterMode.Bilinear;
+                    // Anti-clobber: only override the blur distance when the user opts in via OverrideBlur;
+                    // otherwise the cloned blur material keeps the value from its serialized source.
+                    if (OverrideBlur && blurMaterial != null)
+                        blurMaterial.SetFloat(DistanceId, BlurDistance);
                     blurMaterial.mainTexture = _resources.LightSourcesTexture;
                     Graphics.Blit(null, _resources.BlurredLightTexture, blurMaterial);
                     if (LightTexturesFilterMode == FilterMode.Point)
@@ -981,7 +1074,7 @@ namespace Light2D
             if (_resources.PreviousAmbientTexture != null)
                 ClearTexture(_resources.PreviousAmbientTexture);
             _oldPos = _currPos; // zero this frame's reprojection shift
-            LoopAmbientLight(AmbientHistoryResetWarmupCycles);
+            LoopAmbientLight(AmbientWarmupCycles);
         }
 
         private int RenderAmbientLight(in Light2DCameraGeometry geometry)
@@ -995,6 +1088,17 @@ namespace Light2D
                 // materials without a _AmbientBounceTint entry also resolve to). The obstacle/emission/sampling
                 // tuning is left to the material's own serialized values so per-scene ambient tuning is honored.
                 computeMaterial.SetFloat(AmbientBounceTintId, AmbientColoredBounce);
+                // Anti-clobber: only push the exposed ambient "feel" knobs when the user opts in via
+                // OverrideAmbientFeel. Otherwise the cloned compute material keeps the obstacle/emission/
+                // sampling values copied from its serialized source, preserving per-scene ambient tuning.
+                if (OverrideAmbientFeel)
+                {
+                    computeMaterial.SetFloat(ObstacleMulId, AmbientObstacleMul);
+                    computeMaterial.SetFloat(ObstacleAddId, AmbientObstacleAdd);
+                    computeMaterial.SetFloat(EmissionColorMulId, AmbientEmissionMul);
+                    computeMaterial.SetFloat(SamplingDistId, AmbientSamplingDistance);
+                    computeMaterial.SetFloat(AmbientAdaptSpeedId, AmbientAdaptSpeed);
+                }
 
                 RunSnapshotPass("Light2D Ambient Emission", _resources.AmbientEmissionTexture, Color.clear,
                     geometry, _ambientSnapshot, DefaultUnlitMode);
@@ -1020,6 +1124,10 @@ namespace Light2D
                     Graphics.Blit(null, _resources.AmbientTexture, computeMaterial);
                     if (BlurAmbientLight && _resources.AmbientLightBlurMaterial != null)
                     {
+                        // Anti-clobber: only override the blur distance when the user opts in via OverrideBlur;
+                        // otherwise the cloned blur material keeps the value from its serialized source.
+                        if (OverrideBlur && _resources.AmbientLightBlurMaterial != null)
+                            _resources.AmbientLightBlurMaterial.SetFloat(DistanceId, BlurDistance);
                         _resources.AmbientLightBlurMaterial.mainTexture = _resources.AmbientTexture;
                         Graphics.Blit(null, _resources.PreviousAmbientTexture, _resources.AmbientLightBlurMaterial);
                         Swap(ref _resources.PreviousAmbientTexture, ref _resources.AmbientTexture);
@@ -1056,6 +1164,16 @@ namespace Light2D
                     ? _resources.BlurredLightTexture
                     : _resources.LightSourcesTexture;
                 var overlay = _resources.LightOverlayMaterial;
+                // Anti-clobber: only push the exposed overlay "feel" knobs when the user opts in via
+                // OverrideOverlayLook. Otherwise the cloned material keeps the values copied from its
+                // serialized source, preserving per-scene tuned overlay materials bit-for-bit.
+                if (OverrideOverlayLook)
+                {
+                    overlay.SetFloat(LightMulId, LightBrightness);
+                    overlay.SetFloat(LightSourcesMulId, LightSourcesBrightness);
+                    overlay.SetFloat(AdditiveLightPowId, BloomPower);
+                    overlay.SetFloat(AdditiveLightAddId, BloomAdd);
+                }
                 overlay.SetTexture(AmbientLightTexId, EnableAmbientLight ? _resources.AmbientTexture : null);
                 overlay.SetTexture(LightSourcesTexId, lightSources);
                 overlay.SetTexture(GameTexId, src);
@@ -1131,8 +1249,8 @@ namespace Light2D
         {
             if (!EnableAmbientLight || cycles <= 0)
                 return;
-            _aditionalAmbientLightCycles = Mathf.Min(MaximumQueuedAmbientCycles,
-                _aditionalAmbientLightCycles + Mathf.Min(cycles, MaximumQueuedAmbientCycles));
+            _aditionalAmbientLightCycles = Mathf.Min(MaxQueuedAmbientCycles,
+                _aditionalAmbientLightCycles + Mathf.Min(cycles, MaxQueuedAmbientCycles));
         }
 
         public int ConsumePendingAmbientLightCycles()
@@ -1142,7 +1260,7 @@ namespace Light2D
                 _aditionalAmbientLightCycles = 0;
                 return 0;
             }
-            int cycles = Mathf.Min(MaximumAmbientCyclesPerFrame, Mathf.Max(0, _aditionalAmbientLightCycles));
+            int cycles = Mathf.Min(MaxAmbientCyclesPerFrame, Mathf.Max(0, _aditionalAmbientLightCycles));
             _aditionalAmbientLightCycles -= cycles;
             return cycles;
         }

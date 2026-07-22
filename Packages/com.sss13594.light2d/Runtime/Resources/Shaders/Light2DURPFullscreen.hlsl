@@ -4,6 +4,7 @@
 #include "Light2DURPCommon.hlsl"
 float4 _BlitScaleBias;
 half _AmbientBounceTint; // colored ambient bounce strength (0 = existing behavior, unchanged)
+half _AmbientAdaptSpeed; // ambient temporal blend factor (0.2 = existing behavior, unchanged)
 
 struct Light2DFullscreenAttributes
 {
@@ -107,7 +108,7 @@ half4 Light2DAmbientFrag(Light2DFullscreenVaryings input) : SV_Target
     // indirect fill. _AmbientBounceTint defaults to 0, so lerp(...,0) is a bit-exact no-op and
     // existing scenes are visually unchanged. Identical to the Built-in AmbientLightComputer path.
     color.rgb = lerp(color.rgb, color.rgb * obstacleAlbedo, _AmbientBounceTint);
-    return lerp(oldLight, color, 0.2h);
+    return lerp(oldLight, color, _AmbientAdaptSpeed);
 }
 
 Light2DOverlayVaryings Light2DOverlayVert(Light2DFullscreenAttributes input)

@@ -10,16 +10,13 @@ namespace Light2D.Tests
 {
     public class UrpRenderingTests
     {
-        // WaitForEndOfFrame never fires in -batchmode, so tests settle rendering with plain frame yields.
-        private const int RenderSettleFrames = 4;
-        private const int PipelineInitializationFrameLimit = 30;
-
-        // The v3 host baseline (6000.5) resolves the ShaderGraph-import defect the old skip guard keyed
-        // on, so that condition no longer holds. The surviving host limitation is that a runtime-created
-        // URP pipeline may never ACTIVATE in -batchmode. Each test therefore skips (rather than fails)
-        // only when the pipeline does not become current after the initialization window; see
-        // IgnoreIfPipelineInactive. This is scoped strictly to non-activation so it cannot hide a real
-        // rendering failure once the pipeline is live.
+        // These tests build an in-memory URP asset, then drive rendering explicitly with
+        // RenderPipeline.SubmitRenderRequest against the source camera rather than waiting on player
+        // frames: WaitForEndOfFrame and passive frame yields never advance a runtime-created URP pipeline
+        // to "current" in -batchmode, but an explicit SingleCameraRequest composes the pipeline on demand
+        // and writes into the request's destination target. There is no skip path - two requests are
+        // issued per camera (the first warms the ambient history, the second captures the settled frame),
+        // and every pixel assertion runs for real, so a genuine URP render regression fails the test.
 
         [UnityTest, Timeout(30000)]
         public IEnumerator UniversalRendererProducesAlignedNonSquareTargetTextureOutput()
@@ -42,8 +39,8 @@ namespace Light2D.Tests
                 QualitySettings.renderPipeline = pipelineAsset;
                 GraphicsSettings.defaultRenderPipeline = pipelineAsset;
 
-                yield return WaitForPipelineActivation();
-                IgnoreIfPipelineInactive(pipelineAsset);
+                // Let the render-pipeline asset assignment settle before issuing render requests.
+                yield return null;
 
                 target = new RenderTexture(128, 80, 0, RenderTextureFormat.ARGB32);
                 target.Create();
@@ -56,8 +53,11 @@ namespace Light2D.Tests
                 var light = CreateLightSprite("URP Procedural Light", Vector3.zero, Color.white, lightMaterial);
                 lightObject = light.gameObject;
 
-                for (int frame = 0; frame < RenderSettleFrames; frame++)
-                    yield return null;
+                var req = new UniversalRenderPipeline.SingleCameraRequest { destination = target };
+                Assert.That(RenderPipeline.SupportsRenderRequest(camera, req), Is.True,
+                    "URP must support single-camera render requests on this host.");
+                RenderPipeline.SubmitRenderRequest(camera, req);  // warm ambient
+                RenderPipeline.SubmitRenderRequest(camera, req);  // settled frame
 
                 PixelMetrics metrics = ReadMetrics(target);
                 Assert.That(metrics.Range, Is.GreaterThan(0.08f), metrics.ToString());
@@ -104,8 +104,8 @@ namespace Light2D.Tests
                 QualitySettings.renderPipeline = pipelineAsset;
                 GraphicsSettings.defaultRenderPipeline = pipelineAsset;
 
-                yield return WaitForPipelineActivation();
-                IgnoreIfPipelineInactive(pipelineAsset);
+                // Let the render-pipeline asset assignment settle before issuing render requests.
+                yield return null;
 
                 target = new RenderTexture(256, 160, 0, RenderTextureFormat.ARGB32);
                 target.Create();
@@ -121,8 +121,11 @@ namespace Light2D.Tests
                 var light = CreateLightSprite("URP Viewport Light", Vector3.zero, Color.white, lightMaterial);
                 lightObject = light.gameObject;
 
-                for (int frame = 0; frame < RenderSettleFrames; frame++)
-                    yield return null;
+                var req = new UniversalRenderPipeline.SingleCameraRequest { destination = target };
+                Assert.That(RenderPipeline.SupportsRenderRequest(camera, req), Is.True,
+                    "URP must support single-camera render requests on this host.");
+                RenderPipeline.SubmitRenderRequest(camera, req);  // warm ambient
+                RenderPipeline.SubmitRenderRequest(camera, req);  // settled frame
 
                 // The viewport rect occupies the top-right quadrant: pixels x in [128, 256) and
                 // y in [80, 160) with the bottom-left origin of ReadPixels.
@@ -183,8 +186,8 @@ namespace Light2D.Tests
                 QualitySettings.renderPipeline = pipelineAsset;
                 GraphicsSettings.defaultRenderPipeline = pipelineAsset;
 
-                yield return WaitForPipelineActivation();
-                IgnoreIfPipelineInactive(pipelineAsset);
+                // Let the render-pipeline asset assignment settle before issuing render requests.
+                yield return null;
 
                 target = new RenderTexture(128, 80, 0, RenderTextureFormat.ARGB32);
                 target.Create();
@@ -197,8 +200,11 @@ namespace Light2D.Tests
                 var light = CreateLightSprite("URP Render Scale Light", Vector3.zero, Color.white, lightMaterial);
                 lightObject = light.gameObject;
 
-                for (int frame = 0; frame < RenderSettleFrames; frame++)
-                    yield return null;
+                var req = new UniversalRenderPipeline.SingleCameraRequest { destination = target };
+                Assert.That(RenderPipeline.SupportsRenderRequest(camera, req), Is.True,
+                    "URP must support single-camera render requests on this host.");
+                RenderPipeline.SubmitRenderRequest(camera, req);  // warm ambient
+                RenderPipeline.SubmitRenderRequest(camera, req);  // settled frame
 
                 PixelMetrics metrics = ReadMetrics(target);
                 Assert.That(metrics.Range, Is.GreaterThan(0.08f), metrics.ToString());
@@ -249,8 +255,8 @@ namespace Light2D.Tests
                 QualitySettings.renderPipeline = pipelineAsset;
                 GraphicsSettings.defaultRenderPipeline = pipelineAsset;
 
-                yield return WaitForPipelineActivation();
-                IgnoreIfPipelineInactive(pipelineAsset);
+                // Let the render-pipeline asset assignment settle before issuing render requests.
+                yield return null;
 
                 // v3 has no layers: both rigs use identically configured lighting and are isolated purely
                 // spatially (1000 units apart). Each light's Owner is left null, so the registry snapshot
@@ -275,8 +281,16 @@ namespace Light2D.Tests
                 var lightB = CreateLightSprite("URP Rig B Light", new Vector3(1000, 0, 0), Color.green, lightMaterialB);
                 lightObjectB = lightB.gameObject;
 
-                for (int frame = 0; frame < RenderSettleFrames; frame++)
-                    yield return null;
+                var reqA = new UniversalRenderPipeline.SingleCameraRequest { destination = targetA };
+                var reqB = new UniversalRenderPipeline.SingleCameraRequest { destination = targetB };
+                Assert.That(RenderPipeline.SupportsRenderRequest(cameraA, reqA), Is.True,
+                    "URP must support single-camera render requests on this host.");
+                Assert.That(RenderPipeline.SupportsRenderRequest(cameraB, reqB), Is.True,
+                    "URP must support single-camera render requests on this host.");
+                RenderPipeline.SubmitRenderRequest(cameraA, reqA);  // rig A warm ambient
+                RenderPipeline.SubmitRenderRequest(cameraB, reqB);  // rig B warm ambient
+                RenderPipeline.SubmitRenderRequest(cameraA, reqA);  // rig A settled frame
+                RenderPipeline.SubmitRenderRequest(cameraB, reqB);  // rig B settled frame
 
                 Assert.That(Light2DDiagnostics.ContextCount, Is.EqualTo(2),
                     "Each base camera must own exactly one URP lighting context");
@@ -323,32 +337,6 @@ namespace Light2D.Tests
                 Object.DestroyImmediate(rendererData);
                 Object.DestroyImmediate(pipelineAsset);
             }
-        }
-
-        private static IEnumerator WaitForPipelineActivation()
-        {
-            int initializationFrames = 0;
-            do
-            {
-                initializationFrames++;
-                yield return null;
-            }
-            while (RenderPipelineManager.currentPipeline == null &&
-                initializationFrames < PipelineInitializationFrameLimit);
-        }
-
-        // Re-keyed skip guard: skips only when the runtime-created URP pipeline never becomes current
-        // (the -batchmode activation limitation). Once the pipeline IS live, this returns and every pixel
-        // assertion in the calling test runs for real, so genuine URP render regressions still fail.
-        private static void IgnoreIfPipelineInactive(UniversalRenderPipelineAsset pipelineAsset)
-        {
-            if (RenderPipelineManager.currentPipeline is UniversalRenderPipeline &&
-                ReferenceEquals(GraphicsSettings.currentRenderPipeline, pipelineAsset))
-                return;
-
-            Assert.Ignore("The runtime-created URP pipeline did not activate within " +
-                PipelineInitializationFrameLimit + " player frames (batchmode pipeline-activation " +
-                "limitation); the URP render path could not be exercised on this host.");
         }
 
         private static Camera CreateSourceCamera(string name, Vector3 position, RenderTexture target)

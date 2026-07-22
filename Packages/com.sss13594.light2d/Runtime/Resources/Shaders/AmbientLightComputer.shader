@@ -14,6 +14,7 @@ Properties {
 	_EmissionColorMul ("Emission color mul", Float) = 0.1
 	_SamplingDist ("Average sampling distance", Float) = 0.01
 	_AmbientBounceTint ("Colored bounce tint", Range(0, 1)) = 0
+	_AmbientAdaptSpeed ("Ambient Adapt Speed", Range(0,1)) = 0.2
 }
 SubShader {	
 	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
@@ -49,6 +50,7 @@ SubShader {
 			half _SamplingDist;
 			half _ObstacleAdd;
 			half _AmbientBounceTint;
+			half _AmbientAdaptSpeed;
 
 			v2f vert (appdata_t v)
 			{
@@ -91,7 +93,7 @@ SubShader {
 				// no-op and existing scenes are visually unchanged.
 				col.rgb = lerp(col.rgb, col.rgb * obstacleAlbedo, _AmbientBounceTint);
 
-				return lerp(oldLight, col, 0.2);
+				return lerp(oldLight, col, _AmbientAdaptSpeed);
 			}
 		ENDCG
 	}
