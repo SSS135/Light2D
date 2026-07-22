@@ -13,6 +13,7 @@ Properties {
 	_ObstacleAdd ("Obstacle add", Float) = 0.1
 	_EmissionColorMul ("Emission color mul", Float) = 0.1
 	_SamplingDist ("Average sampling distance", Float) = 0.01
+	_AmbientBounceTint ("Colored bounce tint", Range(0, 1)) = 0
 }
 SubShader {	
 	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
@@ -47,6 +48,7 @@ SubShader {
 			half _EmissionColorMul;
 			half _SamplingDist;
 			half _ObstacleAdd;
+			half _AmbientBounceTint;
 
 			v2f vert (appdata_t v)
 			{
@@ -62,7 +64,8 @@ SubShader {
 				const half addMul = 0.25;
 				
 				half4 emission = tex2D(_LightSourcesTex, i.texcoord);
-				half4 obstacle = tex2D(_ObstacleTex, i.texcoord); 
+				half4 obstacle = tex2D(_ObstacleTex, i.texcoord);
+				half3 obstacleAlbedo = obstacle.rgb; // colored bounce: obstacle color before it becomes attenuation
 				obstacle = saturate(((1 - obstacle)*obstacle.a*_ObstacleMul + _ObstacleAdd));
 
 				half2 uv = i.texcoord + _Shift;
@@ -83,6 +86,10 @@ SubShader {
 				emission.rgb *= emission.a*_EmissionColorMul;
 
 				half4 col = (maxLight + emission)*(half4(1,1,1,1) - obstacle);
+				// Tint the propagated (bounced) light by the obstacle's albedo so a colored wall tints
+				// the indirect fill. _AmbientBounceTint defaults to 0, so lerp(...,0) is a bit-exact
+				// no-op and existing scenes are visually unchanged.
+				col.rgb = lerp(col.rgb, col.rgb * obstacleAlbedo, _AmbientBounceTint);
 
 				return lerp(oldLight, col, 0.2);
 			}

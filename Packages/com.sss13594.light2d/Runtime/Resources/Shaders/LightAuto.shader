@@ -100,6 +100,6 @@ SubShader {
     }
 }
 
-Fallback "Light2D/Light 80 Points"
+Fallback "Light2D/Light Points"
 
 }

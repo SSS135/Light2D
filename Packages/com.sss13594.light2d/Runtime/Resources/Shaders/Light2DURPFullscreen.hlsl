@@ -3,6 +3,7 @@
 
 #include "Light2DURPCommon.hlsl"
 float4 _BlitScaleBias;
+half _AmbientBounceTint; // colored ambient bounce strength (0 = existing behavior, unchanged)
 
 struct Light2DFullscreenAttributes
 {
@@ -87,6 +88,7 @@ half4 Light2DAmbientFrag(Light2DFullscreenVaryings input) : SV_Target
 {
     half4 emission = SAMPLE_TEXTURE2D(_Light2DURPLightSourcesTex, sampler_Light2DURPLightSourcesTex, input.uv);
     half4 obstacle = SAMPLE_TEXTURE2D(_Light2DURPObstacleTex, sampler_Light2DURPObstacleTex, input.uv);
+    half3 obstacleAlbedo = obstacle.rgb; // colored bounce: obstacle color before it becomes attenuation
     obstacle = saturate((1.0h - obstacle) * obstacle.a * _ObstacleMul + _ObstacleAdd);
     float2 uv = input.uv + _Shift;
     half4 oldLight = SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, uv);
@@ -101,6 +103,10 @@ half4 Light2DAmbientFrag(Light2DFullscreenVaryings input) : SV_Target
     maxLight = max(maxLight, SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, uv + half2(-diagonal, -diagonal)));
     emission.rgb *= emission.a * _EmissionColorMul;
     half4 color = (maxLight + emission) * (1.0h - obstacle);
+    // Tint the propagated (bounced) light by the obstacle's albedo so a colored wall tints the
+    // indirect fill. _AmbientBounceTint defaults to 0, so lerp(...,0) is a bit-exact no-op and
+    // existing scenes are visually unchanged. Identical to the Built-in AmbientLightComputer path.
+    color.rgb = lerp(color.rgb, color.rgb * obstacleAlbedo, _AmbientBounceTint);
     return lerp(oldLight, color, 0.2h);
 }
 

@@ -12,7 +12,8 @@ namespace Light2D.Tests
         private const string PackageRoot = "Packages/com.sss13594.light2d";
         private const string RuntimeRoot = PackageRoot + "/Runtime/";
         private const string DefaultLightPath = RuntimeRoot + "Resources/DefaultLight.psd";
-        private const string Light60PointsGuid = "5d8645bc2e5501a4ebd138db5aa609bd";
+        // The unified creation flow now uses Balanced shadow quality → Light40Points.
+        private const string Light40PointsGuid = "ab37f3042fbc56e4b9288c3ba9cd32d8";
 
         private static readonly string[] RuntimeLightMaterialNames =
         {
@@ -146,10 +147,10 @@ namespace Light2D.Tests
         }
 
         [Test]
-        public void CreateLightSourceUsesLight60PointsGuidAndRuntimeAssets()
+        public void CreateLightSourceUsesLight40PointsGuidAndGeneratedFalloff()
         {
-            string materialPath = AssetDatabase.GUIDToAssetPath(Light60PointsGuid);
-            Assert.That(materialPath, Is.EqualTo(RuntimeRoot + "Materials/Light60Points.mat"));
+            string materialPath = AssetDatabase.GUIDToAssetPath(Light40PointsGuid);
+            Assert.That(materialPath, Is.EqualTo(RuntimeRoot + "Materials/Light40Points.mat"));
             var expectedMaterial = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
             Assert.That(expectedMaterial, Is.Not.Null);
 
@@ -164,7 +165,9 @@ namespace Light2D.Tests
                 var light = createdObject.GetComponent<LightSprite>();
                 Assert.That(light, Is.Not.Null);
                 Assert.That(light.Material, Is.SameAs(expectedMaterial));
-                Assert.That(AssetDatabase.GetAssetPath(light.Sprite), Is.EqualTo(DefaultLightPath));
+                Assert.That(light.Shadows, Is.EqualTo(LightSprite.ShadowQuality.Balanced));
+                // Post-refactor the falloff is procedural: no Sprite asset is assigned.
+                Assert.That(light.Sprite, Is.Null);
             }
             finally
             {

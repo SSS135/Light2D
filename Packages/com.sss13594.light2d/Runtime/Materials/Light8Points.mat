@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Light8Points
-  m_Shader: {fileID: 4800000, guid: 855974e4ec7380c468d9ef075b0c1134, type: 3}
+  m_Shader: {fileID: 4800000, guid: 52429f18779e42d09ce2a72bef04eac9, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -39,6 +39,7 @@ Material:
     m_Floats:
     - _EmissionColorMul: 1
     - _ObstacleMul: 500
+    - _PathTrackingSamples: 8
     - _Shininess: 0.7
     m_Colors:
     - _Color: {r: 1, g: 1, b: 1, a: 1}

@@ -75,24 +75,39 @@ void Light2DFixedPositions(Light2DFixedVaryings input, out float2 position, out 
     #endif
 }
 
-#if defined(PATH_TRACKING_SAMPLES)
+#if defined(PATH_TRACKING_SAMPLES) || defined(LIGHT2D_UNIFORM_SAMPLES)
+
+// Mirror of LightBase.cginc: constant PATH_TRACKING_SAMPLES for the retained define path, or a
+// coherent material uniform for the collapsed "Light2D/Light Points" shader (LIGHT2D_UNIFORM_SAMPLES).
+// The uniform float is cast to int for a coherent [loop] bound; the define path keeps [unroll].
+#if defined(LIGHT2D_UNIFORM_SAMPLES)
+float _PathTrackingSamples;
+#define LIGHT2D_SAMPLE_COUNT ((int)_PathTrackingSamples)
+#define LIGHT2D_STEP_SIZE (1.0h / _PathTrackingSamples)
+#define LIGHT2D_LOOP_ATTR [loop]
+#else
+#define LIGHT2D_SAMPLE_COUNT PATH_TRACKING_SAMPLES
+#define LIGHT2D_STEP_SIZE (1.0h / PATH_TRACKING_SAMPLES)
+#define LIGHT2D_LOOP_ATTR [unroll]
+#endif
+
 half4 Light2DFixedFrag(Light2DFixedVaryings input) : SV_Target
 {
     half4 textureColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
     float2 position;
     float2 centerPosition;
     Light2DFixedPositions(input, position, centerPosition);
-    half stepSize = 1.0h / PATH_TRACKING_SAMPLES;
+    half stepSize = LIGHT2D_STEP_SIZE;
     half rayLength = length((position - centerPosition) * input.aspect);
     half obstacleMultiplier = _ObstacleMul * stepSize * rayLength;
     half4 color = input.color * textureColor * textureColor.a * input.color.a;
     half rayPosition = 0;
-    [unroll]
-    for (int sampleIndex = 0; sampleIndex < PATH_TRACKING_SAMPLES; sampleIndex++)
+    LIGHT2D_LOOP_ATTR
+    for (int sampleIndex = 0; sampleIndex < LIGHT2D_SAMPLE_COUNT; sampleIndex++)
     {
         rayPosition += stepSize;
-        half4 obstacle = SAMPLE_TEXTURE2D(_Light2DURPObstacleTex, sampler_Light2DURPObstacleTex,
-            lerp(centerPosition, position, rayPosition));
+        half4 obstacle = SAMPLE_TEXTURE2D_LOD(_Light2DURPObstacleTex, sampler_Light2DURPObstacleTex,
+            lerp(centerPosition, position, rayPosition), 0);
         color *= saturate(1.0h - (1.0h - obstacle) * obstacle.a * obstacleMultiplier);
     }
     color.rgb *= _EmissionColorMul;

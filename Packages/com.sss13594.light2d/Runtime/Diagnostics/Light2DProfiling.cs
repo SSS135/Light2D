@@ -13,6 +13,7 @@ namespace Light2D
         public const string BlurName = "Light2D.Blur";
         public const string AmbientName = "Light2D.Ambient";
         public const string CompositionName = "Light2D.Composition";
+        public const string LightTextureGenName = "Light2D.LightTextureGen";
 
         public static readonly ProfilerMarker Validation = new ProfilerMarker(ValidationName);
         public static readonly ProfilerMarker ResourceReconciliation = new ProfilerMarker(ResourceReconciliationName);
@@ -23,5 +24,6 @@ namespace Light2D
         public static readonly ProfilerMarker Blur = new ProfilerMarker(BlurName);
         public static readonly ProfilerMarker Ambient = new ProfilerMarker(AmbientName);
         public static readonly ProfilerMarker Composition = new ProfilerMarker(CompositionName);
+        public static readonly ProfilerMarker LightTextureGen = new ProfilerMarker(LightTextureGenName);
     }
 }

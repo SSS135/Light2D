@@ -25,8 +25,8 @@ struct light2d_fixed_v2f {
 	float4 projVertex : COLOR1;
 	float zDistance : TEXCOORD2;
 	#else
-	half2 thisPos : TEXCOORD2;
-	half2 centerPos : TEXCOORD1;
+	float2 thisPos : TEXCOORD2;
+	float2 centerPos : TEXCOORD1;
 	#endif
 	half2 aspect : TEXCOORD3;
 };
@@ -71,37 +71,56 @@ light2d_fixed_v2f light2d_fixed_vert (light2d_fixed_data_t v)
 	return o;
 }
 
-#ifdef PATH_TRACKING_SAMPLES
+#if defined(PATH_TRACKING_SAMPLES) || defined(LIGHT2D_UNIFORM_SAMPLES)
+
+// Step count is a compile-time constant for the retained PATH_TRACKING_SAMPLES path, or a coherent
+// material uniform for the collapsed "Light2D/Light Points" shader (LIGHT2D_UNIFORM_SAMPLES). The
+// uniform is a float property cast to int so the loop bound stays coherent across the wave (enables
+// [loop] without divergence); the #define path keeps its original constant-unrolled form.
+// Perf note: the keyword-variant unrolled fallback (multi_compile _SAMPLES_20.._SAMPLES_90) is the
+// pre-approved alternative if the uniform loop regresses on the min-spec mobile target.
+#if defined(LIGHT2D_UNIFORM_SAMPLES)
+uniform float _PathTrackingSamples;
+#define LIGHT2D_SAMPLE_COUNT ((int)_PathTrackingSamples)
+#define LIGHT2D_STEP_SIZE (1.0/_PathTrackingSamples)
+#define LIGHT2D_LOOP_ATTR [loop]
+#else
+#define LIGHT2D_SAMPLE_COUNT PATH_TRACKING_SAMPLES
+#define LIGHT2D_STEP_SIZE (1.0/PATH_TRACKING_SAMPLES)
+#define LIGHT2D_LOOP_ATTR
+#endif
+
 half4 light2_fixed_frag (light2d_fixed_v2f i) : SV_Target
 {
     half4 tex = tex2D(_MainTex, i.texcoord);
 
 	#ifdef PERSPECTIVE_CAMERA
 		float4 vPos = ComputeScreenPos(i.projVertex);
-	half2 thisPos = (vPos.xy/vPos.w - 0.5)*_ExtendedToSmallTextureScale + 0.5;
+	float2 thisPos = (vPos.xy/vPos.w - 0.5)*_ExtendedToSmallTextureScale + 0.5;
 		float4 cPos = ComputeScreenPos(UnityWorldToClipPos(float3(i.texcoord1, i.zDistance)));
-	half2 centerPos = (cPos.xy/cPos.w - 0.5)*_ExtendedToSmallTextureScale + 0.5;
+	float2 centerPos = (cPos.xy/cPos.w - 0.5)*_ExtendedToSmallTextureScale + 0.5;
 	#ifdef UNITY_HALF_TEXEL_OFFSET
 	thisPos += _PosOffset;
 	centerPos += _PosOffset;
 	#endif
 	#else
-	half2 thisPos = i.thisPos;
-	half2 centerPos = i.centerPos;
+	float2 thisPos = i.thisPos;
+	float2 centerPos = i.centerPos;
 	#endif
 
-	half sub = 1.0/PATH_TRACKING_SAMPLES;
+	half sub = LIGHT2D_STEP_SIZE;
 	half len = length((thisPos - centerPos)*i.aspect);
 	half m = _ObstacleMul*sub*len;
-			
+
 	half4 col = i.color*tex*tex.a*i.color.a;
 
 	half pos = 0;
-	
-	for(int i = 0; i < PATH_TRACKING_SAMPLES; i++)
+
+	LIGHT2D_LOOP_ATTR
+	for(int i = 0; i < LIGHT2D_SAMPLE_COUNT; i++)
 	{
-		pos += sub; 
-		half4 obstacle = tex2D(_ObstacleTex, lerp(centerPos, thisPos, pos));
+		pos += sub;
+		half4 obstacle = tex2Dlod(_ObstacleTex, float4(lerp(centerPos, thisPos, pos), 0, 0));
 		col *= saturate(1 - (1 - obstacle)*obstacle.a*m);
 	}
 

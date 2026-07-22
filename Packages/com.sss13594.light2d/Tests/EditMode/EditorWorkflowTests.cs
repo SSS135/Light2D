@@ -131,6 +131,39 @@ namespace Light2D.Tests
             }
         }
 
+        [Test]
+        public void CreateLightSourceProducesAWorkingProceduralLight()
+        {
+            Object[] previousSelection = Selection.objects;
+            GameObject created = null;
+            try
+            {
+                Light2DMenu.CreateLightSource();
+                created = Selection.activeGameObject;
+                Assert.That(created, Is.Not.Null);
+
+                var light = created.GetComponent<LightSprite>();
+                Assert.That(light, Is.Not.Null);
+                // Unified defaults: procedural falloff (no Sprite asset), Balanced material, visible size.
+                Assert.That(light.Sprite, Is.Null);
+                Assert.That(light.Material, Is.Not.Null);
+                Assert.That(light.Type, Is.EqualTo(LightSprite.LightType.Point));
+                Assert.That(light.Radius, Is.GreaterThan(0f));
+                Assert.That(light.Intensity, Is.EqualTo(1f));
+
+                // The generated falloff must drive drawable geometry — the "tiny invisible light" guard.
+                var mesh = created.GetComponent<MeshFilter>().sharedMesh;
+                Assert.That(mesh, Is.Not.Null);
+                Assert.That(mesh.vertexCount, Is.GreaterThan(0));
+            }
+            finally
+            {
+                if (created != null)
+                    Object.DestroyImmediate(created);
+                Selection.objects = previousSelection;
+            }
+        }
+
 #if LIGHT2D_TILEMAP
         [Test]
         public void ObstacleMenuAddsTilemapOccluderOnTheSameObject()

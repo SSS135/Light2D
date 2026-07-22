@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Light2D
 {
@@ -37,6 +39,7 @@ namespace Light2D
         protected MeshRenderer _meshRenderer;
         protected MeshFilter _meshFilter;
         protected Mesh _mesh;
+        private HdrVertex[] _hdrVertices = Array.Empty<HdrVertex>();
 
         private Color _oldColor;
         private Sprite _oldSprite;
@@ -45,6 +48,16 @@ namespace Light2D
 
         private static readonly Dictionary<MaterialKey, MaterialValue> MaterialMap =
             new Dictionary<MaterialKey, MaterialValue>();
+
+        // Interleaved layout for the HDR vertex-color upload. Color is Float32 so overbright survives.
+        private static readonly VertexAttributeDescriptor[] HdrVertexLayout =
+        {
+            new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
+            new VertexAttributeDescriptor(VertexAttribute.Tangent, VertexAttributeFormat.Float32, 4),
+            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 2),
+        };
         private static readonly HashSet<CustomSprite> LiveSprites = new HashSet<CustomSprite>();
         private static Material _defaultSpriteMaterial;
         private static Material _runtimeDefaultObstacleMaterial;
@@ -57,6 +70,19 @@ namespace Light2D
         public bool IsPartOfStaticBatch { get { return _meshRenderer != null && _meshRenderer.isPartOfStaticBatch; } }
 
         protected virtual bool UseNormalTexcoordMaterial { get { return false; } }
+
+        // Uniform scale baked into the copied sprite vertices so a component can size its mesh
+        // independently of the Transform (used by LightSprite.Radius). Base sprites draw at 1:1.
+        protected virtual float MeshScale { get { return 1f; } }
+
+        // When true, the vertex color stream is uploaded as Float32 so overbright (> 1) HDR colors
+        // survive to the light RT instead of clamping through the default Color32 path. Base sprites
+        // (obstacles/ambient) stay on the cheap Color32 path.
+        protected virtual bool UseHdrVertexColors { get { return false; } }
+
+        // The sprite actually drawn through the owned mesh. Base sprites draw the assigned Sprite; a
+        // light can substitute a procedurally generated falloff sprite when no Sprite is assigned.
+        protected virtual Sprite ActiveSprite { get { return Sprite; } }
 
         protected virtual void OnEnable()
         {
@@ -133,11 +159,12 @@ namespace Light2D
         private Material GetOrCreateMaterial()
         {
             ReleaseMaterialReference();
-            if (Sprite == null)
+            var sprite = ActiveSprite;
+            if (sprite == null)
                 return null;
 
             var baseMaterial = Material != null ? Material : GetOrCreateDefaultSpriteMaterial();
-            return AcquireMaterial(baseMaterial, Sprite.texture, UseNormalTexcoordMaterial, out _oldMaterialKey);
+            return AcquireMaterial(baseMaterial, sprite.texture, UseNormalTexcoordMaterial, out _oldMaterialKey);
         }
 
         private static Material GetOrCreateDefaultSpriteMaterial()
@@ -311,7 +338,8 @@ namespace Light2D
         protected virtual void UpdateSprite()
         {
             ReleaseMaterialReference();
-            if (Sprite == null)
+            var sprite = ActiveSprite;
+            if (sprite == null)
             {
                 _vertices = Array.Empty<Vector3>();
                 _triangles = Array.Empty<int>();
@@ -321,17 +349,18 @@ namespace Light2D
                 return;
             }
 
-            var spriteVertices = Sprite.vertices;
-            var spriteTriangles = Sprite.triangles;
+            var spriteVertices = sprite.vertices;
+            var spriteTriangles = sprite.triangles;
+            var scale = MeshScale;
             _vertices = new Vector3[spriteVertices.Length];
             for (var i = 0; i < spriteVertices.Length; i++)
-                _vertices[i] = spriteVertices[i];
+                _vertices[i] = spriteVertices[i] * scale;
 
             _triangles = new int[spriteTriangles.Length];
             for (var i = 0; i < spriteTriangles.Length; i++)
                 _triangles[i] = spriteTriangles[i];
 
-            _uv0 = Sprite.uv;
+            _uv0 = sprite.uv;
             ResizeVertexData(_vertices.Length);
             _meshRenderer.sharedMaterial = GetOrCreateMaterial();
         }
@@ -352,6 +381,13 @@ namespace Light2D
         {
             if (_mesh == null)
                 return;
+
+            if (UseHdrVertexColors)
+            {
+                UpdateMeshHdr();
+                return;
+            }
+
             _mesh.Clear();
             _mesh.vertices = _vertices;
             _mesh.triangles = _triangles;
@@ -361,17 +397,54 @@ namespace Light2D
             _mesh.tangents = _tangents;
         }
 
+        // HDR path: the default Mesh.colors upload stores vertex colors as Color32 (UNorm8) and clamps
+        // any channel > 1, silently discarding overbright HDR before it reaches the ARGBHalf light RT.
+        // This declares an explicit interleaved vertex layout with a Float32 Color attribute and uploads
+        // it manually so values > 1 survive. The light shader input is float4 COLOR0, so the stream is
+        // carried unclamped through the vertex fetch.
+        //
+        // HOST-VALIDATION REQUIRED (top residual risk): confirm on the real host that this Float32 color
+        // stream actually uploads unclamped AND that the half4 i.color interpolator carries > 1 through to
+        // the ARGBHalf RT. If not, fall back to per-light <= 1 with cross-light accumulation.
+        private void UpdateMeshHdr()
+        {
+            var vertexCount = _vertices.Length;
+            _mesh.Clear();
+            if (vertexCount == 0)
+                return;
+
+            if (_hdrVertices.Length != vertexCount)
+                _hdrVertices = new HdrVertex[vertexCount];
+            for (var i = 0; i < vertexCount; i++)
+            {
+                _hdrVertices[i].Position = _vertices[i];
+                _hdrVertices[i].Tangent = _tangents[i];
+                _hdrVertices[i].Color = _colors[i];
+                _hdrVertices[i].Uv0 = _uv0[i];
+                _hdrVertices[i].Uv1 = _uv1[i];
+            }
+
+            _mesh.SetVertexBufferParams(vertexCount, HdrVertexLayout);
+            _mesh.SetVertexBufferData(_hdrVertices, 0, 0, vertexCount);
+            _mesh.SetIndexBufferParams(_triangles.Length, IndexFormat.UInt32);
+            _mesh.SetIndexBufferData(_triangles, 0, 0, _triangles.Length);
+            _mesh.subMeshCount = 1;
+            _mesh.SetSubMesh(0, new SubMeshDescriptor(0, _triangles.Length));
+            _mesh.RecalculateBounds();
+        }
+
         protected virtual void UpdateMeshData(bool forceUpdate = false)
         {
             if (_meshRenderer == null || _meshFilter == null || _mesh == null || IsPartOfStaticBatch)
                 return;
 
             _meshRenderer.sortingOrder = SortingOrder;
-            var spriteChanged = Sprite != _oldSprite;
+            var activeSprite = ActiveSprite;
+            var spriteChanged = activeSprite != _oldSprite;
             if (spriteChanged || Material != _oldMaterial || _meshRenderer.sharedMaterial == null || forceUpdate)
             {
                 UpdateSprite();
-                _oldSprite = Sprite;
+                _oldSprite = activeSprite;
                 _oldMaterial = Material;
                 _isMeshDirty = true;
             }
@@ -389,6 +462,17 @@ namespace Light2D
                 UpdateMesh();
                 _isMeshDirty = false;
             }
+        }
+
+        // Sequential CPU layout matching HdrVertexLayout for the Float32 vertex-color upload path.
+        [StructLayout(LayoutKind.Sequential)]
+        private struct HdrVertex
+        {
+            public Vector3 Position;
+            public Vector4 Tangent;
+            public Color Color;
+            public Vector2 Uv0;
+            public Vector2 Uv1;
         }
 
         private sealed class MaterialValue

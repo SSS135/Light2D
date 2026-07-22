@@ -386,7 +386,9 @@ namespace Light2D.Tests
             light.Sprite = Resources.Load<Sprite>("DefaultLight");
             light.Material = material;
             light.Color = color;
-            lightObject.transform.localScale = Vector3.one * 5;
+            // Radius sizes the light mesh now (decoupled from Transform scale); Radius = 5 on a
+            // unit-scaled transform preserves the old localScale = 5 geometry.
+            light.Radius = 5f;
             light.enabled = false;
             light.enabled = true;
             return light;

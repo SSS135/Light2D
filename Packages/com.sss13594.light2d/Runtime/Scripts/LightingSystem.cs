@@ -53,6 +53,32 @@ namespace Light2D
         [Tooltip("Blurs the ambient-light texture each propagation cycle for smoother ambient (default on).")]
         public bool BlurAmbientLight = true;
 
+        [Tooltip("Ambient bounce: how strongly obstacles attenuate the propagated ambient light; higher " +
+                 "darkens faster behind obstacles (default 1.5, the ambient shader's original value).")]
+        public float AmbientObstacleMultiplier = 1.5f;
+
+        [Tooltip("Ambient bounce: constant obstacle attenuation added everywhere, raising how quickly the " +
+                 "ambient fill decays (default 0.1, the ambient shader's original value).")]
+        public float AmbientObstacleAdd = 0.1f;
+
+        [Tooltip("Ambient bounce: how much light-source emission feeds the ambient propagation (default 0.1, " +
+                 "the ambient shader's original value).")]
+        public float AmbientEmissionColorMultiplier = 0.1f;
+
+        [Tooltip("Ambient bounce: neighbor sampling distance in UV space controlling how far ambient light " +
+                 "spreads per propagation step (default 0.01, the ambient shader's original value).")]
+        public float AmbientSamplingDistance = 0.01f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Ambient bounce tint: how much a colored obstacle tints the indirect ambient fill instead " +
+                 "of only darkening it; 0 = off (neutral, existing behavior), 1 = full colored bounce.")]
+        public float AmbientColoredBounce = 0f;
+
+        [Min(1)]
+        [Tooltip("Ambient bounce: base propagation iterations run each frame; higher spreads ambient farther " +
+                 "per frame at more cost (default 1, matching the original single-step behavior).")]
+        public int AmbientIterations = 1;
+
         [Tooltip("Uses a half-float (ARGBHalf) light buffer for higher dynamic range when the platform " +
                  "supports it (default on).")]
         public bool HDR = true;
@@ -147,6 +173,12 @@ namespace Light2D
         // Whether the most recent frame took the coverage-composition path; drives the next frame's
         // release of the on-demand coverage render targets when coverage becomes inactive.
         private bool _coverageActive;
+        // Obstacle-preview plumbing (Workstream B2): a self-expiring request stamp (mirrors the
+        // _lastUrpServedFrame idiom; -1000 is the never-requested sentinel) and the persistent preview target
+        // the URP copy pass writes into. Both are plain runtime state (an int + an RTHandle), so the runtime
+        // stays editor-independent; the editor preview window reads them through InternalsVisibleTo.
+        private int _obstaclePreviewRequestedFrame = -1000;
+        private RTHandle _obstaclePreviewHandle;
 
         private static readonly int ObstacleTexId = Shader.PropertyToID("_ObstacleTex");
         private static readonly int NormalsBufferId = Shader.PropertyToID("_NormalsBuffer");
@@ -164,6 +196,11 @@ namespace Light2D
         private static readonly int LightPosId = Shader.PropertyToID("_LightPos");
         private static readonly int CompositeTexId = Shader.PropertyToID("_CompositeTex");
         private static readonly int CoverageTexId = Shader.PropertyToID("_CoverageTex");
+        private static readonly int AmbientObstacleMulId = Shader.PropertyToID("_ObstacleMul");
+        private static readonly int AmbientObstacleAddId = Shader.PropertyToID("_ObstacleAdd");
+        private static readonly int AmbientEmissionColorMulId = Shader.PropertyToID("_EmissionColorMul");
+        private static readonly int AmbientSamplingDistId = Shader.PropertyToID("_SamplingDist");
+        private static readonly int AmbientBounceTintId = Shader.PropertyToID("_AmbientBounceTint");
         private const string DefaultUnlitMode = "SRPDefaultUnlit";
 
         public static LightingSystem Instance
@@ -213,6 +250,36 @@ namespace Light2D
         public RenderTexture ObstaclesTexture { get { return _resources == null ? null : _resources.ObstaclesTexture; } }
         public RenderTexture LightSourcesTexture { get { return _resources == null ? null : _resources.LightSourcesTexture; } }
         public RenderTexture AmbientTexture { get { return _resources == null ? null : _resources.AmbientTexture; } }
+
+        // Obstacle-preview accessors (Workstream B2). RequestObstaclePreview is called by the editor preview
+        // window every repaint; ObstaclePreviewRequested self-expires ~2 frames later so the URP copy pass and
+        // its owned target stay zero-cost whenever no window is open. ObstaclePreviewTexture exposes the
+        // resolved obstacle buffer the URP pass copies into (Built-in reads ObstaclesTexture directly instead).
+        internal RenderTexture ObstaclePreviewTexture => _obstaclePreviewHandle != null ? _obstaclePreviewHandle.rt : null;
+        internal void RequestObstaclePreview() => _obstaclePreviewRequestedFrame = Time.frameCount;
+        internal bool ObstaclePreviewRequested => Time.frameCount - _obstaclePreviewRequestedFrame <= 2;
+
+        // Allocates or reuses the persistent preview target (the URP feature imports this RTHandle into
+        // RenderGraph and copies the resolved obstacles into it). Mirrors the feature's ambient-history
+        // RenderingUtils.ReAllocateHandleIfNeeded idiom so a descriptor change reallocates in place.
+        internal RTHandle EnsureObstaclePreviewTarget(RenderTextureDescriptor desc, FilterMode fm)
+        {
+            desc.depthBufferBits = 0;
+            desc.msaaSamples = 1;
+            desc.useMipMap = false;
+            desc.autoGenerateMips = false;
+            desc.useDynamicScale = false;
+            RenderingUtils.ReAllocateHandleIfNeeded(ref _obstaclePreviewHandle, desc, fm, TextureWrapMode.Clamp,
+                name: "Light2D Obstacle Preview");
+            return _obstaclePreviewHandle;
+        }
+
+        internal void ReleaseObstaclePreviewTarget()
+        {
+            _obstaclePreviewHandle?.Release();
+            _obstaclePreviewHandle = null;
+        }
+
         private bool BuiltInNormalMappingEnabled { get { return EnableNormalMapping && !XZPlane; } }
 
         internal static Light2DPipeline ClassifyPipeline(RenderPipelineAsset pipelineAsset)
@@ -944,10 +1011,22 @@ namespace Light2D
                 return 0;
             using (Light2DProfiling.Ambient.Auto())
             {
+                // Push the exposed ambient-bounce tuning onto the compute material each frame so inspector
+                // edits take effect live (the runtime already mutates this material's textures/vectors below,
+                // so it is the safe-to-mutate instance, not the untouched serialized asset).
+                computeMaterial.SetFloat(AmbientObstacleMulId, AmbientObstacleMultiplier);
+                computeMaterial.SetFloat(AmbientObstacleAddId, AmbientObstacleAdd);
+                computeMaterial.SetFloat(AmbientEmissionColorMulId, AmbientEmissionColorMultiplier);
+                computeMaterial.SetFloat(AmbientSamplingDistId, AmbientSamplingDistance);
+                computeMaterial.SetFloat(AmbientBounceTintId, AmbientColoredBounce);
+
                 RunSnapshotPass("Light2D Ambient Emission", _resources.AmbientEmissionTexture, Color.clear,
                     geometry, _ambientSnapshot, DefaultUnlitMode);
                 int additionalCycles = ConsumePendingAmbientLightCycles();
-                for (int i = 0; i < additionalCycles + 1; i++)
+                // Base propagation iterations per frame come from the exposed AmbientIterations (default 1 =
+                // the original single-step behavior); queued warmup cycles are still added on top.
+                int baseIterations = Mathf.Max(1, AmbientIterations);
+                for (int i = 0; i < additionalCycles + baseIterations; i++)
                 {
                     Swap(ref _resources.PreviousAmbientTexture, ref _resources.AmbientTexture);
                     var textureSize = new Vector2(_resources.AmbientTexture.width, _resources.AmbientTexture.height);
@@ -970,7 +1049,7 @@ namespace Light2D
                         Swap(ref _resources.PreviousAmbientTexture, ref _resources.AmbientTexture);
                     }
                 }
-                return additionalCycles + 1;
+                return additionalCycles + baseIterations;
             }
         }
 
@@ -1133,6 +1212,7 @@ namespace Light2D
             if (_resources != null)
                 _resources.Dispose();
             _resources = null;
+            ReleaseObstaclePreviewTarget();
             _initialized = false;
             _settingsHash = 0;
             _hasSourceDescriptor = false;
@@ -1296,6 +1376,11 @@ namespace Light2D
         private void Update()
         {
             WarnIfUrpFeatureMissing();
+            // Reclaim the obstacle-preview target once the editor window stops requesting it (the request
+            // stamp expires ~2 frames after the last RequestObstaclePreview call), so it is only allocated
+            // while a preview window is actually open.
+            if (!ObstaclePreviewRequested && _obstaclePreviewHandle != null)
+                ReleaseObstaclePreviewTarget();
         }
 
         // Called by Light2DUniversalRendererFeature each frame it renders this system's camera, so the

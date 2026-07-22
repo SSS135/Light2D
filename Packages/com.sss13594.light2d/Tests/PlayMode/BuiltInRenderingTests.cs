@@ -258,7 +258,9 @@ namespace Light2D.Tests
                 _lightMaterial = new Material(Shader.Find("Light2D/Light 1 Point"));
                 light.Material = _lightMaterial;
                 light.Color = Color.white;
-                _lightObject.transform.localScale = Vector3.one * 5;
+                // Radius sizes the light mesh now (decoupled from Transform scale); Radius = 5 on a
+                // unit-scaled transform preserves the old localScale = 5 geometry.
+                light.Radius = 5f;
                 light.enabled = false;
                 light.enabled = true;
 

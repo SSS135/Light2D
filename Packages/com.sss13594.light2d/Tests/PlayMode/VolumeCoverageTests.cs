@@ -497,7 +497,9 @@ namespace Light2D.Tests
                     _lightMaterial = new Material(Shader.Find("Light2D/Light 1 Point"));
                     _light.Material = _lightMaterial;
                     _light.Color = Color.white;
-                    _lightObject.transform.localScale = Vector3.one * 3f;
+                    // Radius sizes the light mesh now (decoupled from Transform scale); Radius = 3 on a
+                    // unit-scaled transform preserves the old localScale = 3 geometry.
+                    _light.Radius = 3f;
                     _light.enabled = false;
                     _light.enabled = true;
                 }
@@ -513,8 +515,9 @@ namespace Light2D.Tests
 
             internal void SetLightScale(float scale)
             {
-                if (_lightObject != null)
-                    _lightObject.transform.localScale = Vector3.one * scale;
+                // Radius sizes the light mesh now; the transform stays unit-scaled.
+                if (_light != null)
+                    _light.Radius = scale;
             }
 
             internal Light2DVolume AddBoxVolume(Vector2 worldPosition, Vector2 size, float coverage, int priority,

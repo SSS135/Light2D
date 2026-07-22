@@ -105,11 +105,17 @@ namespace Light2D
             var obj = new GameObject("Light");
             Undo.RegisterCreatedObjectUndo(obj, "Create Light Source");
             var light = Undo.AddComponent<LightSprite>(obj);
-            var materialPath = AssetDatabase.GUIDToAssetPath("5d8645bc2e5501a4ebd138db5aa609bd");
+            // Unified creation flow: a Point light sized by Radius with a procedurally generated falloff
+            // (no Sprite asset) at Balanced shadow quality. The Sprite slot stays null so the falloff is
+            // generated; Shadows maps to the Light40Points material resolved from its runtime GUID.
+            light.Type = LightSprite.LightType.Point;
+            light.Radius = 3f;
+            light.Intensity = 1f;
+            light.Shadows = LightSprite.ShadowQuality.Balanced;
+            light.Color = Color.white;
+            var materialPath = AssetDatabase.GUIDToAssetPath(
+                Light2DLightPresets.GetMaterialGuid(LightSprite.ShadowQuality.Balanced));
             light.Material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
-            light.Sprite = AssetDatabase.LoadAssetAtPath<Sprite>(
-                "Packages/com.sss13594.light2d/Runtime/Resources/DefaultLight.psd");
-            light.Color = new Color(1, 1, 1, 0.5f);
             Selection.activeGameObject = obj;
         }
 

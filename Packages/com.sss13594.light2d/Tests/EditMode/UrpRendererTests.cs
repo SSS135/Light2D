@@ -181,6 +181,22 @@ namespace Light2D.Tests
             Assert.That(overlay.FindPropertyIndex("_LightSourcesTex"), Is.GreaterThanOrEqualTo(0));
         }
 
+        [Test]
+        public void CollapsedLightPointsShaderCarriesBothPipelines()
+        {
+            Shader lightPoints = Shader.Find("Light2D/Light Points");
+            Assert.That(lightPoints, Is.Not.Null,
+                "The collapsed Light2D/Light Points shader replaces the retired per-count light shaders.");
+
+            // URP draws the light geometry through the SRPDefaultUnlit LightMode; a Built-in CGPROGRAM
+            // SubShader (no RenderPipeline tag) coexists in the same shader, so both pipelines render it.
+            Assert.That(HasPassWithLightMode(lightPoints, "SRPDefaultUnlit"), Is.True);
+            Assert.That(lightPoints.subshaderCount, Is.GreaterThanOrEqualTo(2));
+
+            // The sample count is a per-material property that drives the uniform-bound ray-march [loop].
+            Assert.That(lightPoints.FindPropertyIndex("_PathTrackingSamples"), Is.GreaterThanOrEqualTo(0));
+        }
+
         private static bool HasPassWithLightMode(Shader shader, string lightMode)
         {
             var lightModeTag = new ShaderTagId("LightMode");

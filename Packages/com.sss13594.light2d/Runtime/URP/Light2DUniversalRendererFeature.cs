@@ -510,6 +510,14 @@ namespace Light2D
             private static readonly int ViewportToWorldX = Shader.PropertyToID("_ViewportToWorldX");
             private static readonly int ViewportToWorldY = Shader.PropertyToID("_ViewportToWorldY");
             private static readonly int MainTexTexelSize = Shader.PropertyToID("_Light2DURPMainTex_TexelSize");
+            // Ambient-bounce tuning uniforms shared by both pipelines (declared on the ambient material). Pushed
+            // onto the cloned URP ambient material each frame so the LightingSystem knobs behave identically to
+            // the Built-in backend; _AmbientBounceTint is the colored-bounce knob (0 = neutral).
+            private static readonly int AmbientObstacleMul = Shader.PropertyToID("_ObstacleMul");
+            private static readonly int AmbientObstacleAdd = Shader.PropertyToID("_ObstacleAdd");
+            private static readonly int AmbientEmissionColorMul = Shader.PropertyToID("_EmissionColorMul");
+            private static readonly int AmbientSamplingDist = Shader.PropertyToID("_SamplingDist");
+            private static readonly int AmbientBounceTint = Shader.PropertyToID("_AmbientBounceTint");
             private static readonly GlobalKeyword HdrKeyword = new GlobalKeyword("HDR");
             private static readonly GlobalKeyword XzKeyword = new GlobalKeyword("LIGHT2D_XZ_PLANE");
             private static readonly GlobalKeyword XyKeyword = new GlobalKeyword("LIGHT2D_XY_PLANE");
@@ -645,6 +653,26 @@ namespace Light2D
                 AddBorderPass(renderGraph, obstaclesAA, context);
                 AddBlitPass(renderGraph, "Light2D Resolve Obstacles", Light2DProfiling.Obstacles, obstaclesAA,
                     obstacles, null, black, sizes.Extended.x * aa, sizes.Extended.y * aa);
+
+                // Obstacle-preview copy (Workstream B2). Gated entirely on the LightingSystem's self-expiring
+                // request flag so that with no editor preview window open nothing is allocated, imported, or
+                // drawn - the frame is byte-identical to before. When requested, copy the resolved obstacle
+                // buffer (extended size, light format) into the system's persistent preview RTHandle, which the
+                // editor window reads via InternalsVisibleTo. URP-only; Built-in reads ObstaclesTexture directly.
+                if (_lighting.ObstaclePreviewRequested)
+                {
+                    var previewDescriptor = sourceDescriptor;
+                    previewDescriptor.width = sizes.Extended.x;
+                    previewDescriptor.height = sizes.Extended.y;
+                    previewDescriptor.graphicsFormat = lightFormat;
+                    var previewTarget = _lighting.EnsureObstaclePreviewTarget(previewDescriptor,
+                        _lighting.LightTexturesFilterMode);
+                    if (previewTarget != null)
+                    {
+                        TextureHandle previewImported = renderGraph.ImportTexture(previewTarget);
+                        AddObstaclePreviewPass(renderGraph, obstacles, previewImported);
+                    }
+                }
 
                 TextureHandle normals = default(TextureHandle);
                 if (_lighting.EnableNormalMapping)
@@ -786,12 +814,26 @@ namespace Light2D
                 if (context.AmbientMaterial == null)
                     return read;
 
+                // Push the exposed ambient-bounce tuning onto the cloned URP ambient material each frame so the
+                // LightingSystem knobs drive URP identically to the Built-in RenderAmbientLight path (neutral at
+                // defaults: bounce 0, the rest the shader's own defaults, so existing URP scenes are unchanged).
+                context.AmbientMaterial.SetFloat(AmbientObstacleMul, _lighting.AmbientObstacleMultiplier);
+                context.AmbientMaterial.SetFloat(AmbientObstacleAdd, _lighting.AmbientObstacleAdd);
+                context.AmbientMaterial.SetFloat(AmbientEmissionColorMul, _lighting.AmbientEmissionColorMultiplier);
+                context.AmbientMaterial.SetFloat(AmbientSamplingDist, _lighting.AmbientSamplingDistance);
+                context.AmbientMaterial.SetFloat(AmbientBounceTint, _lighting.AmbientColoredBounce);
+
                 context.WarmupCycles = AddWithoutOverflow(context.WarmupCycles,
                     _lighting.ConsumePendingAmbientLightCycles());
                 int maximumCycles = Mathf.Max(1, _settings.MaximumAmbientCyclesPerFrame);
-                int cycles = 1 + Mathf.Min(context.WarmupCycles, maximumCycles - 1);
+                // Base propagation iterations come from the exposed AmbientIterations (default 1 = the original
+                // single-step behavior), clamped to the per-frame maximum; queued warmup cycles fill whatever
+                // budget remains. At AmbientIterations=1 this is identical to the previous 1 + warmup formula.
+                int baseIterations = Mathf.Clamp(_lighting.AmbientIterations, 1, maximumCycles);
+                int warmupConsumed = Mathf.Min(context.WarmupCycles, maximumCycles - baseIterations);
+                int cycles = baseIterations + warmupConsumed;
                 cyclesRun = cycles;
-                context.WarmupCycles = Mathf.Max(0, context.WarmupCycles - (cycles - 1));
+                context.WarmupCycles = Mathf.Max(0, context.WarmupCycles - warmupConsumed);
                 Vector3 current = lightPosition;
                 Vector2 shift = Vector2.zero;
                 if (context.HasPreviousPosition)
@@ -951,6 +993,31 @@ namespace Light2D
                         Blitter.BlitTexture(rg.cmd, pass.Source, Vector2.one, pass.Material, 0);
                         ClearTextureGlobals(rg.cmd, pass.Black);
                         pass.Marker.End();
+                    });
+                }
+            }
+
+            // Obstacle-preview copy (Workstream B2): copies the resolved obstacle transmission buffer into the
+            // LightingSystem's imported preview RTHandle so the editor preview window can show what the light
+            // system sees. Modeled on AddBlitPass's null-material branch. Only added when the preview is
+            // requested (see RecordRenderGraph), so it is zero-cost whenever no preview window is open. Culling
+            // is disabled because the output is consumed on the editor side, not by a downstream graph pass.
+            // The URP copy pass itself is not batchmode-verifiable on this host (no runtime pipeline activates).
+            private static void AddObstaclePreviewPass(RenderGraph graph, TextureHandle obstacles,
+                TextureHandle preview)
+            {
+                using (var builder = graph.AddRasterRenderPass<ObstaclePreviewPassData>(
+                           "Light2D Obstacle Preview Copy", out var data))
+                {
+                    data.Source = obstacles;
+                    builder.UseTexture(obstacles, AccessFlags.Read);
+                    builder.SetRenderAttachment(preview, 0, AccessFlags.Write);
+                    builder.AllowPassCulling(false);
+                    builder.SetRenderFunc(static (ObstaclePreviewPassData pass, RasterGraphContext rg) =>
+                    {
+                        Light2DProfiling.Obstacles.Begin();
+                        Blitter.BlitTexture(rg.cmd, pass.Source, Vector2.one, 0, false);
+                        Light2DProfiling.Obstacles.End();
                     });
                 }
             }
@@ -1395,6 +1462,11 @@ namespace Light2D
                 internal Material Material;
                 internal Vector4 SourceTexelSize;
                 internal TextureHandle Black;
+            }
+
+            private sealed class ObstaclePreviewPassData
+            {
+                internal TextureHandle Source;
             }
 
             private sealed class ClearPassData
