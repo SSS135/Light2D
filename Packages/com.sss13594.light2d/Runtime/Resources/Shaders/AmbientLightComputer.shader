@@ -17,7 +17,9 @@ Properties {
 	_AmbientAdaptSpeed ("Ambient Adapt Speed", Range(0,1)) = 0.2
 }
 SubShader {	
-	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
+	// RenderPipeline="BuiltInPipeline" makes URP skip this Built-in SubShader and select the UniversalPipeline
+	// one below. Built-in composites via Graphics.Blit, which uses SubShader[0] and ignores the tag. See LightOverlay.
+	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent" "RenderPipeline"="BuiltInPipeline"}
 
 	LOD 100
 	ZWrite Off

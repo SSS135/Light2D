@@ -7,7 +7,7 @@ namespace Light2D
     /// </summary>
     [ExecuteAlways]
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
+    [RequireComponent(typeof(MeshFilter))]
     [AddComponentMenu("Light2D/Light Obstacle Mesh")]
     [HelpURL(Light2DDocs.HelpUrl)]
     public class LightObstacleMesh : MonoBehaviour, ILight2DObstacle
@@ -31,10 +31,10 @@ namespace Light2D
         [Tooltip("Draw order within the obstacle pass; lower values draw first.")]
         public int SortingOrder;
 
-        [Tooltip("Draw this object's own MeshFilter/MeshRenderer directly instead of mirroring a parent " +
-                 "renderer. Required when the obstacle object is parented to unrelated geometry whose mesh " +
-                 "must NOT be mirrored (MapGenerator chunks parent the obstacle mesh under the block-visual " +
-                 "mesh, and the Phase-2 Tilemap occluder owns its own mesh).")]
+        [Tooltip("Use this object's own mesh instead of mirroring a parent renderer's mesh. Required when " +
+                 "the obstacle object is parented to unrelated geometry whose mesh must NOT be mirrored " +
+                 "(MapGenerator chunks parent the obstacle mesh under the block-visual mesh, and the Phase-2 " +
+                 "Tilemap occluder owns its own mesh).")]
         public bool SelfMesh;
 
         private MeshRenderer _parentMeshRenderer;
@@ -44,9 +44,9 @@ namespace Light2D
         // sharedMesh/sharedMaterial are still read live (LightObstacleSprite.ResolveSourceSprite pattern).
         private Transform _cachedParent;
         private bool _cachedSelfMesh;
-        private MeshRenderer _meshRenderer;
         private MeshFilter _meshFilter;
         private Mesh _mesh;
+        private Material _drawMaterial;
         private Mesh _oldParentMesh;
         private Color32 _oldMulColor;
         private Color _oldAddColor;
@@ -59,7 +59,6 @@ namespace Light2D
 
         private void OnEnable()
         {
-            _meshRenderer = GetComponent<MeshRenderer>();
             _meshFilter = GetComponent<MeshFilter>();
             ReleaseOrphanedResources();
             Light2DRenderRegistry.RegisterObstacle(this);
@@ -81,19 +80,20 @@ namespace Light2D
         bool ILight2DDrawable.TryGetDrawEntry(out Light2DDrawEntry entry)
         {
             entry = default;
-            if (!isActiveAndEnabled || _meshFilter == null || _meshRenderer == null)
+            if (!isActiveAndEnabled || _meshFilter == null)
                 return false;
             if (Light2DObjectUtility.IsInPrefabStage(gameObject))
                 return false;
 
-            // Read the shared mesh/material live so a self-mesh assigned after OnEnable (MapGenerator,
-            // Phase-2 Tilemap) is picked up the next frame without caching a stale entry (Risk R4).
+            // Read the shared mesh live so a self-mesh assigned after OnEnable (MapGenerator, Phase-2
+            // Tilemap) is picked up the next frame without caching a stale entry (Risk R4).
             var mesh = _meshFilter.sharedMesh;
-            var material = _meshRenderer.sharedMaterial;
+            var material = _drawMaterial;
             if (mesh == null || material == null)
                 return false;
 
-            entry = new Light2DDrawEntry(mesh, material, transform.localToWorldMatrix, _meshRenderer.bounds,
+            entry = new Light2DDrawEntry(mesh, material, transform.localToWorldMatrix,
+                Light2DGeometry.TransformBounds(mesh.bounds, transform.localToWorldMatrix),
                 Mathf.Max(1, mesh.subMeshCount), SortingOrder, Owner);
             return true;
         }
@@ -124,16 +124,22 @@ namespace Light2D
                            source.sharedMaterial.mainTexture != null;
             MultiplicativeColor = settings.MultiplicativeFor(textured);
             AdditiveColor = settings.AdditiveColor;
+
+            // The Material slot is hidden in the normal inspector (see LightObstacleEditors) because it only
+            // supplies the obstacle-writing shader. Seed it from the packaged default when unset so a fresh
+            // obstacle draws through the obstacle shader; existing assignments are left untouched, and a
+            // custom-shader material can still be set via the Debug inspector.
+            if (Material == null)
+            {
+                var defaults = Light2DDefaultResources.Load();
+                if (defaults != null)
+                    Material = defaults.ObstacleMaterial;
+            }
         }
 #endif
 
         private void Refresh()
         {
-            // Register-and-draw model (§0.3): obstacles draw only through the registry, never a scene
-            // camera, so the owned renderer stays disabled in both mirror and self-mesh modes.
-            if (_meshRenderer != null)
-                _meshRenderer.enabled = false;
-
             // SelfMesh forces the self-mesh path even when a mirror-able parent exists: MapGenerator parents
             // the obstacle mesh under the block-visual mesh, whose geometry must never be mirrored.
             // D.2: only re-GetComponent when the parent transform changes or SelfMesh toggles; otherwise the
@@ -153,13 +159,19 @@ namespace Light2D
             if (!hasParentMirror)
             {
                 // Self-mesh mode (OQ1 option A): no parent geometry to mirror. Drop any owned generated
-                // mesh/material left from a prior mirror pass and register this object's own MeshFilter/
-                // MeshRenderer directly. Serves MapGenerator's self-mesh obstacle prefab and the Phase-2
-                // Tilemap occluder, whose meshes/materials are assigned externally after OnEnable.
+                // mesh/material left from a prior mirror pass; this object's own mesh is then drawn through
+                // the registry, which reads the MeshFilter's sharedMesh. Serves MapGenerator's self-mesh
+                // obstacle prefab and the Phase-2 Tilemap occluder, whose meshes are assigned externally
+                // after OnEnable.
                 ReleaseMesh();
                 ReleaseMaterial();
                 _oldParentMesh = null;
                 _oldParentMaterial = null;
+                // Self-mesh has no parent material to borrow, so resolve the assigned obstacle material
+                // or the build-safe obstacle-shader default; without this, _drawMaterial stays null and
+                // TryGetDrawEntry silently drops every self-mesh obstacle from the snapshot (mirrors
+                // LightAmbientEmitter.RefreshSelfMeshMode / LightObstacleTilemap.ResolveBaseMaterial).
+                _drawMaterial = Material != null ? Material : CustomSprite.GetRuntimeDefaultObstacleMaterial();
                 return;
             }
 
@@ -190,10 +202,10 @@ namespace Light2D
             var baseMaterial = Material != null ? Material : parentMaterial;
             var texture = parentMaterial.mainTexture as Texture2D;
             if (_oldParentMaterial != parentMaterial || _oldBaseMaterial != baseMaterial || _oldTexture != texture ||
-                _meshRenderer.sharedMaterial == null)
+                _drawMaterial == null)
             {
                 ReleaseMaterial();
-                _meshRenderer.sharedMaterial = CustomSprite.AcquireMaterial(baseMaterial, texture, false, out _materialKey);
+                _drawMaterial = CustomSprite.AcquireMaterial(baseMaterial, texture, out _materialKey);
                 _oldParentMaterial = parentMaterial;
                 _oldBaseMaterial = baseMaterial;
                 _oldTexture = texture;
@@ -235,19 +247,12 @@ namespace Light2D
                 Light2DObjectUtility.Destroy(_meshFilter.sharedMesh);
                 _meshFilter.sharedMesh = null;
             }
-            if (CustomSprite.IsGeneratedMaterial(_meshRenderer.sharedMaterial))
-            {
-                Light2DObjectUtility.Destroy(_meshRenderer.sharedMaterial);
-                _meshRenderer.sharedMaterial = null;
-            }
         }
 
         private void ReleaseOwnedResources()
         {
             ReleaseMesh();
             ReleaseMaterial();
-            if (_meshRenderer != null)
-                _meshRenderer.enabled = false;
         }
 
         private void ReleaseMesh()
@@ -264,8 +269,8 @@ namespace Light2D
             if (_materialKey != null)
                 CustomSprite.ReleaseMaterial(_materialKey);
             _materialKey = null;
-            if (_meshRenderer != null && CustomSprite.IsGeneratedMaterial(_meshRenderer.sharedMaterial))
-                _meshRenderer.sharedMaterial = null;
+            if (CustomSprite.IsGeneratedMaterial(_drawMaterial))
+                _drawMaterial = null;
         }
     }
 }

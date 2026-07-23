@@ -657,24 +657,22 @@ MonoBehaviour:
   EnableAmbientLight: 1
   BlurLightSources: 1
   BlurAmbientLight: 1
-  AmbientColoredBounce: 0
+  AmbientColoredBounce: 1
   AmbientIterations: 1
-  OverrideOverlayLook: 0
   LightBrightness: 2
   LightSourcesBrightness: 1
-  BloomPower: 4
+  BloomPower: 3
   BloomAdd: 0.15
-  OverrideAmbientFeel: 0
-  AmbientObstacleMul: 1.5
-  AmbientObstacleAdd: 0.1
-  AmbientEmissionMul: 0.1
+  AmbientObstacleMul: 2
+  AmbientObstacleAdd: 0.2
+  AmbientEmissionMul: 0.02
   AmbientSamplingDistance: 0.01
   AmbientAdaptSpeed: 0.2
-  OverrideBlur: 0
   BlurDistance: 2.5
   HDR: 1
   LightObstaclesAntialiasing: 1
   LightObstaclesDistance: 10
+  ObstacleColor: {r: 1, g: 1, b: 1, a: 0.45490196}
   LightTexturesFilterMode: 1
   EnableNormalMapping: 0
   AffectOnlyThisCamera: 0
@@ -1115,7 +1113,7 @@ MonoBehaviour:
   Sprite: {fileID: 0}
   Priority: 1
   BlendDistance: 0.3
-  Coverage: 0.857
+  Coverage: 0.806
   Owner: {fileID: 0}
 --- !u!4 &1404857723
 Transform:
@@ -1254,7 +1252,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: Radius
-      value: 5.0571256
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: Sprite
@@ -1266,7 +1264,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: Color.b
-      value: 0.5
+      value: 0.7
       objectReference: {fileID: 0}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: Color.g
@@ -1274,12 +1272,16 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: Falloff
-      value: 1
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: Material
       value: 
       objectReference: {fileID: 2100000, guid: ab37f3042fbc56e4b9288c3ba9cd32d8, type: 2}
+    - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
+      propertyPath: Intensity
+      value: 0.9
+      objectReference: {fileID: 0}
     - target: {fileID: 11400000, guid: f1f87948c09d89b48acf75b3f771eece, type: 3}
       propertyPath: LightOrigin.y
       value: 0

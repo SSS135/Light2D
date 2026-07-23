@@ -15,3 +15,4 @@ MonoBehaviour:
   AmbientLightComputeMaterial: {fileID: 2100000, guid: 0d2e0bb3755347a42ba8fe781dcfa6f1, type: 2}
   LightOverlayMaterial: {fileID: 2100000, guid: 357b085471a3b6b4aace8aa4cc99238a, type: 2}
   BlurMaterial: {fileID: 2100000, guid: a359593f98c7f7740b07a09ac6d11e43, type: 2}
+  ObstacleMaterial: {fileID: 2100000, guid: 0a8c132f813f5514b9f5b48ff3956482, type: 2}

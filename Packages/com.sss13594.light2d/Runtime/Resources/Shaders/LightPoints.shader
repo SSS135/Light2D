@@ -6,9 +6,11 @@ uniform _PathTrackingSamples (a bounded [loop] in LightBase.cginc / LightBaseURP
 LIGHT2D_UNIFORM_SAMPLES) instead of a compile-time PATH_TRACKING_SAMPLES define, so one shader
 serves every sample count and a MaterialPropertyBlock can drive per-light quality.
 
-The Built-in (CGPROGRAM) SubShader is intentionally FIRST and the URP (UniversalPipeline) SubShader
-SECOND: these light passes draw as geometry, so URP disambiguates by the RenderPipeline tag and the
-ordering is free — the collapsed shader standardizes on Built-in-first.
+The URP (UniversalPipeline) SubShader is intentionally FIRST and the Built-in (CGPROGRAM) SubShader
+SECOND: URP selects the first pipeline-compatible SubShader in source order, and a Built-in SubShader
+with no RenderPipeline tag counts as universally compatible, so URP-first is required for correct URP
+selection. Built-in still works because these light passes draw as geometry, so the Built-in pipeline
+disambiguates by the RenderPipeline tag and skips the URP SubShader.
 
 Perf: the uniform loop was chosen over unrolled keyword variants. If it regresses on the min-spec
 mobile A/B, the pre-approved fallback is a single shader with #pragma multi_compile of byte-identical
@@ -22,6 +24,25 @@ Properties {
 	_ObstacleMul ("Obstacle Mul", Float) = 500
 	_EmissionColorMul ("Emission color mul", Float) = 1
 	_PathTrackingSamples ("Path tracking samples", Float) = 40
+}
+SubShader {
+	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
+	Blend OneMinusDstColor One
+	Cull Off
+	ZWrite Off
+	Pass {
+		Name "LightPoints"
+		Tags { "LightMode"="SRPDefaultUnlit" }
+		HLSLPROGRAM
+		#define LIGHT2D_UNIFORM_SAMPLES
+		#pragma target 3.0
+		#pragma vertex Light2DFixedVert
+		#pragma fragment Light2DFixedFrag
+		#pragma multi_compile ORTHOGRAPHIC_CAMERA PERSPECTIVE_CAMERA
+		#pragma multi_compile LIGHT2D_XY_PLANE LIGHT2D_XZ_PLANE
+		#include "LightBaseURP.hlsl"
+		ENDHLSL
+	}
 }
 SubShader {
 	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
@@ -45,25 +66,6 @@ SubShader {
 			#pragma vertex light2d_fixed_vert
 			#pragma fragment light2_fixed_frag
 		ENDCG
-	}
-}
-SubShader {
-	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
-	Blend OneMinusDstColor One
-	Cull Off
-	ZWrite Off
-	Pass {
-		Name "LightPoints"
-		Tags { "LightMode"="SRPDefaultUnlit" }
-		HLSLPROGRAM
-		#define LIGHT2D_UNIFORM_SAMPLES
-		#pragma target 3.0
-		#pragma vertex Light2DFixedVert
-		#pragma fragment Light2DFixedFrag
-		#pragma multi_compile ORTHOGRAPHIC_CAMERA PERSPECTIVE_CAMERA
-		#pragma multi_compile LIGHT2D_XY_PLANE LIGHT2D_XZ_PLANE
-		#include "LightBaseURP.hlsl"
-		ENDHLSL
 	}
 }
 

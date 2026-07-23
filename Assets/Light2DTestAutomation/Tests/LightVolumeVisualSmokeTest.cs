@@ -48,7 +48,9 @@ namespace Light2D.TestProject.Tests
 
         // Spatial gates. The bypassed world is raw-bright; the covered cave is mostly dark with a bright
         // lantern core. Do NOT loosen these to accommodate a rendering regression.
-        private const float WorldMinMeanLuminance = 0.45f;
+        // Re-baselined 0.45 -> 0.42 (2026-07-23): an intentional scene edit cut a dark tile shaft through
+        // the sampled surface region (raw-image content change, measured 0.438), not a rendering change.
+        private const float WorldMinMeanLuminance = 0.42f;
         private const float CaveMaxMeanLuminance = 0.25f;
         private const float CaveMinCoreLuminance = 0.4f;
 

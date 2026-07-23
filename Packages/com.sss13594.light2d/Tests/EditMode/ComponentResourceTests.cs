@@ -22,28 +22,29 @@ namespace Light2D.Tests
 
             try
             {
-                var customSprite = gameObject.AddComponent<CustomSprite>();
+                var customSprite = gameObject.AddComponent<TestCustomSprite>();
                 customSprite.Sprite = sprite;
                 customSprite.Material = material;
                 customSprite.SendMessage("Update");
 
-                var filter = gameObject.GetComponent<MeshFilter>();
-                var renderer = gameObject.GetComponent<MeshRenderer>();
-                var mesh = filter.sharedMesh;
-                var generatedMaterial = renderer.sharedMaterial;
+                // The owned mesh and generated material are read through the internal draw accessors;
+                // the component owns no MeshFilter/MeshRenderer to inspect.
+                var mesh = customSprite.Mesh;
+                var generatedMaterial = customSprite.DrawMaterial;
+                Assert.That(mesh, Is.Not.Null);
                 Assert.That(mesh.vertices.Select(vertex => (Vector2)vertex), Is.EqualTo(sprite.vertices));
                 Assert.That(mesh.triangles, Is.EqualTo(sprite.triangles.Select(index => (int)index)));
                 Assert.That(mesh.uv, Is.EqualTo(sprite.uv));
 
                 customSprite.enabled = false;
-                Assert.That(filter.sharedMesh, Is.Null);
-                Assert.That(renderer.sharedMaterial, Is.Null);
+                Assert.That(customSprite.Mesh, Is.Null);
+                Assert.That(customSprite.DrawMaterial, Is.Null);
                 Assert.That(mesh == null, Is.True);
                 Assert.That(generatedMaterial == null, Is.True);
 
                 customSprite.enabled = true;
-                Assert.That(filter.sharedMesh, Is.Not.Null);
-                Assert.That(renderer.sharedMaterial, Is.Not.Null);
+                Assert.That(customSprite.Mesh, Is.Not.Null);
+                Assert.That(customSprite.DrawMaterial, Is.Not.Null);
             }
             finally
             {
@@ -63,16 +64,16 @@ namespace Light2D.Tests
             var gameObject = new GameObject("Cache reset sprite");
             try
             {
-                var customSprite = gameObject.AddComponent<CustomSprite>();
+                var customSprite = gameObject.AddComponent<TestCustomSprite>();
                 customSprite.Sprite = sprite;
                 customSprite.Material = material;
                 customSprite.SendMessage("Update");
-                var oldGeneratedMaterial = gameObject.GetComponent<MeshRenderer>().sharedMaterial;
+                var oldGeneratedMaterial = customSprite.DrawMaterial;
 
                 typeof(CustomSprite).GetMethod("ResetMaterialCache", BindingFlags.Static | BindingFlags.NonPublic)
                     .Invoke(null, null);
 
-                var reboundMaterial = gameObject.GetComponent<MeshRenderer>().sharedMaterial;
+                var reboundMaterial = customSprite.DrawMaterial;
                 Assert.That(oldGeneratedMaterial == null, Is.True);
                 Assert.That(reboundMaterial, Is.Not.Null);
                 Assert.That(reboundMaterial, Is.Not.SameAs(oldGeneratedMaterial));
@@ -110,7 +111,7 @@ namespace Light2D.Tests
                 obstacle.GameSpriteRenderer = sourceObject.GetComponent<SpriteRenderer>();
                 obstacle.SendMessage("Update");
 
-                var ownedMesh = obstacleObject.GetComponent<MeshFilter>().sharedMesh;
+                var ownedMesh = obstacle.Mesh;
                 Assert.That(ownedMesh, Is.Not.Null, "The obstacle did not build an owned mesh to register");
 
                 var snapshot = new List<Light2DDrawEntry>();
@@ -145,19 +146,22 @@ namespace Light2D.Tests
         }
 
         [Test]
-        public void RegisteredLightingInputRenderersStayDisabledToPreventSourceCameraDoubleDraw()
+        public void RegisteredLightingInputComponentsOwnNoMeshRendererSoGeometryCannotLeak()
         {
-            // R5 double-draw guard: sources, obstacles and ambient emitters draw only through the
-            // registry, so each keeps its owned MeshRenderer disabled. A left-enabled renderer would let
-            // the source camera draw the lighting-input mesh into the game image, the exact defect the
-            // retired LightSources/AmbientLight/LightObstacles layers used to prevent.
+            // Register-and-draw guard: sources, obstacles and ambient emitters draw only through the
+            // registry via CommandBuffer.DrawMesh, so none of them owns a MeshRenderer the source camera
+            // could draw into the game image — the exact defect the retired LightSources/AmbientLight/
+            // LightObstacles layers used to prevent. With no renderer at all there is nothing to leak.
+            // None of them owns a MeshFilter either: a sprite-mode ambient emitter keeps its generated mesh
+            // in an internal field, and its MeshFilter is now only an optional self-mesh input that
+            // AddComponent no longer forces.
             var texture = new Texture2D(2, 2);
             var sprite = Sprite.Create(texture, new Rect(0, 0, 2, 2), Vector2.one * 0.5f, 1);
             var material = new Material(Shader.Find("Sprites/Default"));
-            var sourceObject = new GameObject("Double-draw obstacle source", typeof(SpriteRenderer));
-            var lightObject = new GameObject("Double-draw light source");
-            var obstacleObject = new GameObject("Double-draw obstacle");
-            var ambientObject = new GameObject("Double-draw ambient emitter");
+            var sourceObject = new GameObject("No-leak obstacle source", typeof(SpriteRenderer));
+            var lightObject = new GameObject("No-leak light source");
+            var obstacleObject = new GameObject("No-leak obstacle");
+            var ambientObject = new GameObject("No-leak ambient emitter");
             try
             {
                 sourceObject.GetComponent<SpriteRenderer>().sprite = sprite;
@@ -177,12 +181,24 @@ namespace Light2D.Tests
                 ambient.Material = material;
                 ambient.SendMessage("Update");
 
-                Assert.That(lightObject.GetComponent<MeshRenderer>().enabled, Is.False,
-                    "The light source MeshRenderer must stay disabled");
-                Assert.That(obstacleObject.GetComponent<MeshRenderer>().enabled, Is.False,
-                    "The obstacle MeshRenderer must stay disabled");
-                Assert.That(ambientObject.GetComponent<MeshRenderer>().enabled, Is.False,
-                    "The ambient emitter MeshRenderer must stay disabled");
+                // Lights and obstacles own neither a MeshRenderer nor a MeshFilter, so no lighting-input
+                // geometry can reach the game image.
+                Assert.That(lightObject.GetComponent<MeshRenderer>(), Is.Null,
+                    "The light source must not own a MeshRenderer");
+                Assert.That(lightObject.GetComponent<MeshFilter>(), Is.Null,
+                    "The light source must not own a MeshFilter");
+                Assert.That(obstacleObject.GetComponent<MeshRenderer>(), Is.Null,
+                    "The obstacle must not own a MeshRenderer");
+                Assert.That(obstacleObject.GetComponent<MeshFilter>(), Is.Null,
+                    "The obstacle must not own a MeshFilter");
+
+                // A sprite-mode ambient emitter draws an internal generated mesh through the registry, so it
+                // owns neither a MeshRenderer nor a MeshFilter; AddComponent no longer forces a MeshFilter
+                // now that it is only an optional self-mesh input.
+                Assert.That(ambientObject.GetComponent<MeshRenderer>(), Is.Null,
+                    "The ambient emitter must not own a MeshRenderer");
+                Assert.That(ambientObject.GetComponent<MeshFilter>(), Is.Null,
+                    "AddComponent must not force a MeshFilter on the ambient emitter (optional self-mesh input)");
             }
             finally
             {
@@ -206,13 +222,13 @@ namespace Light2D.Tests
                 var first = firstObject.AddComponent<LightSprite>();
                 var second = secondObject.AddComponent<LightSprite>();
                 var snapshot = new List<LightSprite>();
-                LightSprite.PrepareSnapshot(snapshot, false);
+                LightSprite.PrepareSnapshot(snapshot, false, null, null);
                 Assert.That(snapshot, Does.Contain(first));
                 Assert.That(snapshot, Does.Contain(second));
                 Assert.That(snapshot.Select(light => light.GetEntityId()), Is.Ordered);
 
                 first.enabled = false;
-                LightSprite.PrepareSnapshot(snapshot, false);
+                LightSprite.PrepareSnapshot(snapshot, false, null, null);
                 Assert.That(snapshot.Any(light => ReferenceEquals(light, first)), Is.False);
                 Assert.That(snapshot, Does.Contain(second));
             }
@@ -232,7 +248,7 @@ namespace Light2D.Tests
             var gameObject = new GameObject("Steady state sprite");
             try
             {
-                var customSprite = gameObject.AddComponent<CustomSprite>();
+                var customSprite = gameObject.AddComponent<TestCustomSprite>();
                 customSprite.Sprite = sprite;
                 customSprite.Material = material;
 
@@ -269,11 +285,11 @@ namespace Light2D.Tests
             var gameObject = new GameObject("Mirroring sprite");
             try
             {
-                var customSprite = gameObject.AddComponent<CustomSprite>();
+                var customSprite = gameObject.AddComponent<TestCustomSprite>();
                 customSprite.Sprite = sprite;
                 customSprite.Material = source;
                 customSprite.SendMessage("Update");
-                var generated = gameObject.GetComponent<MeshRenderer>().sharedMaterial;
+                var generated = customSprite.DrawMaterial;
 
                 // While the source is unchanged, steady-state updates must not re-copy source properties.
                 var localColor = new Color(0.1f, 0.2f, 0.3f, 0.4f);
@@ -304,11 +320,13 @@ namespace Light2D.Tests
             var firstSprite = Sprite.Create(texture, new Rect(0, 0, 4, 4), Vector2.one * 0.5f, 4);
             var secondSprite = Sprite.Create(texture, new Rect(0, 0, 2, 2), Vector2.one * 0.5f, 2);
             var material = new Material(Shader.Find("Sprites/Default"));
-            var sourceObject = new GameObject("Source custom sprite");
+            // The CustomSprite source owns no renderer of its own; a bare MeshRenderer is added only to
+            // wire GameSpriteRenderer, and ResolveSourceSprite prefers the sibling CustomSprite's Sprite.
+            var sourceObject = new GameObject("Source custom sprite", typeof(MeshRenderer));
             var obstacleObject = new GameObject("Obstacle sprite");
             try
             {
-                var sourceSprite = sourceObject.AddComponent<CustomSprite>();
+                var sourceSprite = sourceObject.AddComponent<TestCustomSprite>();
                 sourceSprite.Sprite = firstSprite;
                 sourceSprite.Material = material;
 
@@ -334,14 +352,58 @@ namespace Light2D.Tests
         }
 
         [Test]
+        public void ObstacleMeshSelfMeshWithNullMaterialStillYieldsDrawEntryWithDefaultObstacleMaterial()
+        {
+            // Regression guard (Rocket shadows): a self-mesh LightObstacleMesh with no serialized Material
+            // must still resolve the build-safe default obstacle material so TryGetDrawEntry keeps it in the
+            // snapshot, instead of silently dropping every self-mesh obstacle when its material is null.
+            var mesh = new Mesh
+            {
+                vertices = new[] { Vector3.zero, Vector3.right, Vector3.up },
+                triangles = new[] { 0, 1, 2 }
+            };
+            var gameObject = new GameObject("Self-mesh obstacle", typeof(MeshFilter));
+            try
+            {
+                gameObject.GetComponent<MeshFilter>().sharedMesh = mesh;
+                var obstacle = gameObject.AddComponent<LightObstacleMesh>();
+                obstacle.SelfMesh = true;
+                obstacle.Material = null;
+                obstacle.SendMessage("Update");
+
+                Assert.That(((ILight2DDrawable)obstacle).TryGetDrawEntry(out var entry), Is.True,
+                    "A self-mesh obstacle with a valid mesh and a null Material must still draw");
+                Assert.That(entry.Material, Is.Not.Null,
+                    "The self-mesh branch must resolve the default obstacle material when Material is null");
+                Assert.That(entry.Mesh, Is.SameAs(mesh),
+                    "The draw entry must register the object's own self-mesh");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(gameObject);
+                UnityEngine.Object.DestroyImmediate(mesh);
+            }
+        }
+
+        [Test]
         public void ResourceComponentsDeclareRequiredLifecycleAttributes()
         {
             Assert.That(typeof(CustomSprite).GetCustomAttribute<ExecuteAlways>(), Is.Not.Null);
             Assert.That(typeof(CustomSprite).GetCustomAttribute<DisallowMultipleComponent>(), Is.Not.Null);
-            var required = typeof(CustomSprite).GetCustomAttributes<RequireComponent>().ToArray();
-            Assert.That(required, Is.Not.Empty);
+            // CustomSprite and LightAmbientEmitter both draw a mesh through the registry (a bare owned mesh
+            // and an internal generated mesh respectively), so neither requires a MeshFilter/MeshRenderer;
+            // the emitter's MeshFilter is now only an optional self-mesh input, not a RequireComponent.
+            Assert.That(typeof(CustomSprite).GetCustomAttributes<RequireComponent>(), Is.Empty);
+            Assert.That(typeof(LightAmbientEmitter).GetCustomAttributes<RequireComponent>(), Is.Empty);
             Assert.That(typeof(LightObstacleMesh).GetCustomAttribute<ExecuteAlways>(), Is.Not.Null);
             Assert.That(typeof(LightObstacleGenerator).GetCustomAttribute<DisallowMultipleComponent>(), Is.Not.Null);
+        }
+
+        // Concrete stand-in for the retired standalone CustomSprite: an empty subclass behaves exactly
+        // like the old bare component, so these base-class tests stay valid before and after CustomSprite
+        // is made abstract. AddComponent needs a concrete type; the abstract base cannot be added directly.
+        private sealed class TestCustomSprite : CustomSprite
+        {
         }
     }
 }

@@ -56,14 +56,14 @@ namespace Light2D.Tests
             var sprite = Sprite.Create(texture, new Rect(0, 0, 2, 2), new Vector2(0.5f, 0.5f), 1);
             var baseMaterial = new Material(Shader.Find("Sprites/Default"));
             var gameObject = new GameObject("Generated Sprite");
-            var customSprite = gameObject.AddComponent<CustomSprite>();
+            var customSprite = gameObject.AddComponent<TestCustomSprite>();
             customSprite.Sprite = sprite;
             customSprite.Material = baseMaterial;
             customSprite.enabled = false;
             customSprite.enabled = true;
 
-            var mesh = gameObject.GetComponent<MeshFilter>().sharedMesh;
-            var generatedMaterial = gameObject.GetComponent<MeshRenderer>().sharedMaterial;
+            var mesh = customSprite.Mesh;
+            var generatedMaterial = customSprite.DrawMaterial;
             Assert.That(mesh, Is.Not.Null);
             Assert.That(mesh.name, Does.StartWith("Generated Mesh"));
             Assert.That(generatedMaterial, Is.Not.Null);
@@ -89,6 +89,12 @@ namespace Light2D.Tests
             {
                 Assert.That(lighting.SourceCamera, Is.SameAs(camera));
                 Assert.That(LightingSystem.Instances, Does.Contain(lighting));
+                // In the editor, AddComponent fires Reset, which auto-populates the hidden material
+                // slots from Light2DDefaultResources — a freshly added system is ready out of the box.
+                Assert.That(lighting.LightOverlayMaterial, Is.Not.Null);
+                Assert.That(lighting.IsRenderingReady, Is.True);
+                // The null-overlay contract still holds: clearing the material reverts readiness.
+                lighting.LightOverlayMaterial = null;
                 Assert.That(lighting.IsRenderingReady, Is.False);
                 lighting.LightOverlayMaterial = overlay;
                 // v3 retires the Built-in helper LightCamera: with the overlay material assigned the
@@ -128,6 +134,14 @@ namespace Light2D.Tests
             }
 
             Assert.That(LightingSystem.Instances.Any(item => item == lighting), Is.False);
+        }
+
+        // Concrete stand-in for the retired standalone CustomSprite: an empty subclass behaves exactly
+        // like the old bare component, so this base-class lifecycle test stays valid before and after
+        // CustomSprite is made abstract. AddComponent needs a concrete type; the abstract base cannot be
+        // added directly.
+        private sealed class TestCustomSprite : CustomSprite
+        {
         }
     }
 }

@@ -15,7 +15,7 @@ The renderer data must be a persistent writable asset. A camera can override the
 
 ## Light Inputs Are Visible as Ordinary Sprites
 
-This does not happen in Light2D 2.0. Each input component keeps its own `MeshRenderer` disabled and is drawn only into Light2D's textures, so lighting-input geometry never leaks into the game image — there are no layers to exclude. If an obstacle or light source is visibly rendering as an ordinary sprite, the visible renderer is a separate, still-enabled component on the object (for example the original `SpriteRenderer` you want the obstacle to mirror). Disable or remove that renderer if it should not appear.
+This does not happen in Light2D 2.0. Each input component owns no scene renderer and is drawn only into Light2D's textures, so lighting-input geometry never leaks into the game image — there are no layers to exclude. If an obstacle or light source is visibly rendering as an ordinary sprite, the visible renderer is a separate, still-enabled component on the object (for example the original `SpriteRenderer` you want the obstacle to mirror). Disable or remove that renderer if it should not appear.
 
 ## Small Obstacles or Edge Lights Disappear
 
@@ -27,7 +27,7 @@ Decrease `Light Pixel Size` to raise lighting resolution. Increase `Light Camera
 - Disable ambient lighting when unused.
 - Disable source or ambient blur.
 - Disable obstacle antialiasing.
-- Disable 64-bit color when HDR precision is unnecessary.
+- Disable 16-bit HDR Color when HDR precision is unnecessary.
 - Use a lower-point direct-light shader.
 - Avoid normal mapping unless its full-resolution normal buffer and per-light passes are acceptable.
 - Reduce the number and screen coverage of lights, especially normal-mapped lights.
@@ -47,7 +47,7 @@ Set `Camera To Light Obstacles Distance` to the effective distance between the c
 
 ## HDR Looks Clamped or Different in URP
 
-Enable HDR on the camera and URP asset. When **64 Bit Color** is enabled, set the URP asset **HDR Color Buffer Precision** to **64 Bits**. Light2D falls back when the platform cannot render to the required half-float format.
+Enable HDR on the camera and URP asset. When **16-bit HDR Color** is enabled, set the URP asset **HDR Color Buffer Precision** to **64 Bits**. Light2D falls back when the platform cannot render to the required half-float format.
 
 ## `Affect Only This Camera` Fails
 

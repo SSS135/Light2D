@@ -114,11 +114,8 @@ namespace Light2D.Examples
                     if (useUv1) uv1.AddRange(smallMesh.uv2);
                     if (useColors) colors.AddRange(smallMesh.colors);
 
-                    var customSprite = meshPart.Renderer.GetComponent<CustomSprite>();
                     Destroy(meshPart.Renderer);
                     Destroy(filter);
-                    if (customSprite != null)
-                        Destroy(customSprite);
                 }
 
                 var meshFilter = obj.AddComponent<MeshFilter>();

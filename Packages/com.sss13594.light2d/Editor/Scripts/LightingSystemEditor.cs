@@ -16,11 +16,8 @@ namespace Light2D
         private SerializedProperty _blurAmbientLight ;
         private SerializedProperty  _hdr ;
         private SerializedProperty _lightObstaclesAntialiasing;
-        private SerializedProperty _ambientLightComputeMaterial;
-        private SerializedProperty _lightOverlayMaterial;
-        private SerializedProperty _lightSourcesBlurMaterial;
-        private SerializedProperty _ambientLightBlurMaterial;
         private SerializedProperty _lightObstaclesDistance;
+        private SerializedProperty _obstacleColor;
         private SerializedProperty _lightTexturesFilterMode;
         private SerializedProperty _enableNormalMapping;
         private SerializedProperty _affectOnlyThisCamera;
@@ -32,24 +29,16 @@ namespace Light2D
         private SerializedProperty _ambientWarmupCycles;
         private SerializedProperty _maxQueuedAmbientCycles;
         private SerializedProperty _maxLightTexturePixels;
-        private SerializedProperty _overrideOverlayLook;
         private SerializedProperty _lightBrightness;
         private SerializedProperty _lightSourcesBrightness;
         private SerializedProperty _bloomPower;
         private SerializedProperty _bloomAdd;
-        private SerializedProperty _overrideAmbientFeel;
         private SerializedProperty _ambientObstacleMul;
         private SerializedProperty _ambientObstacleAdd;
         private SerializedProperty _ambientEmissionMul;
         private SerializedProperty _ambientSamplingDistance;
         private SerializedProperty _ambientAdaptSpeed;
-        private SerializedProperty _overrideBlur;
         private SerializedProperty _blurDistance;
-
-        private bool _showOverlayLook;
-        private bool _showAmbientFeel;
-        private bool _showBlur;
-        private bool _showAdvancedLimits;
 
         void OnEnable()
         {
@@ -61,11 +50,8 @@ namespace Light2D
             _blurAmbientLight = serializedObject.FindProperty("BlurAmbientLight");
             _hdr = serializedObject.FindProperty("HDR");
             _lightObstaclesAntialiasing = serializedObject.FindProperty("LightObstaclesAntialiasing");
-            _ambientLightComputeMaterial = serializedObject.FindProperty("AmbientLightComputeMaterial");
-            _lightOverlayMaterial = serializedObject.FindProperty("LightOverlayMaterial");
-            _lightSourcesBlurMaterial = serializedObject.FindProperty("LightSourcesBlurMaterial");
-            _ambientLightBlurMaterial = serializedObject.FindProperty("AmbientLightBlurMaterial");
             _lightObstaclesDistance = serializedObject.FindProperty("LightObstaclesDistance");
+            _obstacleColor = serializedObject.FindProperty("ObstacleColor");
             _lightTexturesFilterMode = serializedObject.FindProperty("LightTexturesFilterMode");
             _enableNormalMapping = serializedObject.FindProperty("EnableNormalMapping");
             _affectOnlyThisCamera = serializedObject.FindProperty("AffectOnlyThisCamera");
@@ -77,18 +63,15 @@ namespace Light2D
             _ambientWarmupCycles = serializedObject.FindProperty("AmbientWarmupCycles");
             _maxQueuedAmbientCycles = serializedObject.FindProperty("MaxQueuedAmbientCycles");
             _maxLightTexturePixels = serializedObject.FindProperty("MaxLightTexturePixels");
-            _overrideOverlayLook = serializedObject.FindProperty("OverrideOverlayLook");
             _lightBrightness = serializedObject.FindProperty("LightBrightness");
             _lightSourcesBrightness = serializedObject.FindProperty("LightSourcesBrightness");
             _bloomPower = serializedObject.FindProperty("BloomPower");
             _bloomAdd = serializedObject.FindProperty("BloomAdd");
-            _overrideAmbientFeel = serializedObject.FindProperty("OverrideAmbientFeel");
             _ambientObstacleMul = serializedObject.FindProperty("AmbientObstacleMul");
             _ambientObstacleAdd = serializedObject.FindProperty("AmbientObstacleAdd");
             _ambientEmissionMul = serializedObject.FindProperty("AmbientEmissionMul");
             _ambientSamplingDistance = serializedObject.FindProperty("AmbientSamplingDistance");
             _ambientAdaptSpeed = serializedObject.FindProperty("AmbientAdaptSpeed");
-            _overrideBlur = serializedObject.FindProperty("OverrideBlur");
             _blurDistance = serializedObject.FindProperty("BlurDistance");
         }
 
@@ -97,8 +80,15 @@ namespace Light2D
             // Update the serializedProperty - always do this in the beginning of OnInspectorGUI.
             serializedObject.Update();
 
-            if (Application.isPlaying)
-                GUI.enabled = false;
+            // Play-mode gating: the value fields (Obstacles / Overlay Look / Ambient Feel / Blur / Advanced
+            // Limits, plus Colored Bounce and Ambient Iterations) are pushed to their materials or read as
+            // loop counts every frame, so they live-update the running scene and stay editable in Play - this
+            // is the intended in-Play tuning loop. Structural setup fields (texture size, camera geometry,
+            // HDR, antialiasing, normal mapping, plane, single-camera mode, filter mode, the ambient/blur
+            // resource toggles, and the coverage baseline) allocate or reconfigure render targets, so editing
+            // them mid-play would force a reallocation and an ambient-history reset; they are locked in Play
+            // instead of the old blanket disable that greyed the value fields too.
+            bool playMode = Application.isPlaying;
 
             var lightingSystem = (LightingSystem)target;
             var cam = lightingSystem.GetComponent<Camera>();
@@ -109,58 +99,71 @@ namespace Light2D
 
             DrawConfigurationWarnings(cam);
 
-            EditorGUILayout.PropertyField(_lightPixelSize, new GUIContent("Light Pixel Size"));
+            // Rendered enabled so it stays legible: Unity discards Play-mode inspector edits on exit, so warn
+            // that live value tweaks made now are not persisted.
+            if (playMode)
+                EditorGUILayout.HelpBox("Play mode: the value fields below (Obstacles, Overlay Look, Ambient " +
+                    "Feel, Blur, Advanced Limits) are editable and update the lighting live. Setup fields are " +
+                    "locked because they reallocate render targets. Note: value tweaks made in Play mode are " +
+                    "reverted by Unity when you exit Play mode.", MessageType.Info);
 
-            if (cam == null || cam.orthographic)
+            // --- Structural / setup fields: locked in Play mode (allocate/reconfigure render targets). ---
+            using (new EditorGUI.DisabledScope(playMode))
             {
-                EditorGUILayout.PropertyField(_lightCameraSizeAdd, new GUIContent("Light Camera Size Add"));
+                EditorGUILayout.PropertyField(_lightPixelSize, new GUIContent("Light Pixel Size"));
+
+                if (cam == null || cam.orthographic)
+                {
+                    EditorGUILayout.PropertyField(_lightCameraSizeAdd, new GUIContent("Light Camera Size Add"));
+                }
+                else
+                {
+                    EditorGUILayout.PropertyField(_lightCameraFovAdd, new GUIContent("Light Camera Fov Add"));
+                    EditorGUILayout.PropertyField(_lightObstaclesDistance, new GUIContent("Camera To Light Obstacles Distance"));
+                }
+
+                EditorGUILayout.PropertyField(_hdr, new GUIContent("16-bit HDR Color"));
+                EditorGUILayout.PropertyField(_lightObstaclesAntialiasing, new GUIContent("Light Obstacles Antialiasing"));
+                EditorGUILayout.PropertyField(_enableNormalMapping, new GUIContent("Normal Mapping"));
+                EditorGUILayout.PropertyField(_xzPlane, new GUIContent("XZ Plane"));
+                EditorGUILayout.PropertyField(_affectOnlyThisCamera, new GUIContent("Affect Only This Camera"));
+                _lightTexturesFilterMode.enumValueIndex = (int)(FilterMode)EditorGUILayout.EnumPopup(
+                    "Texture Filtering", (FilterMode)_lightTexturesFilterMode.enumValueIndex);
+
+                // Composition materials (overlay, ambient compute, blur) are intentionally hidden from this
+                // inspector: the value fields below are the single source of truth and are applied every frame,
+                // so only the materials' shaders matter. A freshly added LightingSystem auto-populates the slots
+                // from the packaged defaults (LightingSystem.Reset); a power user can still assign a custom-shader
+                // material through Unity's Debug inspector.
+                EditorGUILayout.PropertyField(_blurLightSources, new GUIContent("Blur Light Sources"));
+                if (_blurLightSources.boolValue && _enableNormalMapping.boolValue)
+                {
+                    EditorGUILayout.LabelField("    Blurring light sources with normal mapping enabled\n");
+                    EditorGUILayout.LabelField("     could significantly reduce lighting quality.");
+                }
+
+                EditorGUILayout.PropertyField(_enableAmbientLight, new GUIContent("Enable Ambient Light"));
             }
-            else
+
+            // Ambient sub-fields are additionally greyed when ambient is disabled. Blur Ambient Light is a
+            // structural toggle (also locked in Play), while Colored Bounce and Ambient Iterations are
+            // always-applied per-frame values and stay editable in Play whenever ambient is enabled.
+            bool ambientEnabled = _enableAmbientLight.boolValue;
+            using (new EditorGUI.DisabledScope(!ambientEnabled || playMode))
+                EditorGUILayout.PropertyField(_blurAmbientLight, new GUIContent("   Blur Ambient Light"));
+            using (new EditorGUI.DisabledScope(!ambientEnabled))
             {
-                EditorGUILayout.PropertyField(_lightCameraFovAdd, new GUIContent("Light Camera Fov Add"));
-                EditorGUILayout.PropertyField(_lightObstaclesDistance, new GUIContent("Camera To Light Obstacles Distance"));
+                EditorGUILayout.PropertyField(_ambientColoredBounce, new GUIContent("   Colored Bounce"));
+                EditorGUILayout.PropertyField(_ambientIterations, new GUIContent("   Ambient Iterations"));
             }
 
-            EditorGUILayout.PropertyField(_hdr, new GUIContent("64 Bit Color"));
-            EditorGUILayout.PropertyField(_lightObstaclesAntialiasing, new GUIContent("Light Obstacles Antialiasing"));
-            EditorGUILayout.PropertyField(_enableNormalMapping, new GUIContent("Normal Mapping"));
-            EditorGUILayout.PropertyField(_xzPlane, new GUIContent("XZ Plane"));
-            EditorGUILayout.PropertyField(_affectOnlyThisCamera, new GUIContent("Affect Only This Camera"));
-            _lightTexturesFilterMode.enumValueIndex = (int)(FilterMode)EditorGUILayout.EnumPopup(
-                "Texture Filtering", (FilterMode)_lightTexturesFilterMode.enumValueIndex);
+            // Default Coverage is the world-coverage baseline; crossing 1.0 activates coverage compositing and
+            // allocates the coverage render targets, so it is a structural field and stays locked in Play.
+            using (new EditorGUI.DisabledScope(playMode))
+                EditorGUILayout.PropertyField(_defaultCoverage, new GUIContent("Default Coverage"));
 
-            EditorGUILayout.PropertyField(_blurLightSources, new GUIContent("Blur Light Sources"));
-            if (_blurLightSources.boolValue && _enableNormalMapping.boolValue)
-            {
-                EditorGUILayout.LabelField("    Blurring light sources with normal mapping enabled\n");
-                EditorGUILayout.LabelField("     could significantly reduce lighting quality.");
-            }
-
-            bool normalGuiEnableState = GUI.enabled;
-            if (!_blurLightSources.boolValue)
-                GUI.enabled = false;
-            EditorGUILayout.PropertyField(_lightSourcesBlurMaterial, new GUIContent("   Light Sources Blur Material"));
-            GUI.enabled = normalGuiEnableState;
-
-            EditorGUILayout.PropertyField(_enableAmbientLight, new GUIContent("Enable Ambient Light"));
-            if (!_enableAmbientLight.boolValue)
-                GUI.enabled = false;
-            EditorGUILayout.PropertyField(_blurAmbientLight, new GUIContent("   Blur Ambient Light"));
-            var oldEnabled = GUI.enabled;
-            if (!_blurAmbientLight.boolValue)
-                GUI.enabled = false;
-            EditorGUILayout.PropertyField(_ambientLightBlurMaterial, new GUIContent("   Ambient Light Blur Material"));
-            GUI.enabled = oldEnabled;
-            EditorGUILayout.PropertyField(_ambientLightComputeMaterial, new GUIContent("   Ambient Light Compute Material"));
-            EditorGUILayout.PropertyField(_ambientColoredBounce, new GUIContent("   Colored Bounce"));
-            EditorGUILayout.PropertyField(_ambientIterations, new GUIContent("   Ambient Iterations"));
-            GUI.enabled = normalGuiEnableState;
-
-            EditorGUILayout.PropertyField(_defaultCoverage, new GUIContent("Default Coverage"));
-
-            EditorGUILayout.PropertyField(_lightOverlayMaterial, new GUIContent("Light Overlay Material"));
-
-            DrawOverrideGroups(normalGuiEnableState);
+            // --- Always-applied value groups and limits: editable in Play (the live tuning loop). ---
+            DrawValueGroups();
             DrawAdvancedLimits();
 
             DrawSizeEstimate(cam);
@@ -169,66 +172,54 @@ namespace Light2D
             serializedObject.ApplyModifiedProperties();
         }
 
-        private void DrawOverrideGroups(bool baseEnabled)
+        private void DrawValueGroups()
         {
-            // baseEnabled mirrors the surrounding GUI.enabled (Application.isPlaying) guard.
-            _showOverlayLook = EditorGUILayout.BeginFoldoutHeaderGroup(_showOverlayLook, "Overlay Look");
-            if (_showOverlayLook)
-            {
-                EditorGUILayout.PropertyField(_overrideOverlayLook, new GUIContent("Override Overlay Look"));
-                bool restore = GUI.enabled;
-                if (!_overrideOverlayLook.boolValue)
-                    GUI.enabled = false;
-                EditorGUILayout.PropertyField(_lightBrightness, new GUIContent("   Light Brightness"));
-                EditorGUILayout.PropertyField(_lightSourcesBrightness, new GUIContent("   Light Sources Brightness"));
-                EditorGUILayout.PropertyField(_bloomPower, new GUIContent("   Bloom Power"));
-                EditorGUILayout.PropertyField(_bloomAdd, new GUIContent("   Bloom Add"));
-                GUI.enabled = restore;
-            }
-            EditorGUILayout.EndFoldoutHeaderGroup();
+            // Plain, always-expanded section headers (no collapsible foldouts). Each value is a plain,
+            // always-editable, always-applied field - the values-only source of truth.
+            // Obstacles: the global obstacle multiplier is a write-side value (it scales every obstacle's
+            // transmission), so it lives in its own header here rather than under the ambient-only "Feel" group.
+            DrawSectionHeader("Obstacles");
+            EditorGUILayout.PropertyField(_obstacleColor, Content(_obstacleColor, "Obstacle Color"));
 
-            _showAmbientFeel = EditorGUILayout.BeginFoldoutHeaderGroup(_showAmbientFeel, "Ambient Feel");
-            if (_showAmbientFeel)
-            {
-                EditorGUILayout.PropertyField(_overrideAmbientFeel, new GUIContent("Override Ambient Feel"));
-                bool restore = GUI.enabled;
-                if (!_overrideAmbientFeel.boolValue)
-                    GUI.enabled = false;
-                EditorGUILayout.PropertyField(_ambientObstacleMul, new GUIContent("   Obstacle Mul"));
-                EditorGUILayout.PropertyField(_ambientObstacleAdd, new GUIContent("   Obstacle Add"));
-                EditorGUILayout.PropertyField(_ambientEmissionMul, new GUIContent("   Emission Mul"));
-                EditorGUILayout.PropertyField(_ambientSamplingDistance, new GUIContent("   Sampling Distance"));
-                EditorGUILayout.PropertyField(_ambientAdaptSpeed, new GUIContent("   Adapt Speed"));
-                GUI.enabled = restore;
-            }
-            EditorGUILayout.EndFoldoutHeaderGroup();
+            DrawSectionHeader("Overlay Look");
+            EditorGUILayout.PropertyField(_lightBrightness, new GUIContent("Light Brightness"));
+            EditorGUILayout.PropertyField(_lightSourcesBrightness, new GUIContent("Light Sources Brightness"));
+            EditorGUILayout.PropertyField(_bloomPower, new GUIContent("Bloom Power"));
+            EditorGUILayout.PropertyField(_bloomAdd, new GUIContent("Bloom Add"));
 
-            _showBlur = EditorGUILayout.BeginFoldoutHeaderGroup(_showBlur, "Blur");
-            if (_showBlur)
-            {
-                EditorGUILayout.PropertyField(_overrideBlur, new GUIContent("Override Blur"));
-                bool restore = GUI.enabled;
-                if (!_overrideBlur.boolValue)
-                    GUI.enabled = false;
-                EditorGUILayout.PropertyField(_blurDistance, new GUIContent("   Blur Distance"));
-                GUI.enabled = restore;
-            }
-            EditorGUILayout.EndFoldoutHeaderGroup();
+            DrawSectionHeader("Ambient Feel");
+            EditorGUILayout.PropertyField(_ambientObstacleMul, new GUIContent("Obstacle Mul"));
+            EditorGUILayout.PropertyField(_ambientObstacleAdd, new GUIContent("Obstacle Add"));
+            EditorGUILayout.PropertyField(_ambientEmissionMul, new GUIContent("Emission Mul"));
+            EditorGUILayout.PropertyField(_ambientSamplingDistance, new GUIContent("Sampling Distance"));
+            EditorGUILayout.PropertyField(_ambientAdaptSpeed, new GUIContent("Adapt Speed"));
 
-            GUI.enabled = baseEnabled;
+            DrawSectionHeader("Blur");
+            EditorGUILayout.PropertyField(_blurDistance, new GUIContent("Blur Distance"));
         }
 
         private void DrawAdvancedLimits()
         {
-            _showAdvancedLimits = EditorGUILayout.BeginFoldoutHeaderGroup(_showAdvancedLimits, "Advanced ▸ Limits");
-            if (_showAdvancedLimits)
-            {
-                EditorGUILayout.PropertyField(_maxAmbientCyclesPerFrame, new GUIContent("Max Cycles / Frame"));
-                EditorGUILayout.PropertyField(_ambientWarmupCycles, new GUIContent("Warm-up Cycles"));
-                EditorGUILayout.PropertyField(_maxQueuedAmbientCycles, new GUIContent("Max Queued Cycles"));
-                EditorGUILayout.PropertyField(_maxLightTexturePixels, new GUIContent("Max Light Texture Pixels"));
-            }
-            EditorGUILayout.EndFoldoutHeaderGroup();
+            // Always-applied limits: a plain header plus normal fields.
+            DrawSectionHeader("Advanced ▸ Limits");
+            EditorGUILayout.PropertyField(_maxAmbientCyclesPerFrame, new GUIContent("Max Cycles / Frame"));
+            EditorGUILayout.PropertyField(_ambientWarmupCycles, new GUIContent("Warm-up Cycles"));
+            EditorGUILayout.PropertyField(_maxQueuedAmbientCycles, new GUIContent("Max Queued Cycles"));
+            EditorGUILayout.PropertyField(_maxLightTexturePixels, new GUIContent("Max Light Texture Pixels"));
+        }
+
+        private static void DrawSectionHeader(string label)
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(label, EditorStyles.boldLabel);
+        }
+
+        // Builds a GUIContent that keeps the custom inspector label but restores the field's [Tooltip] hover
+        // text. Passing a bare new GUIContent(label) to PropertyField drops the tooltip that Unity's default
+        // inspector would otherwise show from the [Tooltip] attribute; SerializedProperty.tooltip re-reads it.
+        private static GUIContent Content(SerializedProperty property, string label)
+        {
+            return new GUIContent(label, property.tooltip);
         }
 
         private void DrawSizeEstimate(Camera camera)
@@ -277,7 +268,7 @@ namespace Light2D
                     EditorGUILayout.HelpBox("Affect Only This Camera is incompatible with a camera Target Texture in the Built-in Render Pipeline.", MessageType.Error);
 
                 if (_hdr.boolValue && (!camera.allowHDR || urpAsset != null && !urpAsset.supportsHDR))
-                    EditorGUILayout.HelpBox("64 Bit Color is enabled, but HDR is disabled on the camera or current URP asset.", MessageType.Warning);
+                    EditorGUILayout.HelpBox("16-bit HDR Color is enabled, but HDR is disabled on the camera or current URP asset.", MessageType.Warning);
 
                 if (urpAsset != null && camera.TryGetComponent<UniversalAdditionalCameraData>(out var cameraData))
                 {
@@ -294,7 +285,7 @@ namespace Light2D
             }
 
             if (_hdr.boolValue && !SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGBHalf))
-                EditorGUILayout.HelpBox("This platform does not support the ARGBHalf render texture format required by 64 Bit Color.", MessageType.Warning);
+                EditorGUILayout.HelpBox("This platform does not support the ARGBHalf render texture format required by 16-bit HDR Color.", MessageType.Warning);
             if (_hdr.boolValue && urpAsset != null &&
                 urpAsset.hdrColorBufferPrecision != HDRColorBufferPrecision._64Bits)
                 EditorGUILayout.HelpBox("The URP asset HDR Color Buffer Precision is 32 bits. Select 64 bits to preserve Light2D HDR precision through camera composition.", MessageType.Warning);

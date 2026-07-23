@@ -12,8 +12,37 @@ Shader "Light2D/Transparent Dual Color Normal Mapped" {
 Properties {
 	_MainTex ("Base (RGB) Trans (A)", 2D) = "white" {}
 	_NormalTex ("Normalmap", 2D) = "bump" {}
+	// LightingSystem-wide obstacle multiplier, supplied per obstacle draw through a MaterialPropertyBlock.
+	// Defaults to white so every non-obstacle draw of this shader (e.g. the ambient emitter, which shares
+	// this material) and any obstacle draw without the block is a byte-identical no-op. PerRendererData hides
+	// it from the material inspector since it is driven per draw, not per material.
+	[PerRendererData] _Light2DObstacleGlobalMul ("Obstacle Global Mul", Color) = (1,1,1,1)
 }
 
+SubShader {
+	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" "LightObstacle"="True" }
+	Cull Off
+	ZWrite Off
+	Blend SrcAlpha OneMinusSrcAlpha
+	Pass {
+		Name "ObstacleDualColor"
+		Tags { "LightMode"="SRPDefaultUnlit" }
+		HLSLPROGRAM
+		#pragma vertex Light2DDualColorVert
+		#pragma fragment Light2DDualColorFrag
+		#include "Light2DURPRenderer.hlsl"
+		ENDHLSL
+	}
+	Pass {
+		Name "Light2DNormals"
+		Tags { "LightMode"="Light2DNormals" }
+		HLSLPROGRAM
+		#pragma vertex Light2DNormalMapVert
+		#pragma fragment Light2DNormalMapFrag
+		#include "Light2DURPRenderer.hlsl"
+		ENDHLSL
+	}
+}
 SubShader {
 	Tags {
 		"Queue"="Transparent"
@@ -50,6 +79,7 @@ SubShader {
 			};
 
 			sampler2D _MainTex;
+			fixed4 _Light2DObstacleGlobalMul;
 
 			v2f vert (appdata_t v)
 			{
@@ -65,33 +95,9 @@ SubShader {
 			fixed4 frag (v2f i) : SV_Target
 			{
 				fixed4 col = tex2D(_MainTex, i.texcoord);
-				return col*i.color0 + fixed4(i.color1.rgb, i.color1.a*i.color1.a*col.a*10);
+				return col*i.color0*_Light2DObstacleGlobalMul + fixed4(i.color1.rgb, i.color1.a*i.color1.a*col.a*10);
 			}
 		ENDCG
-	}
-}
-SubShader {
-	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" "LightObstacle"="True" }
-	Cull Off
-	ZWrite Off
-	Blend SrcAlpha OneMinusSrcAlpha
-	Pass {
-		Name "ObstacleDualColor"
-		Tags { "LightMode"="SRPDefaultUnlit" }
-		HLSLPROGRAM
-		#pragma vertex Light2DDualColorVert
-		#pragma fragment Light2DDualColorFrag
-		#include "Light2DURPRenderer.hlsl"
-		ENDHLSL
-	}
-	Pass {
-		Name "Light2DNormals"
-		Tags { "LightMode"="Light2DNormals" }
-		HLSLPROGRAM
-		#pragma vertex Light2DNormalMapVert
-		#pragma fragment Light2DNormalMapFrag
-		#include "Light2DURPRenderer.hlsl"
-		ENDHLSL
 	}
 }
 

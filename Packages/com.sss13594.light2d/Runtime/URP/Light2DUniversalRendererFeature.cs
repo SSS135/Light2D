@@ -513,9 +513,10 @@ namespace Light2D
             // cloned URP ambient material each frame so it matches the Built-in backend; default 0 = the shader's
             // neutral default. Obstacle/emission/sampling tuning is left to the material's own serialized values.
             private static readonly int AmbientBounceTint = Shader.PropertyToID("_AmbientBounceTint");
-            // URP-parity material "feel" knobs, mirrored from the Built-in LightingSystem push. Pushed onto the
-            // cloned URP materials only when the matching Override bool is set (anti-clobber); otherwise the
-            // clone keeps its serialized-source value. Names match the shared shader property identifiers.
+            // URP-parity material "feel"/"look"/blur knobs, mirrored from the Built-in LightingSystem push and
+            // applied to the cloned URP materials unconditionally each frame (values-only source of truth).
+            // Names match the shared shader property identifiers.
+            private static readonly int ObstacleGlobalMul = Shader.PropertyToID("_Light2DObstacleGlobalMul");
             private static readonly int ObstacleMul = Shader.PropertyToID("_ObstacleMul");
             private static readonly int ObstacleAdd = Shader.PropertyToID("_ObstacleAdd");
             private static readonly int EmissionColorMul = Shader.PropertyToID("_EmissionColorMul");
@@ -546,6 +547,10 @@ namespace Light2D
             private readonly List<Light2DDrawEntry> _sourceEntries = new List<Light2DDrawEntry>();
             private readonly Plane[] _extendedPlanes = new Plane[6];
             private readonly Plane[] _smallPlanes = new Plane[6];
+            // Per-draw block carrying the obstacle multiplier for this pass's obstacle draw. Each Light2DPass
+            // instance serves exactly one LightingSystem (keyed in _passes), so this stays per-camera isolated;
+            // it is reused across frames and re-set before each obstacle pass is recorded.
+            private MaterialPropertyBlock _obstacleProperties;
             private readonly LightingSystem _lighting;
             private readonly Action<Camera, LightingSystem, string> _warnOnce;
 
@@ -655,9 +660,17 @@ namespace Light2D
                 BuildSourceEntries(_lightSprites, _sourceEntries);
 
                 int obstaclePass = ResolvePassForSnapshot(_obstacleSnapshot, ForwardLightMode);
+                // Values-only source of truth: the LightingSystem-wide obstacle multiplier is pushed onto the
+                // obstacle draws through a property block every frame (default white = a byte-identical no-op).
+                // Scoping it to this pass's block keeps the ambient emitter - which shares the dual-color obstacle
+                // material - and every other role on the material's default white, with no cross-pass global state.
+                if (_obstacleProperties == null)
+                    _obstacleProperties = new MaterialPropertyBlock();
+                _obstacleProperties.SetColor(ObstacleGlobalMul, _lighting.ObstacleColor);
                 AddDrawPass(renderGraph, "Light2D Obstacles", Light2DProfiling.Obstacles, obstaclesAA,
                     _obstacleSnapshot, obstaclePass, extendedView, extendedProjection, cameraView, cameraProjection,
-                    new Color(1, 1, 1, 0), context, false, default(TextureHandle), default(TextureHandle), black);
+                    new Color(1, 1, 1, 0), context, false, default(TextureHandle), default(TextureHandle), black,
+                    _obstacleProperties);
                 AddBorderPass(renderGraph, obstaclesAA, context);
                 AddBlitPass(renderGraph, "Light2D Resolve Obstacles", Light2DProfiling.Obstacles, obstaclesAA,
                     obstacles, null, black, sizes.Extended.x * aa, sizes.Extended.y * aa);
@@ -722,11 +735,9 @@ namespace Light2D
                 TextureHandle finalSources = sources;
                 if (_lighting.BlurLightSources && context.SourceBlurMaterial != null)
                 {
-                    // URP parity for the blur distance knob (mirrors LightingSystem's Built-in blur push).
-                    // Anti-clobber: only when OverrideBlur is set; otherwise the cloned blur material keeps its
-                    // serialized _Distance value.
-                    if (_lighting.OverrideBlur)
-                        context.SourceBlurMaterial.SetFloat(Distance, _lighting.BlurDistance);
+                    // Values-only source of truth: the blur distance is applied unconditionally each frame
+                    // (mirrors LightingSystem's Built-in blur push).
+                    context.SourceBlurMaterial.SetFloat(Distance, _lighting.BlurDistance);
                     int blurWidth = _lighting.EnableNormalMapping ? lightWidth : lightWidth * 2;
                     int blurHeight = _lighting.EnableNormalMapping ? lightHeight : lightHeight * 2;
                     finalSources = CreateTexture(renderGraph, blurWidth, blurHeight, lightFormat, FilterMode.Bilinear,
@@ -827,26 +838,18 @@ namespace Light2D
                 if (context.AmbientMaterial == null)
                     return read;
 
-                // Drive only the colored-bounce tint from C# so it matches the Built-in RenderAmbientLight path
-                // (default 0 = the shader's neutral default). The obstacle/emission/sampling tuning is left to
-                // the cloned material's own serialized values so per-scene ambient tuning is honored.
+                // Values-only source of truth: the colored-bounce tint plus every ambient "feel" knob are
+                // pushed onto the cloned compute material unconditionally each frame, matching the Built-in
+                // RenderAmbientLight path (AmbientColoredBounce default 0 is the shader's neutral no-op).
                 context.AmbientMaterial.SetFloat(AmbientBounceTint, _lighting.AmbientColoredBounce);
-
-                // URP parity for the ambient "feel" knobs (mirrors LightingSystem's Built-in RenderAmbientLight
-                // push). Anti-clobber: only when the user opts in via OverrideAmbientFeel; otherwise the cloned
-                // compute material keeps its serialized obstacle/emission/sampling values (CRC-gated CloneMaterial).
-                if (_lighting.OverrideAmbientFeel)
-                {
-                    context.AmbientMaterial.SetFloat(ObstacleMul, _lighting.AmbientObstacleMul);
-                    context.AmbientMaterial.SetFloat(ObstacleAdd, _lighting.AmbientObstacleAdd);
-                    context.AmbientMaterial.SetFloat(EmissionColorMul, _lighting.AmbientEmissionMul);
-                    context.AmbientMaterial.SetFloat(SamplingDist, _lighting.AmbientSamplingDistance);
-                    context.AmbientMaterial.SetFloat(AmbientAdaptSpeed, _lighting.AmbientAdaptSpeed);
-                }
-                // URP parity for the ambient-blur distance knob (mirrors the Built-in ambient blur push). Pushed
-                // once per frame before the propagation loop, which reuses AmbientBlurMaterial each cycle. Anti-
-                // clobber: only when OverrideBlur is set; otherwise the clone keeps its serialized _Distance.
-                if (_lighting.OverrideBlur && context.AmbientBlurMaterial != null)
+                context.AmbientMaterial.SetFloat(ObstacleMul, _lighting.AmbientObstacleMul);
+                context.AmbientMaterial.SetFloat(ObstacleAdd, _lighting.AmbientObstacleAdd);
+                context.AmbientMaterial.SetFloat(EmissionColorMul, _lighting.AmbientEmissionMul);
+                context.AmbientMaterial.SetFloat(SamplingDist, _lighting.AmbientSamplingDistance);
+                context.AmbientMaterial.SetFloat(AmbientAdaptSpeed, _lighting.AmbientAdaptSpeed);
+                // Ambient-blur distance, applied unconditionally once per frame before the propagation loop
+                // (mirrors the Built-in ambient blur push). The loop reuses AmbientBlurMaterial each cycle.
+                if (context.AmbientBlurMaterial != null)
                     context.AmbientBlurMaterial.SetFloat(Distance, _lighting.BlurDistance);
 
                 context.WarmupCycles = AddWithoutOverflow(context.WarmupCycles,
@@ -909,15 +912,27 @@ namespace Light2D
                 List<Light2DDrawEntry> snapshot, int shaderPass, Matrix4x4 view, Matrix4x4 projection,
                 Matrix4x4 cameraView, Matrix4x4 cameraProjection, Color clear,
                 CameraContext context, bool setLightState, TextureHandle obstacles, TextureHandle normals,
-                TextureHandle black)
+                TextureHandle black, MaterialPropertyBlock properties = null)
             {
-                using (var builder = graph.AddRasterRenderPass<DrawPassData>(name, out var data, profilingSampler))
+                // Unsafe pass (native command buffer) rather than a raster pass: the register-and-draw geometry
+                // is issued with DrawMesh through a buffer that behaves like the Built-in CommandBuffer, so it
+                // mirrors the proven Built-in path -- SetGlobalTexture reaches the shader and the buffer applies
+                // the render-texture GPU projection adjustment itself (hence the raw projection below, exactly
+                // like LightingSystem.cs:801). SetRenderTarget is issued manually (unsafe passes bind no
+                // attachment automatically). The dual-pipeline shaders themselves select their URP SubShader via
+                // the RenderPipeline tag / SubShader ordering (see Light1.shader and LightOverlay.shader).
+                using (var builder = graph.AddUnsafePass<DrawPassData>(name, out var data, profilingSampler))
                 {
                     data.Marker = marker;
+                    data.Target = target;
                     data.Snapshot = snapshot;
                     data.ShaderPass = shaderPass;
                     data.View = view;
-                    data.Projection = GL.GetGPUProjectionMatrix(projection, true);
+                    // Raw projection: the unsafe pass renders through a native command buffer, which applies the
+                    // render-texture GPU adjustment itself (exactly like the Built-in path at LightingSystem.cs:801).
+                    // Pre-applying GL.GetGPUProjectionMatrix(..., true) here would double-adjust on flipped-UV
+                    // platforms (D3D) and push the light out of the clip volume -> zero fragments -> black light.
+                    data.Projection = projection;
                     data.Clear = clear;
                     data.CameraView = cameraView;
                     data.CameraProjection = cameraProjection;
@@ -925,6 +940,7 @@ namespace Light2D
                     data.Obstacles = obstacles;
                     data.Normals = normals;
                     data.Black = black;
+                    data.Properties = properties;
                     data.XZ = context.Lighting.XZPlane;
                     data.Perspective = !context.Lighting.SourceCamera.orthographic;
                     data.PixelsPerMeter = context.Lighting.LightPixelsPerUnityMeter;
@@ -938,35 +954,52 @@ namespace Light2D
                     }
                     data.ExtendedScale = new Vector2(small.x / (float)extended.x, small.y / (float)extended.y);
                     data.PositionOffset = new Vector2(0.5f / extended.x, 0.5f / extended.y);
-                    builder.SetRenderAttachment(target, 0, AccessFlags.Write);
+                    builder.UseTexture(target, AccessFlags.Write);
                     if (obstacles.IsValid())
                         builder.UseTexture(obstacles, AccessFlags.Read);
                     if (normals.IsValid())
                         builder.UseTexture(normals, AccessFlags.Read);
                     builder.UseTexture(black, AccessFlags.Read);
                     builder.AllowGlobalStateModification(true);
-                    builder.SetRenderFunc(static (DrawPassData pass, RasterGraphContext rg) =>
+                    builder.SetRenderFunc(static (DrawPassData pass, UnsafeGraphContext rg) =>
                     {
+                        var cmd = rg.cmd;
                         pass.Marker.Begin();
-                        rg.cmd.ClearRenderTarget(RTClearFlags.Color, pass.Clear, 1, 0);
-                        rg.cmd.SetViewProjectionMatrices(pass.View, pass.Projection);
+                        cmd.SetRenderTarget(pass.Target);
+                        cmd.ClearRenderTarget(RTClearFlags.Color, pass.Clear, 1, 0);
+                        cmd.SetViewProjectionMatrices(pass.View, pass.Projection);
                         if (pass.SetLightState)
                         {
-                            rg.cmd.SetGlobalTexture(UrpObstacleTex, pass.Obstacles);
+                            cmd.SetGlobalTexture(UrpObstacleTex, pass.Obstacles);
                             if (pass.Normals.IsValid())
-                                rg.cmd.SetGlobalTexture(UrpNormalsBuffer, pass.Normals);
-                            rg.cmd.SetGlobalFloat(PixelsPerBlock, pass.PixelsPerMeter);
-                            rg.cmd.SetGlobalVector(ExtendedScale, pass.ExtendedScale);
-                            rg.cmd.SetGlobalVector(PositionOffset, pass.PositionOffset);
-                            SetKeywords(rg.cmd, pass.XZ, pass.Perspective);
+                                cmd.SetGlobalTexture(UrpNormalsBuffer, pass.Normals);
+                            cmd.SetGlobalFloat(PixelsPerBlock, pass.PixelsPerMeter);
+                            cmd.SetGlobalVector(ExtendedScale, pass.ExtendedScale);
+                            cmd.SetGlobalVector(PositionOffset, pass.PositionOffset);
+                            SetKeywords(cmd, pass.XZ, pass.Perspective);
                         }
-                        Light2DDraw.Draw(rg.cmd, pass.Snapshot, pass.ShaderPass);
+                        var snap = pass.Snapshot;
+                        var props = pass.Properties;
+                        for (int i = 0; i < snap.Count; i++)
+                        {
+                            var entry = snap[i];
+                            if (entry.Mesh == null || entry.Material == null)
+                                continue;
+                            int submeshCount = entry.SubmeshCount > 0 ? entry.SubmeshCount : 1;
+                            for (int s = 0; s < submeshCount; s++)
+                            {
+                                if (props != null)
+                                    cmd.DrawMesh(entry.Mesh, entry.Matrix, entry.Material, s, pass.ShaderPass, props);
+                                else
+                                    cmd.DrawMesh(entry.Mesh, entry.Matrix, entry.Material, s, pass.ShaderPass);
+                            }
+                        }
                         if (pass.SetLightState)
                         {
-                            ClearKeywords(rg.cmd);
-                            ClearTextureGlobals(rg.cmd, pass.Black);
+                            ClearKeywords(cmd);
+                            ClearTextureGlobals(cmd, pass.Black);
                         }
-                        rg.cmd.SetViewProjectionMatrices(pass.CameraView, pass.CameraProjection);
+                        cmd.SetViewProjectionMatrices(pass.CameraView, pass.CameraProjection);
                         pass.Marker.End();
                     });
                 }
@@ -1152,11 +1185,11 @@ namespace Light2D
             {
                 Vector2 size = light.Sprite.bounds.size;
                 Vector3 center = light.transform.localToWorldMatrix.MultiplyPoint3x4(
-                    Vector2.Scale((Vector2)light.LightOrigin, size));
+                    Vector2.Scale(light.LightOrigin, size));
                 Vector4 clipPosition = smallCamera.Projection * smallCamera.View *
                                        new Vector4(center.x, center.y, 0, 1);
                 Vector2 viewportPosition = (Vector2)clipPosition / clipPosition.w * 0.5f + Vector2.one * 0.5f;
-                var lightPosition = new Vector3(viewportPosition.x, viewportPosition.y, light.LightOrigin.z);
+                var lightPosition = new Vector3(viewportPosition.x, viewportPosition.y, light.NormalMapHeight);
                 Matrix4x4 cameraToWorld = smallCamera.View.inverse;
                 Vector3 viewportToWorldX = cameraToWorld.MultiplyVector(Vector3.right *
                     (2f * smallCamera.OrthographicSize * smallCamera.Aspect));
@@ -1196,23 +1229,20 @@ namespace Light2D
                 TextureHandle source, TextureHandle destination, TextureHandle ambient, TextureHandle sources,
                 Sizes sizes, Light2DCameraGeometry lightCamera, TextureHandle black, bool hdrActive)
             {
-                using (var builder = graph.AddRasterRenderPass<OverlayPassData>("Light2D Composite", out var data,
+                using (var builder = graph.AddUnsafePass<OverlayPassData>("Light2D Composite", out var data,
                            profilingSampler))
                 {
+                    data.Destination = destination;
                     data.Source = source;
                     data.Ambient = ambient;
                     data.Sources = sources;
                     data.Material = context.OverlayMaterial;
-                    // URP parity for the overlay "look" knobs (mirrors LightingSystem's Built-in overlay push).
-                    // Anti-clobber: only when OverrideOverlayLook is set; otherwise the cloned overlay material
-                    // keeps its serialized brightness/bloom values (CRC-gated CloneMaterial preserves them).
-                    if (_lighting.OverrideOverlayLook)
-                    {
-                        context.OverlayMaterial.SetFloat(LightMul, _lighting.LightBrightness);
-                        context.OverlayMaterial.SetFloat(LightSourcesMul, _lighting.LightSourcesBrightness);
-                        context.OverlayMaterial.SetFloat(AdditiveLightPow, _lighting.BloomPower);
-                        context.OverlayMaterial.SetFloat(AdditiveLightAdd, _lighting.BloomAdd);
-                    }
+                    // Values-only source of truth: every overlay "look" knob is pushed onto the cloned overlay
+                    // material unconditionally each frame (mirrors LightingSystem's Built-in overlay push).
+                    context.OverlayMaterial.SetFloat(LightMul, _lighting.LightBrightness);
+                    context.OverlayMaterial.SetFloat(LightSourcesMul, _lighting.LightSourcesBrightness);
+                    context.OverlayMaterial.SetFloat(AdditiveLightPow, _lighting.BloomPower);
+                    context.OverlayMaterial.SetFloat(AdditiveLightAdd, _lighting.BloomAdd);
                     data.Hdr = hdrActive;
                     data.ExtendedScale = new Vector2(sizes.Small.x / (float)sizes.Extended.x,
                         sizes.Small.y / (float)sizes.Extended.y);
@@ -1230,21 +1260,28 @@ namespace Light2D
                     builder.UseTexture(ambient, AccessFlags.Read);
                     builder.UseTexture(sources, AccessFlags.Read);
                     builder.UseTexture(black, AccessFlags.Read);
-                    builder.SetRenderAttachment(destination, 0, AccessFlags.Write);
+                    builder.UseTexture(destination, AccessFlags.Write);
                     builder.AllowGlobalStateModification(true);
-                    builder.SetRenderFunc(static (OverlayPassData pass, RasterGraphContext rg) =>
+                    // Unsafe pass so SetGlobalTexture reaches the composite shader through a native command buffer,
+                    // mirroring Built-in's Graphics.Blit path. The overlay shader selects its URP SubShader because
+                    // its Built-in SubShader carries a non-UniversalPipeline RenderPipeline tag (see LightOverlay.shader).
+                    // Blitter needs the native command buffer.
+                    builder.SetRenderFunc(static (OverlayPassData pass, UnsafeGraphContext rg) =>
                     {
+                        var cmd = rg.cmd;
                         Light2DProfiling.Composition.Begin();
-                        rg.cmd.SetGlobalTexture(UrpGameTex, pass.Source);
-                        rg.cmd.SetGlobalTexture(UrpAmbientLightTex, pass.Ambient);
-                        rg.cmd.SetGlobalTexture(UrpLightSourcesTex, pass.Sources);
-                        rg.cmd.SetGlobalVector(ExtendedScale, pass.ExtendedScale);
-                        rg.cmd.SetGlobalVector(Scale, pass.Scale);
-                        rg.cmd.SetGlobalVector(Offset, pass.Offset);
-                        rg.cmd.SetKeyword(HdrKeyword, pass.Hdr);
-                        Blitter.BlitTexture(rg.cmd, pass.Source, Vector2.one, pass.Material, 0);
-                        rg.cmd.SetKeyword(HdrKeyword, false);
-                        ClearTextureGlobals(rg.cmd, pass.Black);
+                        cmd.SetRenderTarget(pass.Destination);
+                        cmd.SetGlobalTexture(UrpGameTex, pass.Source);
+                        cmd.SetGlobalTexture(UrpAmbientLightTex, pass.Ambient);
+                        cmd.SetGlobalTexture(UrpLightSourcesTex, pass.Sources);
+                        cmd.SetGlobalVector(ExtendedScale, pass.ExtendedScale);
+                        cmd.SetGlobalVector(Scale, pass.Scale);
+                        cmd.SetGlobalVector(Offset, pass.Offset);
+                        cmd.SetKeyword(HdrKeyword, pass.Hdr);
+                        Blitter.BlitTexture(CommandBufferHelpers.GetNativeCommandBuffer(cmd), pass.Source,
+                            Vector2.one, pass.Material, 0);
+                        cmd.SetKeyword(HdrKeyword, false);
+                        ClearTextureGlobals(cmd, pass.Black);
                         Light2DProfiling.Composition.End();
                     });
                 }
@@ -1322,20 +1359,19 @@ namespace Light2D
                 }
             }
 
-            // Builds a draw entry from a light's owned mesh + generated material + world matrix. Does not check
-            // Renderer.enabled: the register-and-draw path draws lighting inputs whose renderers are disabled so
-            // no scene camera renders them (the enabled=false invariant that replaces layer exclusion).
+            // Builds a draw entry from a light's owned mesh + generated material + world matrix. The mesh,
+            // material, and world bounds come from the LightSprite's register-and-draw accessors: there is no
+            // owned Renderer/MeshFilter at all (the no-renderer invariant that replaced layer exclusion).
             private static bool TryBuildLightEntry(LightSprite light, out Light2DDrawEntry entry)
             {
                 entry = default;
-                if (light == null || light.Renderer == null)
+                if (light == null)
                     return false;
-                var filter = light.Renderer.GetComponent<MeshFilter>();
-                var mesh = filter != null ? filter.sharedMesh : null;
-                var material = light.Renderer.sharedMaterial;
+                var mesh = light.Mesh;
+                var material = light.DrawMaterial;
                 if (mesh == null || material == null)
                     return false;
-                entry = new Light2DDrawEntry(mesh, material, light.transform.localToWorldMatrix, light.Renderer.bounds,
+                entry = new Light2DDrawEntry(mesh, material, light.transform.localToWorldMatrix, light.WorldBounds,
                     Mathf.Max(1, mesh.subMeshCount), light.SortingOrder, null);
                 return true;
             }
@@ -1426,7 +1462,7 @@ namespace Light2D
                 return left > int.MaxValue - right ? int.MaxValue : left + right;
             }
 
-            private static void SetKeywords(RasterCommandBuffer cmd, bool xz, bool perspective)
+            private static void SetKeywords(IBaseCommandBuffer cmd, bool xz, bool perspective)
             {
                 cmd.SetKeyword(XzKeyword, xz);
                 cmd.SetKeyword(XyKeyword, !xz);
@@ -1434,7 +1470,7 @@ namespace Light2D
                 cmd.SetKeyword(OrthographicKeyword, !perspective);
             }
 
-            private static void ClearKeywords(RasterCommandBuffer cmd)
+            private static void ClearKeywords(IBaseCommandBuffer cmd)
             {
                 cmd.SetKeyword(XzKeyword, false);
                 cmd.SetKeyword(XyKeyword, false);
@@ -1442,7 +1478,7 @@ namespace Light2D
                 cmd.SetKeyword(OrthographicKeyword, false);
             }
 
-            private static void ClearTextureGlobals(RasterCommandBuffer cmd, TextureHandle black)
+            private static void ClearTextureGlobals(IBaseCommandBuffer cmd, TextureHandle black)
             {
                 cmd.SetGlobalTexture(UrpObstacleTex, black);
                 cmd.SetGlobalTexture(UrpMainTex, black);
@@ -1467,6 +1503,7 @@ namespace Light2D
             private sealed class DrawPassData
             {
                 internal ProfilerMarker Marker;
+                internal TextureHandle Target;
                 internal List<Light2DDrawEntry> Snapshot;
                 internal int ShaderPass;
                 internal Matrix4x4 View;
@@ -1483,6 +1520,9 @@ namespace Light2D
                 internal TextureHandle Obstacles;
                 internal TextureHandle Normals;
                 internal TextureHandle Black;
+                // Optional per-draw property block; non-null only for the obstacle pass, where it carries the
+                // LightingSystem-wide obstacle multiplier (_Light2DObstacleGlobalMul).
+                internal MaterialPropertyBlock Properties;
             }
 
             private sealed class BorderPassData
@@ -1553,6 +1593,7 @@ namespace Light2D
 
             private sealed class OverlayPassData
             {
+                internal TextureHandle Destination;
                 internal TextureHandle Source;
                 internal TextureHandle Ambient;
                 internal TextureHandle Sources;

@@ -69,13 +69,13 @@ The feature runs after transparents by default, requests an intermediate camera 
 
 Support for both Universal Renderer Data and 2D Renderer Data is implemented; see [Development and Testing](TESTING.md#urp-verification-status) for the current URP verification status.
 
-For HDR output, enable HDR on the source camera and URP asset. Set the URP asset’s **HDR Color Buffer Precision** to **64 Bits** when `LightingSystem` **64 Bit Color** is enabled; otherwise the final camera composition reduces precision.
+For HDR output, enable HDR on the source camera and URP asset. Set the URP asset’s **HDR Color Buffer Precision** to **64 Bits** when `LightingSystem` **16-bit HDR Color** is enabled; otherwise the final camera composition reduces precision.
 
 ## Add Content
 
 ### Direct Lights
 
-Use **GameObject > Light2D > Light Source** or add `LightSprite` manually. `Sprite` defines the light footprint; `Color`, transform, material, and `LightOrigin` shape the output. `Shape` supports point and line origins. The light registers itself when enabled; there is no layer to assign.
+Use **GameObject > Light2D > Light Source** or add `LightSprite` manually. `Sprite` defines the light footprint; `Color`, transform, material, and `LightOrigin` shape the output. `Type` selects Point (radial), Spot (a cone whose apex sits at the transform), or Line (a `Length`-by-`Throw` bar with a `Sides` option); `LightOrigin` is a pure XY correction offset for Point/Spot and is unused for Line, and `NormalMapHeight` sets the light's height above the plane for normal mapping. The light registers itself when enabled; there is no layer to assign.
 
 ### Obstacles
 

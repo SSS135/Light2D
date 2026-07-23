@@ -15,7 +15,11 @@ namespace Light2D
     {
         private static readonly ShaderTagId LightModeTag = new ShaderTagId("LightMode");
 
-        internal static void Draw(IRasterCommandBuffer cmd, List<Light2DDrawEntry> snapshot, int shaderPass)
+        // An optional per-draw MaterialPropertyBlock is forwarded to every DrawMesh; the obstacle passes use it
+        // to supply the LightingSystem-wide obstacle multiplier (_Light2DObstacleGlobalMul) that scales each
+        // obstacle's transmission, while all other roles pass null and are unaffected.
+        internal static void Draw(IRasterCommandBuffer cmd, List<Light2DDrawEntry> snapshot, int shaderPass,
+            MaterialPropertyBlock properties = null)
         {
             if (cmd == null || snapshot == null)
                 return;
@@ -28,7 +32,12 @@ namespace Light2D
 
                 var submeshCount = entry.SubmeshCount > 0 ? entry.SubmeshCount : 1;
                 for (var submesh = 0; submesh < submeshCount; submesh++)
-                    cmd.DrawMesh(entry.Mesh, entry.Matrix, entry.Material, submesh, shaderPass);
+                {
+                    if (properties != null)
+                        cmd.DrawMesh(entry.Mesh, entry.Matrix, entry.Material, submesh, shaderPass, properties);
+                    else
+                        cmd.DrawMesh(entry.Mesh, entry.Matrix, entry.Material, submesh, shaderPass);
+                }
             }
         }
 

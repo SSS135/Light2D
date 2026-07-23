@@ -35,20 +35,23 @@ namespace Light2D
         internal static int CacheCount { get { return Cache.Count; } }
 
         // The generated sprite used by a light with no assigned Sprite override.
-        internal static Sprite GetSprite(LightSprite.LightType type, float falloff, float spotAngle)
+        internal static Sprite GetSprite(LightSprite.LightType type, float falloff, float spotAngle,
+            LightSprite.LightSides sides = LightSprite.LightSides.Both)
         {
-            return GetEntry(type, falloff, spotAngle, DefaultResolution).Sprite;
+            return GetEntry(type, falloff, spotAngle, sides, DefaultResolution).Sprite;
         }
 
         // The generated falloff texture (RGBA32, readable) for the same key. Exposed for tooling/tests.
-        internal static Texture2D GetTexture(LightSprite.LightType type, float falloff, float spotAngle)
+        internal static Texture2D GetTexture(LightSprite.LightType type, float falloff, float spotAngle,
+            LightSprite.LightSides sides = LightSprite.LightSides.Both)
         {
-            return GetEntry(type, falloff, spotAngle, DefaultResolution).Texture;
+            return GetEntry(type, falloff, spotAngle, sides, DefaultResolution).Texture;
         }
 
-        private static Entry GetEntry(LightSprite.LightType type, float falloff, float spotAngle, int resolution)
+        private static Entry GetEntry(LightSprite.LightType type, float falloff, float spotAngle,
+            LightSprite.LightSides sides, int resolution)
         {
-            var key = new Key(type, falloff, spotAngle, resolution);
+            var key = new Key(type, falloff, spotAngle, sides, resolution);
             if (Cache.TryGetValue(key, out var entry) && entry.Texture != null && entry.Sprite != null)
             {
                 entry.Recency = ++_recencyCounter;   // bump to most-recently-used on a hit
@@ -57,7 +60,7 @@ namespace Light2D
 
             Cache.Remove(key);
             using (Light2DProfiling.LightTextureGen.Auto())
-                entry = Build(type, key.Falloff / 100f, key.SpotAngle, resolution);
+                entry = Build(type, key.Falloff / 100f, key.SpotAngle, sides, resolution);
             entry.Recency = ++_recencyCounter;
             Cache[key] = entry;
             EvictLeastRecentlyUsed();
@@ -90,7 +93,8 @@ namespace Light2D
             }
         }
 
-        private static Entry Build(LightSprite.LightType type, float falloff, float spotAngleDeg, int resolution)
+        private static Entry Build(LightSprite.LightType type, float falloff, float spotAngleDeg,
+            LightSprite.LightSides sides, int resolution)
         {
             var texture = new Texture2D(resolution, resolution, TextureFormat.RGBA32, false, false)
             {
@@ -101,7 +105,7 @@ namespace Light2D
             };
 
             var pixels = new Color32[resolution * resolution];
-            FillPixels(pixels, type, falloff, spotAngleDeg, resolution);
+            FillPixels(pixels, type, falloff, spotAngleDeg, sides, resolution);
             texture.SetPixels32(pixels);
             texture.Apply(false, false);
 
@@ -116,7 +120,7 @@ namespace Light2D
         }
 
         private static void FillPixels(Color32[] pixels, LightSprite.LightType type, float falloff,
-            float spotAngleDeg, int resolution)
+            float spotAngleDeg, LightSprite.LightSides sides, int resolution)
         {
             // Core radius grows with hardness: a larger near-solid center plus a tighter rim reads as a
             // harder edge; falloff == 0 is an all-the-way-in soft gradient.
@@ -133,7 +137,7 @@ namespace Light2D
                     switch (type)
                     {
                         case LightSprite.LightType.Line:
-                            alpha = LineAlpha(v, core);
+                            alpha = LineAlpha(v, core, sides);
                             break;
                         case LightSprite.LightType.Spot:
                             alpha = SpotAlpha(u, v, core, falloff, spotAngleDeg);
@@ -157,10 +161,26 @@ namespace Light2D
             return 1f - SmoothStep01(core, 1f, d);
         }
 
-        // Line: 1-D vertical profile, uniform along the horizontal extent (the emitting segment).
-        private static float LineAlpha(float v, float core)
+        // Line: 1-D vertical profile, uniform along the horizontal extent. Sides places the emitting segment
+        // (the bright edge) and the direction of the fade: Both is symmetric about the mid-row (two-sided),
+        // Front puts the segment at v == 0 (the mesh's +normal edge) and fades toward v == 1, Back puts it
+        // at v == 1 (the -normal edge) and fades toward v == 0.
+        private static float LineAlpha(float v, float core, LightSprite.LightSides sides)
         {
-            var d = Mathf.Abs(v - 0.5f) * 2f;             // 0 mid-row .. 1 top/bottom
+            float d;
+            switch (sides)
+            {
+                case LightSprite.LightSides.Front:
+                    d = v;                                // 0 at the segment (v == 0) .. 1 at the far edge
+                    break;
+                case LightSprite.LightSides.Back:
+                    d = 1f - v;                           // 0 at the segment (v == 1) .. 1 at the far edge
+                    break;
+                default:
+                    d = Mathf.Abs(v - 0.5f) * 2f;         // 0 mid-row .. 1 top/bottom
+                    break;
+            }
+
             return 1f - SmoothStep01(core, 1f, d);
         }
 
@@ -222,29 +242,33 @@ namespace Light2D
             }
         }
 
-        // Falloff/spot angle are quantized so continuous slider values share a bounded set of textures.
-        // Spot angle only participates for Spot lights (Point/Line ignore it → shared entry).
+        // Falloff/spot angle/sides are quantized so continuous slider values share a bounded set of textures.
+        // Spot angle only participates for Spot lights and Sides only for Line lights (others collapse to a
+        // shared entry).
         private readonly struct Key : IEquatable<Key>
         {
             public readonly LightSprite.LightType Type;
             public readonly int Falloff;      // round(clamp01(falloff) * 100)
             public readonly int SpotAngle;    // round(degrees), 0 for non-spot
+            public readonly int Sides;        // (int)sides for Line, 0 otherwise
             public readonly int Resolution;
 
-            public Key(LightSprite.LightType type, float falloff, float spotAngle, int resolution)
+            public Key(LightSprite.LightType type, float falloff, float spotAngle,
+                LightSprite.LightSides sides, int resolution)
             {
                 Type = type;
                 Falloff = Mathf.RoundToInt(Mathf.Clamp01(falloff) * 100f);
                 SpotAngle = type == LightSprite.LightType.Spot
                     ? Mathf.RoundToInt(Mathf.Clamp(spotAngle, 1f, 179f))
                     : 0;
+                Sides = type == LightSprite.LightType.Line ? (int)sides : 0;
                 Resolution = resolution;
             }
 
             public bool Equals(Key other)
             {
                 return Type == other.Type && Falloff == other.Falloff &&
-                       SpotAngle == other.SpotAngle && Resolution == other.Resolution;
+                       SpotAngle == other.SpotAngle && Sides == other.Sides && Resolution == other.Resolution;
             }
 
             public override bool Equals(object obj)
@@ -259,6 +283,7 @@ namespace Light2D
                     var hash = (int)Type;
                     hash = (hash * 397) ^ Falloff;
                     hash = (hash * 397) ^ SpotAngle;
+                    hash = (hash * 397) ^ Sides;
                     return (hash * 397) ^ Resolution;
                 }
             }

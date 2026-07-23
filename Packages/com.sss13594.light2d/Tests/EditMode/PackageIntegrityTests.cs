@@ -15,16 +15,14 @@ namespace Light2D.Tests
         // The unified creation flow now uses Balanced shadow quality → Light40Points.
         private const string Light40PointsGuid = "ab37f3042fbc56e4b9288c3ba9cd32d8";
 
+        // The five preset materials (8/40/90/Auto/Ignore) plus Light20/80Points, which Small Examples
+        // binds as ShadowQuality.Custom raw-slot materials. The other per-count materials were deleted
+        // with the per-count shader collapse (Light1Point/30/50/60/70).
         private static readonly string[] RuntimeLightMaterialNames =
         {
-            "Light1Point",
             "Light8Points",
             "Light20Points",
-            "Light30Points",
             "Light40Points",
-            "Light50Points",
-            "Light60Points",
-            "Light70Points",
             "Light80Points",
             "Light90Points",
             "LightAutoPoints",
@@ -51,7 +49,6 @@ namespace Light2D.Tests
             {
                 DefaultLightPath,
                 PackageRoot + "/Runtime/Materials/LightOverlay.mat",
-                PackageRoot + "/Runtime/Materials/Light1Point.mat",
                 PackageRoot + "/Runtime/Materials/DualColor.mat",
                 PackageRoot + "/Runtime/Materials/AmbientLightComputer.mat",
                 PackageRoot + "/Runtime/Materials/FastBlur.mat"
@@ -70,6 +67,8 @@ namespace Light2D.Tests
             Assert.That(defaults.AmbientLightComputeMaterial, Is.Not.Null);
             Assert.That(defaults.LightOverlayMaterial, Is.Not.Null);
             Assert.That(defaults.BlurMaterial, Is.Not.Null);
+            // The obstacle components seed their hidden Material slot from this field on Reset.
+            Assert.That(defaults.ObstacleMaterial, Is.Not.Null);
 
             foreach (string guid in AssetDatabase.FindAssets("t:Material", new[] { PackageRoot + "/Runtime" }))
             {

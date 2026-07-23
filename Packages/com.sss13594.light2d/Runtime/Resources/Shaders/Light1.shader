@@ -1,6 +1,6 @@
 /*
 
-This is simplest and fastest light shader without path tracking. 
+This is simplest and fastest light shader without path tracking.
 It requires no aditional data to work so it could be used with Particle System.
 
 */
@@ -11,7 +11,22 @@ Properties {
 	_ObstacleMul ("Obstacle Mul", Float) = 6
 	_EmissionColorMul ("Emission color mul", Float) = 1
 }
-SubShader {	
+SubShader {
+	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
+	Blend OneMinusDstColor One
+	Cull Off
+	ZWrite Off
+	Pass {
+		Name "Light1Point"
+		Tags { "LightMode"="SRPDefaultUnlit" }
+		HLSLPROGRAM
+		#pragma vertex Light2DOnePointVert
+		#pragma fragment Light2DOnePointFrag
+		#include "Light2DURPRenderer.hlsl"
+		ENDHLSL
+	}
+}
+SubShader {
 	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
 
 	LOD 100
@@ -20,13 +35,11 @@ SubShader {
 	ZWrite Off
 	Lighting Off
 
-	Pass {  
+	Pass {
 		CGPROGRAM
 			#pragma vertex vert
 			#pragma fragment frag
-			#pragma multi_compile ORTHOGRAPHIC_CAMERA PERSPECTIVE_CAMERA
-			#pragma multi_compile LIGHT2D_XY_PLANE LIGHT2D_XZ_PLANE
-			
+
 			#include "UnityCG.cginc"
 
 			struct appdata_t {
@@ -41,7 +54,7 @@ SubShader {
 				half4 scrPos  : TEXCOORD1;
 				fixed4 color : COLOR0;
 			};
-			
+
 		    uniform sampler2D _ObstacleTex;
 			uniform sampler2D _MainTex;
 			uniform half _ObstacleMul;
@@ -58,10 +71,10 @@ SubShader {
 				o.color = v.color;
 				return o;
 			}
-			
+
 			half4 frag (v2f i) : SV_Target
 			{
-				half2 thisPos = (i.scrPos.xy/i.scrPos.w); 
+				half2 thisPos = (i.scrPos.xy/i.scrPos.w);
 				half m = _ObstacleMul;
                 half4 tex = tex2D(_MainTex, i.texcoord.xy);
 				half4 col = i.color*tex*tex.a*i.color.a;
@@ -71,23 +84,6 @@ SubShader {
                 return col;
 			}
 		ENDCG
-	}
-}
-SubShader {
-	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
-	Blend OneMinusDstColor One
-	Cull Off
-	ZWrite Off
-	Pass {
-		Name "Light1Point"
-		Tags { "LightMode"="SRPDefaultUnlit" }
-		HLSLPROGRAM
-		#pragma vertex Light2DOnePointVert
-		#pragma fragment Light2DOnePointFrag
-		#pragma multi_compile ORTHOGRAPHIC_CAMERA PERSPECTIVE_CAMERA
-		#pragma multi_compile LIGHT2D_XY_PLANE LIGHT2D_XZ_PLANE
-		#include "Light2DURPRenderer.hlsl"
-		ENDHLSL
 	}
 }
 

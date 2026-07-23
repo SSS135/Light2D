@@ -76,70 +76,54 @@ namespace Light2D
                  "per frame at more cost (default 1, matching the original single-step behavior).")]
         public int AmbientIterations = 1;
 
-        [Header("Overlay Look")]
-        [Tooltip("Enables the Overlay Look overrides below. When off, the cloned overlay material keeps the " +
-                 "values from its serialized source, so per-scene tuned materials are preserved (default off).")]
-        public bool OverrideOverlayLook = false;
-
         [Min(0)]
         [Tooltip("Overlay: overall brightness applied to the composited lighting result " +
-                 "(shader _LightMul, default 2).")]
+                 "(shader _LightMul, default 2). Always applied every frame.")]
         public float LightBrightness = 2f;
 
         [Min(0)]
         [Tooltip("Overlay: brightness applied to the light-sources contribution " +
-                 "(shader _LightSourcesMul, default 1).")]
+                 "(shader _LightSourcesMul, default 1). Always applied every frame.")]
         public float LightSourcesBrightness = 1f;
 
         [Min(0)]
         [Tooltip("Overlay: exponent shaping the additive bloom falloff of bright lights " +
-                 "(shader _AdditiveLightPow, default 4).")]
+                 "(shader _AdditiveLightPow, default 4). Always applied every frame.")]
         public float BloomPower = 4f;
 
         [Min(0)]
         [Tooltip("Overlay: additive bloom offset added to bright lights " +
-                 "(shader _AdditiveLightAdd, default 0.15).")]
+                 "(shader _AdditiveLightAdd, default 0.15). Always applied every frame.")]
         public float BloomAdd = 0.15f;
-
-        [Header("Ambient Feel")]
-        [Tooltip("Enables the Ambient Feel overrides below. When off, the cloned ambient compute material " +
-                 "keeps the values from its serialized source, so per-scene tuned materials are preserved " +
-                 "(default off).")]
-        public bool OverrideAmbientFeel = false;
 
         [Min(0)]
         [Tooltip("Ambient: how strongly obstacles attenuate the ambient propagation " +
-                 "(shader _ObstacleMul, default 1.5).")]
+                 "(shader _ObstacleMul, default 1.5). Always applied every frame.")]
         public float AmbientObstacleMul = 1.5f;
 
         [Min(0)]
         [Tooltip("Ambient: additive term applied alongside the obstacle attenuation " +
-                 "(shader _ObstacleAdd, default 0.1).")]
+                 "(shader _ObstacleAdd, default 0.1). Always applied every frame.")]
         public float AmbientObstacleAdd = 0.1f;
 
         [Min(0)]
         [Tooltip("Ambient: emission strength contributed by ambient emitters " +
-                 "(shader _EmissionColorMul, default 0.1).")]
+                 "(shader _EmissionColorMul, default 0.1). Always applied every frame.")]
         public float AmbientEmissionMul = 0.1f;
 
         [Min(0)]
         [Tooltip("Ambient: world-space distance the propagation samples each cycle " +
-                 "(shader _SamplingDist, default 0.01).")]
+                 "(shader _SamplingDist, default 0.01). Always applied every frame.")]
         public float AmbientSamplingDistance = 0.01f;
 
         [Range(0f, 1f)]
         [Tooltip("Ambient: how quickly the ambient history adapts toward the new state each cycle " +
-                 "(shader _AmbientAdaptSpeed, default 0.2).")]
+                 "(shader _AmbientAdaptSpeed, default 0.2). Always applied every frame.")]
         public float AmbientAdaptSpeed = 0.2f;
-
-        [Header("Blur")]
-        [Tooltip("Enables the Blur override below. When off, the cloned blur material(s) keep the values " +
-                 "from their serialized source, so per-scene tuned materials are preserved (default off).")]
-        public bool OverrideBlur = false;
 
         [Min(0)]
         [Tooltip("Blur: sampling distance of the light-sources and ambient blur passes " +
-                 "(shader _Distance, default 2.5).")]
+                 "(shader _Distance, default 2.5). Always applied every frame.")]
         public float BlurDistance = 2.5f;
 
         [Tooltip("Uses a half-float (ARGBHalf) light buffer for higher dynamic range when the platform " +
@@ -153,6 +137,13 @@ namespace Light2D
         [Tooltip("Distance from the camera to the obstacle/light plane, used to project casters in " +
                  "perspective mode (default 10).")]
         public float LightObstaclesDistance = 10;
+
+        [Tooltip("Global obstacle multiplier: multiplies every obstacle's color and alpha before it occludes " +
+                 "light (direct and ambient alike), on top of each obstacle's own Multiplicative Color. White " +
+                 "with full alpha (the default) is a no-op that leaves all obstacles unchanged; lowering the " +
+                 "alpha makes every wall more transparent with one control, and the RGB tints their " +
+                 "transmission. Always applied every frame.")]
+        public Color ObstacleColor = Color.white;
 
         [Tooltip("Filter mode of the internal light textures; Bilinear softens, Point keeps hard pixels " +
                  "(default Bilinear).")]
@@ -205,6 +196,7 @@ namespace Light2D
         private readonly Plane[] _extendedPlanes = new Plane[6];
         private readonly Plane[] _smallPlanes = new Plane[6];
         private MaterialPropertyBlock _normalLightProperties;
+        private MaterialPropertyBlock _obstacleProperties;
         private Vector2Int _extendedLightTextureSize;
         private Vector2Int _smallLightTextureSize;
         private Vector3 _oldPos;
@@ -223,7 +215,7 @@ namespace Light2D
         private RenderTexture _mainCameraTarget;
         private CameraClearFlags _mainCameraClearFlags;
         private Color _mainCameraBackground;
-#pragma warning disable CS0618 // FlareLayer is obsolete from Unity 6000.5 (Built-in Render Pipeline deprecation); Light2D still supports the Built-in backend and hides lens flares from the helper-camera render.
+#pragma warning disable CS0618 // FlareLayer is obsolete from Unity 6000.5 (Built-in Render Pipeline deprecation); Light2D still supports the Built-in backend and hides lens flares from the source camera's intermediate (Affect-Only-This-Camera) render.
         private FlareLayer _flareLayer;
 #pragma warning restore CS0618
         private bool _flareLayerEnabled;
@@ -244,6 +236,7 @@ namespace Light2D
         private RTHandle _obstaclePreviewHandle;
 
         private static readonly int ObstacleTexId = Shader.PropertyToID("_ObstacleTex");
+        private static readonly int ObstacleGlobalMulId = Shader.PropertyToID("_Light2DObstacleGlobalMul");
         private static readonly int NormalsBufferId = Shader.PropertyToID("_NormalsBuffer");
         private static readonly int NormalTexId = Shader.PropertyToID("_NormalTex");
         private static readonly int PixelsPerBlockId = Shader.PropertyToID("_PixelsPerBlock");
@@ -420,6 +413,30 @@ namespace Light2D
             ActiveInstances.Remove(this);
             ReleaseOwnedResources();
         }
+
+#if UNITY_EDITOR
+        // Editor-only: when the component is first added through the Inspector, populate the composition
+        // material slots (hidden from the custom inspector) from the packaged default resources so a freshly
+        // added LightingSystem renders without any manual assignment. Reset runs only when the component is
+        // added in the editor, so existing serialized systems and sample scenes are never re-written, and a
+        // programmatic AddComponent (used by the tests) never triggers it - an unassigned overlay stays null.
+        // Since the value fields are always applied at render time, only the default materials' shaders matter.
+        private void Reset()
+        {
+            var defaults = UnityEditor.AssetDatabase.LoadAssetAtPath<Light2DDefaultResources>(
+                "Packages/com.sss13594.light2d/Runtime/Light2DDefaultResources.asset");
+            if (defaults == null)
+                return;
+            if (AmbientLightComputeMaterial == null)
+                AmbientLightComputeMaterial = defaults.AmbientLightComputeMaterial;
+            if (LightOverlayMaterial == null)
+                LightOverlayMaterial = defaults.LightOverlayMaterial;
+            if (LightSourcesBlurMaterial == null)
+                LightSourcesBlurMaterial = defaults.BlurMaterial;
+            if (AmbientLightBlurMaterial == null)
+                AmbientLightBlurMaterial = defaults.BlurMaterial;
+        }
+#endif
 
         private void OnRenderImage(RenderTexture src, RenderTexture dest)
         {
@@ -787,6 +804,16 @@ namespace Light2D
                     LightObstaclesAntialiasing ? 2f : 1f);
                 var borderMaterial = _obstaclesPostProcessor.Material;
 
+                // Values-only source of truth: the LightingSystem-wide obstacle multiplier is pushed onto the
+                // obstacle draws through a property block every frame (default white = a byte-identical no-op).
+                // The block is scoped to the obstacle snapshot only, so the ambient emitter - which shares the
+                // dual-color obstacle material - and every other role keep the material's default white. The
+                // border draw uses a different shader and is intentionally left untouched (a full-transmission
+                // edge guard that must stay put regardless of how transparent obstacles are made).
+                if (_obstacleProperties == null)
+                    _obstacleProperties = new MaterialPropertyBlock();
+                _obstacleProperties.SetColor(ObstacleGlobalMulId, ObstacleColor);
+
                 var commands = CommandBufferPool.Get("Light2D Obstacles");
                 try
                 {
@@ -799,7 +826,7 @@ namespace Light2D
                     // GL.GetGPUProjectionMatrix(..., true) here double-adjusts on flipped-UV platforms (D3D)
                     // and renders the light textures vertically mirrored relative to the game image.
                     raster.SetViewProjectionMatrices(geometry.View, geometry.Projection);
-                    Light2DDraw.Draw(raster, _obstacleSnapshot, pass);
+                    Light2DDraw.Draw(raster, _obstacleSnapshot, pass, _obstacleProperties);
                     // One-pixel white border so lights with off-screen origins keep sampling obstacles.
                     // The border shader emits clip-space vertices directly, so it ignores view/projection.
                     if (borderMesh != null && borderMaterial != null)
@@ -835,7 +862,6 @@ namespace Light2D
 
         private void RenderNormalBuffer(in Light2DCameraGeometry geometry)
         {
-            SetKeyword("NORMAL_MAPPED_LIGHTS", BuiltInNormalMappingEnabled);
             if (!BuiltInNormalMappingEnabled)
                 return;
             using (Light2DProfiling.Normals.Auto())
@@ -915,10 +941,8 @@ namespace Light2D
                     var light = _lightSpritesCache[i];
                     if (light == null || light.Sprite == null)
                         continue;
-                    var renderer = light.Renderer;
-                    var filter = light.GetComponent<MeshFilter>();
-                    var mesh = filter != null ? filter.sharedMesh : null;
-                    var lightMaterial = renderer != null ? renderer.sharedMaterial : null;
+                    var mesh = light.Mesh;
+                    var lightMaterial = light.DrawMaterial;
                     if (mesh == null || lightMaterial == null)
                         continue;
                     var matrix = light.transform.localToWorldMatrix;
@@ -932,10 +956,10 @@ namespace Light2D
                         raster.DrawMesh(mesh, matrix, lightMaterial, s, sourcePass);
 
                     var size = light.Sprite.bounds.size;
-                    var center = matrix.MultiplyPoint3x4(Vector2.Scale((Vector2)light.LightOrigin, size));
+                    var center = matrix.MultiplyPoint3x4(Vector2.Scale(light.LightOrigin, size));
                     _normalLightProperties.Clear();
                     _normalLightProperties.SetVector(LightPosId,
-                        new Vector4(center.x, center.y, light.LightOrigin.z, 0f));
+                        new Vector4(center.x, center.y, light.NormalMapHeight, 0f));
                     _normalLightProperties.SetTexture(MainTexId, _resources.SingleLightSourceTexture);
                     commands.SetRenderTarget(_resources.LightSourcesTexture);
                     raster.SetViewProjectionMatrices(geometry.View, projection);
@@ -983,14 +1007,12 @@ namespace Light2D
                 var light = _lightSpritesCache[i];
                 if (light == null)
                     continue;
-                var renderer = light.Renderer;
-                var filter = light.GetComponent<MeshFilter>();
-                var mesh = filter != null ? filter.sharedMesh : null;
-                var material = renderer != null ? renderer.sharedMaterial : null;
+                var mesh = light.Mesh;
+                var material = light.DrawMaterial;
                 if (mesh == null || material == null)
                     continue;
                 _sourceSnapshot.Add(new Light2DDrawEntry(mesh, material, light.transform.localToWorldMatrix,
-                    renderer.bounds, mesh.subMeshCount, light.SortingOrder, light.Owner));
+                    light.WorldBounds, mesh.subMeshCount, light.SortingOrder, light.Owner));
             }
         }
 
@@ -1026,10 +1048,8 @@ namespace Light2D
                 try
                 {
                     _resources.LightSourcesTexture.filterMode = FilterMode.Bilinear;
-                    // Anti-clobber: only override the blur distance when the user opts in via OverrideBlur;
-                    // otherwise the cloned blur material keeps the value from its serialized source.
-                    if (OverrideBlur && blurMaterial != null)
-                        blurMaterial.SetFloat(DistanceId, BlurDistance);
+                    // Values-only source of truth: the blur distance is applied unconditionally every frame.
+                    blurMaterial.SetFloat(DistanceId, BlurDistance);
                     blurMaterial.mainTexture = _resources.LightSourcesTexture;
                     Graphics.Blit(null, _resources.BlurredLightTexture, blurMaterial);
                     if (LightTexturesFilterMode == FilterMode.Point)
@@ -1084,21 +1104,15 @@ namespace Light2D
                 return 0;
             using (Light2DProfiling.Ambient.Auto())
             {
-                // Drive only the colored-bounce tint from C# (default 0 = the shader's neutral default, which
-                // materials without a _AmbientBounceTint entry also resolve to). The obstacle/emission/sampling
-                // tuning is left to the material's own serialized values so per-scene ambient tuning is honored.
+                // Values-only source of truth: the colored-bounce tint plus every ambient "feel" knob are
+                // pushed onto the cloned compute material unconditionally each frame (AmbientColoredBounce
+                // default 0 is the shader's neutral no-op). The component fields are the single source of truth.
                 computeMaterial.SetFloat(AmbientBounceTintId, AmbientColoredBounce);
-                // Anti-clobber: only push the exposed ambient "feel" knobs when the user opts in via
-                // OverrideAmbientFeel. Otherwise the cloned compute material keeps the obstacle/emission/
-                // sampling values copied from its serialized source, preserving per-scene ambient tuning.
-                if (OverrideAmbientFeel)
-                {
-                    computeMaterial.SetFloat(ObstacleMulId, AmbientObstacleMul);
-                    computeMaterial.SetFloat(ObstacleAddId, AmbientObstacleAdd);
-                    computeMaterial.SetFloat(EmissionColorMulId, AmbientEmissionMul);
-                    computeMaterial.SetFloat(SamplingDistId, AmbientSamplingDistance);
-                    computeMaterial.SetFloat(AmbientAdaptSpeedId, AmbientAdaptSpeed);
-                }
+                computeMaterial.SetFloat(ObstacleMulId, AmbientObstacleMul);
+                computeMaterial.SetFloat(ObstacleAddId, AmbientObstacleAdd);
+                computeMaterial.SetFloat(EmissionColorMulId, AmbientEmissionMul);
+                computeMaterial.SetFloat(SamplingDistId, AmbientSamplingDistance);
+                computeMaterial.SetFloat(AmbientAdaptSpeedId, AmbientAdaptSpeed);
 
                 RunSnapshotPass("Light2D Ambient Emission", _resources.AmbientEmissionTexture, Color.clear,
                     geometry, _ambientSnapshot, DefaultUnlitMode);
@@ -1124,10 +1138,8 @@ namespace Light2D
                     Graphics.Blit(null, _resources.AmbientTexture, computeMaterial);
                     if (BlurAmbientLight && _resources.AmbientLightBlurMaterial != null)
                     {
-                        // Anti-clobber: only override the blur distance when the user opts in via OverrideBlur;
-                        // otherwise the cloned blur material keeps the value from its serialized source.
-                        if (OverrideBlur && _resources.AmbientLightBlurMaterial != null)
-                            _resources.AmbientLightBlurMaterial.SetFloat(DistanceId, BlurDistance);
+                        // Values-only source of truth: the blur distance is applied unconditionally each frame.
+                        _resources.AmbientLightBlurMaterial.SetFloat(DistanceId, BlurDistance);
                         _resources.AmbientLightBlurMaterial.mainTexture = _resources.AmbientTexture;
                         Graphics.Blit(null, _resources.PreviousAmbientTexture, _resources.AmbientLightBlurMaterial);
                         Swap(ref _resources.PreviousAmbientTexture, ref _resources.AmbientTexture);
@@ -1164,16 +1176,12 @@ namespace Light2D
                     ? _resources.BlurredLightTexture
                     : _resources.LightSourcesTexture;
                 var overlay = _resources.LightOverlayMaterial;
-                // Anti-clobber: only push the exposed overlay "feel" knobs when the user opts in via
-                // OverrideOverlayLook. Otherwise the cloned material keeps the values copied from its
-                // serialized source, preserving per-scene tuned overlay materials bit-for-bit.
-                if (OverrideOverlayLook)
-                {
-                    overlay.SetFloat(LightMulId, LightBrightness);
-                    overlay.SetFloat(LightSourcesMulId, LightSourcesBrightness);
-                    overlay.SetFloat(AdditiveLightPowId, BloomPower);
-                    overlay.SetFloat(AdditiveLightAddId, BloomAdd);
-                }
+                // Values-only source of truth: every overlay "look" knob is pushed onto the cloned material
+                // unconditionally each frame, so the component fields are the single source of truth.
+                overlay.SetFloat(LightMulId, LightBrightness);
+                overlay.SetFloat(LightSourcesMulId, LightSourcesBrightness);
+                overlay.SetFloat(AdditiveLightPowId, BloomPower);
+                overlay.SetFloat(AdditiveLightAddId, BloomAdd);
                 overlay.SetTexture(AmbientLightTexId, EnableAmbientLight ? _resources.AmbientTexture : null);
                 overlay.SetTexture(LightSourcesTexId, lightSources);
                 overlay.SetTexture(GameTexId, src);
@@ -1561,7 +1569,6 @@ namespace Light2D
             private readonly bool _xzPlane;
             private readonly bool _hdr;
             private readonly bool _perspectiveCamera;
-            private readonly bool _normalMappedLights;
             private readonly Texture _obstacleTexture;
             private readonly Texture _normalsTexture;
 
@@ -1570,7 +1577,6 @@ namespace Light2D
                 _xzPlane = Shader.IsKeywordEnabled("LIGHT2D_XZ_PLANE");
                 _hdr = Shader.IsKeywordEnabled("HDR");
                 _perspectiveCamera = Shader.IsKeywordEnabled("PERSPECTIVE_CAMERA");
-                _normalMappedLights = Shader.IsKeywordEnabled("NORMAL_MAPPED_LIGHTS");
                 _obstacleTexture = Shader.GetGlobalTexture(ObstacleTexId);
                 _normalsTexture = Shader.GetGlobalTexture(NormalsBufferId);
             }
@@ -1585,7 +1591,6 @@ namespace Light2D
                 SetKeyword("LIGHT2D_XZ_PLANE", _xzPlane);
                 SetKeyword("HDR", _hdr);
                 SetKeyword("PERSPECTIVE_CAMERA", _perspectiveCamera);
-                SetKeyword("NORMAL_MAPPED_LIGHTS", _normalMappedLights);
                 Shader.SetGlobalTexture(ObstacleTexId, _obstacleTexture);
                 Shader.SetGlobalTexture(NormalsBufferId, _normalsTexture);
             }

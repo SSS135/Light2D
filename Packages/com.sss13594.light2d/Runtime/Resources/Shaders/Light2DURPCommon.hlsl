@@ -33,6 +33,10 @@ float3 _LightPos;
 float2 _ViewportToWorldX;
 float2 _ViewportToWorldY;
 half _Distance;
+// LightingSystem-wide obstacle multiplier, supplied per obstacle draw through a MaterialPropertyBlock and
+// applied only in the two obstacle frags below. White (the material default and the URP feature's default)
+// keeps every draw byte-identical; a lower alpha makes every obstacle more transparent to light.
+half4 _Light2DObstacleGlobalMul;
 half _ObstacleMul;
 half _ObstacleAdd;
 half _EmissionColorMul;

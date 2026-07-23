@@ -17,26 +17,40 @@ namespace Light2D
         private static readonly Comparison<LightSprite> CompareByEntityId = CompareLights;
         private static readonly Predicate<LightSprite> IsMissing = light => light == null;
 
-        [Tooltip("Light emission origin in sprite-local space; Z is the light's height above the plane " +
-                 "used for normal mapping (default (0, 0, 1)).")]
-        public Vector3 LightOrigin = new Vector3(0, 0, 1);
+        [Tooltip("Pure correction offset for the emission origin, in the sprite's local XY (default (0, 0)): " +
+                 "for Point it nudges the light centre, for Spot it nudges the cone apex, and it is unused " +
+                 "for Line. Switching Type never rewrites this value.")]
+        public Vector2 LightOrigin = Vector2.zero;
 
-        [Tooltip("Point emits radially from LightOrigin; Line emits along the sprite's horizontal extent " +
-                 "(default Point).")]
-        public LightShape Shape = LightShape.Point;
+        [Tooltip("Height of the light above the 2D plane, consumed only by the normal-mapped light pass " +
+                 "(default 1). Requires an Override Sprite and normal mapping enabled on the owning " +
+                 "LightingSystem; ignored otherwise.")]
+        public float NormalMapHeight = 1f;
 
         [Tooltip("LightingSystem that draws this light. Leave empty to draw for any system, or set it to " +
                  "scope the light to one system when several exist.")]
         public LightingSystem Owner;
 
-        [Tooltip("Light type. Point emits radially, Spot projects a soft cone from the origin apex, and " +
-                 "Line emits along the sprite's horizontal extent. Drives Shape, the generated falloff " +
-                 "texture, and (for Spot) the origin (default Point).")]
+        [Tooltip("Light type. Point emits radially, Spot projects a soft cone whose apex sits at the " +
+                 "transform, and Line emits along a bar. Drives the generated falloff texture and the mesh " +
+                 "geometry (default Point).")]
         public LightType Type = LightType.Point;
 
-        [Tooltip("Light size in world units, baked into the mesh independently of the Transform scale " +
-                 "(default 3).")]
+        [Tooltip("Point/Spot light size in world units, baked into the mesh independently of the Transform " +
+                 "scale (default 3). Unused for Line, which is sized by Length and Throw.")]
         public float Radius = 3f;
+
+        [Tooltip("Line light extent along its local X axis, in world units (default 3). Used only when Type " +
+                 "is Line.")]
+        public float Length = 3f;
+
+        [Tooltip("Line light perpendicular reach before it fades, in world units (default 1.5). Used only " +
+                 "when Type is Line.")]
+        public float Throw = 1.5f;
+
+        [Tooltip("Which side(s) of a Line light emit: Both (two-sided), Front (+normal only), or Back " +
+                 "(-normal only). Used only when Type is Line (default Both).")]
+        public LightSides Sides = LightSides.Both;
 
         [Tooltip("Brightness multiplied into the light color. Values above 1 need the owning " +
                  "LightingSystem's HDR enabled to avoid clamping (default 1).")]
@@ -56,8 +70,7 @@ namespace Light2D
         public ShadowQuality Shadows = ShadowQuality.Balanced;
 
         private Matrix4x4 _modelMatrix;
-        private Vector3 _oldLightOrigin;
-        private LightShape _oldLightShape;
+        private Vector2 _oldLightOrigin;
         private Sprite _positionSprite;
         private bool _xzPlane;
         private bool _oldXzPlane;
@@ -66,9 +79,11 @@ namespace Light2D
         private float _oldIntensity;
         private float _oldFalloff;
         private float _oldSpotAngle;
+        private float _oldLength;
+        private float _oldThrow;
+        private LightSides _oldSides;
 
         public static LightSprite[] AllLightSprites { get { return CreateSnapshot(); } }
-        public MeshRenderer Renderer { get { return _meshRenderer; } }
 
         // Radius sizes the light mesh directly (decoupled from the Transform scale).
         protected override float MeshScale { get { return Mathf.Max(Radius, 1e-4f); } }
@@ -85,7 +100,7 @@ namespace Light2D
             {
                 return Sprite != null
                     ? Sprite
-                    : Light2DLightTextureGenerator.GetSprite(Type, Falloff, SpotAngle);
+                    : Light2DLightTextureGenerator.GetSprite(Type, Falloff, SpotAngle, Sides);
             }
         }
 
@@ -100,10 +115,6 @@ namespace Light2D
         protected override void OnEnable()
         {
             base.OnEnable();
-            // Register-and-draw model (§0.3): the owned renderer is permanently disabled so no scene
-            // camera ever draws the light mesh; it is drawn only through the LightSprites snapshot.
-            if (_meshRenderer != null)
-                _meshRenderer.enabled = false;
             LightSprites.Add(this);
         }
 
@@ -127,23 +138,6 @@ namespace Light2D
                 LightSprites.Add(lightSprite);
         }
 
-        public static void PrepareSnapshot(List<LightSprite> snapshot, bool xzPlane)
-        {
-            if (snapshot == null)
-                throw new ArgumentNullException("snapshot");
-
-            LightSprites.RemoveWhere(IsMissing);
-            snapshot.Clear();
-            foreach (var light in LightSprites)
-            {
-                if (IsRenderable(light))
-                    snapshot.Add(light);
-            }
-            snapshot.Sort(CompareByEntityId);
-            for (var i = 0; i < snapshot.Count; i++)
-                snapshot[i].PrepareForLighting(xzPlane);
-        }
-
         // Owner-filtered snapshot for the register-and-draw backends: no layer filter, an explicit Owner
         // scope, and caller-cached frustum planes (null skips frustum culling).
         internal static void PrepareSnapshot(List<LightSprite> snapshot, bool xzPlane, LightingSystem owner,
@@ -158,7 +152,7 @@ namespace Light2D
             {
                 if (!IsRenderable(light) ||
                     (light.Owner != null && light.Owner != owner) ||
-                    (planes != null && !GeometryUtility.TestPlanesAABB(planes, light.Renderer.bounds)))
+                    (planes != null && !GeometryUtility.TestPlanesAABB(planes, light.WorldBounds)))
                     continue;
                 snapshot.Add(light);
             }
@@ -166,14 +160,6 @@ namespace Light2D
             snapshot.Sort(CompareByEntityId);
             for (var i = 0; i < snapshot.Count; i++)
                 snapshot[i].PrepareForLighting(xzPlane);
-        }
-
-        public static LightSprite[] PrepareSnapshot(bool xzPlane)
-        {
-            var snapshot = CreateSnapshot();
-            for (var i = 0; i < snapshot.Length; i++)
-                snapshot[i].PrepareForLighting(xzPlane);
-            return snapshot;
         }
 
         private static LightSprite[] CreateSnapshot()
@@ -191,10 +177,9 @@ namespace Light2D
 
         private static bool IsRenderable(LightSprite light)
         {
-            // The owned MeshRenderer is permanently disabled in the register-and-draw model, so
-            // renderability is gated on the component being active/enabled, not the renderer's flag.
-            // The renderer is still required as the mesh/material/bounds container for the snapshot.
-            return light != null && light.isActiveAndEnabled && light.Renderer != null;
+            // Register-and-draw: there is no MeshRenderer. Renderability is gated on the component being
+            // active/enabled and owning a built mesh + material (the draw-entry inputs).
+            return light != null && light.isActiveAndEnabled && light.Mesh != null && light.DrawMaterial != null;
         }
 
         private static int CompareLights(LightSprite left, LightSprite right)
@@ -214,53 +199,81 @@ namespace Light2D
             if (sprite == null || _uv1.Length != _vertices.Length)
                 return;
 
-            // The mesh vertices are already scaled by MeshScale (radius), so the origin/segment must be
-            // scaled by the same size*MeshScale to stay aligned with them.
-            var size = sprite.bounds.size * MeshScale;
-            if (Shape == LightShape.Point)
+            if (Type == LightType.Line)
             {
-                var position = _modelMatrix.MultiplyPoint(Vector2.Scale((Vector2)LightOrigin, size));
-                var uv = xzPlane ? new Vector2(position.x, position.z) : (Vector2)position;
+                // Each column emits from the point on the line segment directly at its X. The segment lies
+                // along local X at the transform origin and spans Length; Throw/Sides shape only the
+                // perpendicular mesh, so the emitting line itself does not depend on LightOrigin.
+                var half = Length * 0.5f;
+                var left = _modelMatrix.MultiplyPoint(new Vector3(-half, 0f, 0f));
+                var right = _modelMatrix.MultiplyPoint(new Vector3(half, 0f, 0f));
+                var width = Mathf.Max(Length, Mathf.Epsilon);
                 for (var i = 0; i < _uv1.Length; i++)
-                    _uv1[i] = uv;
+                {
+                    var frac = Mathf.Clamp01((_vertices[i].x + half) / width);
+                    var position = Vector3.LerpUnclamped(left, right, frac);
+                    _uv1[i] = xzPlane ? new Vector2(position.x, position.z) : (Vector2)position;
+                }
                 return;
             }
 
-            var left = _modelMatrix.MultiplyPoint(Vector2.Scale(new Vector2(-0.5f, LightOrigin.y), size));
-            var right = _modelMatrix.MultiplyPoint(Vector2.Scale(new Vector2(0.5f, LightOrigin.y), size));
-            var minX = sprite.bounds.min.x * MeshScale;
-            var width = Mathf.Max(size.x, Mathf.Epsilon);
+            // Point and Spot emit from a single origin: the transform position nudged by the LightOrigin XY
+            // correction, scaled into the sprite's local footprint. For Spot the mesh apex is baked to this
+            // same point (see TransformVertex), so origin, apex, and the Scene gizmo coincide.
+            var size = sprite.bounds.size * MeshScale;
+            var origin = _modelMatrix.MultiplyPoint(Vector2.Scale(LightOrigin, size));
+            var uv = xzPlane ? new Vector2(origin.x, origin.z) : (Vector2)origin;
             for (var i = 0; i < _uv1.Length; i++)
+                _uv1[i] = uv;
+        }
+
+        // Reshapes the copied sprite quad per Type. Point keeps the centered quad; Spot lifts it so the
+        // generated cone's apex row (the sprite's bottom edge) sits at the LightOrigin-corrected transform
+        // origin; Line rebuilds it as a Length-by-Throw bar with the emitting segment placed by Sides.
+        protected override Vector3 TransformVertex(Vector3 vertex, float scale, Sprite sprite)
+        {
+            switch (Type)
             {
-                var position = Vector3.LerpUnclamped(left, right, (_vertices[i].x - minX) / width);
-                _uv1[i] = xzPlane ? new Vector2(position.x, position.z) : (Vector2)position;
+                case LightType.Line:
+                {
+                    var yScale = Sides == LightSides.Both ? Throw * 2f : Throw;
+                    var yOffset = Sides == LightSides.Front ? Throw * 0.5f
+                        : Sides == LightSides.Back ? -Throw * 0.5f
+                        : 0f;
+                    return new Vector3(vertex.x * Length, vertex.y * yScale + yOffset, 0f);
+                }
+                case LightType.Spot:
+                {
+                    if (sprite == null)
+                        return vertex * scale;
+                    var size = sprite.bounds.size * scale;
+                    var offsetX = LightOrigin.x * size.x;
+                    var offsetY = LightOrigin.y * size.y - sprite.bounds.min.y * scale;
+                    return vertex * scale + new Vector3(offsetX, offsetY, 0f);
+                }
+                default:
+                    return vertex * scale;
             }
         }
 
         protected override void UpdateMeshData(bool forceUpdate = false)
         {
-            if (IsPartOfStaticBatch)
-                return;
-
-            // Type is the top-level chooser: switching it (re)configures Shape and the emission origin.
+            // Type is the single top-level chooser: it selects the generated falloff, the mesh geometry, and
+            // how the emission origin is written into UV1. No field is mutated when Type switches -
+            // LightOrigin is a pure correction offset the user owns.
             var lightTypeChanged = _oldLightType != Type;
-            if (lightTypeChanged)
-            {
-                ApplyLightTypeShape();
-                _oldLightType = Type;
-            }
 
-            // Radius (mesh scale), Intensity (vertex color), and the generated-texture params all change
-            // alone and must repaint. Radius/Intensity force a vertex/color rebuild; Falloff/SpotAngle/Type
-            // also swap the generated ActiveSprite, which the base sprite-change path already catches.
+            // Radius/Intensity/Falloff/SpotAngle, the Line dimensions (Length/Throw/Sides), and Type each
+            // change alone and must rebuild the mesh or repaint. LightOrigin also rebuilds the mesh because
+            // the Spot apex offset is baked into the vertices.
             var lightDataDirty = lightTypeChanged || _oldRadius != Radius || _oldIntensity != Intensity ||
-                _oldFalloff != Falloff || _oldSpotAngle != SpotAngle;
+                _oldFalloff != Falloff || _oldSpotAngle != SpotAngle || _oldLength != Length ||
+                _oldThrow != Throw || _oldSides != Sides || _oldLightOrigin != LightOrigin;
 
             var activeSprite = ActiveSprite;
             var matrix = transform.localToWorldMatrix;
-            var positionDirty = !MatrixExactlyEquals(matrix, _modelMatrix) || _oldLightOrigin != LightOrigin ||
-                _oldLightShape != Shape || _oldXzPlane != _xzPlane || _positionSprite != activeSprite ||
-                lightDataDirty || forceUpdate;
+            var positionDirty = !MatrixExactlyEquals(matrix, _modelMatrix) || _oldXzPlane != _xzPlane ||
+                _positionSprite != activeSprite || lightDataDirty || forceUpdate;
 
             base.UpdateMeshData(forceUpdate || lightDataDirty);
             if (!positionDirty && _uv1.Length == _vertices.Length)
@@ -268,43 +281,19 @@ namespace Light2D
 
             _modelMatrix = matrix;
             _oldLightOrigin = LightOrigin;
-            _oldLightShape = Shape;
             _oldXzPlane = _xzPlane;
             _positionSprite = activeSprite;
             _oldRadius = Radius;
             _oldIntensity = Intensity;
             _oldFalloff = Falloff;
             _oldSpotAngle = SpotAngle;
+            _oldLength = Length;
+            _oldThrow = Throw;
+            _oldSides = Sides;
+            _oldLightType = Type;
             UpdatePosition(_xzPlane);
             _isMeshDirty = true;
             base.UpdateMeshData();
-        }
-
-        // Applies the Shape and emission origin implied by the chosen Type. Runs only when Type changes so
-        // it configures the light once without fighting later manual tweaks.
-        private void ApplyLightTypeShape()
-        {
-            switch (Type)
-            {
-                case LightType.Line:
-                    Shape = LightShape.Line;
-                    break;
-                case LightType.Spot:
-                    Shape = LightShape.Point;
-                    // Spot emits from the cone apex at the bottom-center of the generated cone texture.
-                    LightOrigin = new Vector3(0f, -0.5f, LightOrigin.z);
-                    break;
-                default:
-                    Shape = LightShape.Point;
-                    LightOrigin = new Vector3(0f, 0f, LightOrigin.z);
-                    break;
-            }
-        }
-
-        public enum LightShape
-        {
-            Point,
-            Line,
         }
 
         public enum LightType
@@ -312,6 +301,13 @@ namespace Light2D
             Point,
             Spot,
             Line,
+        }
+
+        public enum LightSides
+        {
+            Both,
+            Front,
+            Back,
         }
 
         public enum ShadowQuality
@@ -330,22 +326,25 @@ namespace Light2D
             if (sprite == null)
                 return;
 
-            var size = sprite.bounds.size * MeshScale;
-            if (Shape == LightShape.Point)
+            if (Type == LightType.Line)
             {
-                var center = transform.TransformPoint(
-                    new Vector3(LightOrigin.x * size.x, LightOrigin.y * size.y, LightOrigin.z));
-                Gizmos.DrawLine(center + transform.TransformDirection(new Vector2(-0.1f, 0)),
-                    center + transform.TransformDirection(new Vector2(0.1f, 0)));
-                Gizmos.DrawLine(center + transform.TransformDirection(new Vector2(0, -0.1f)),
-                    center + transform.TransformDirection(new Vector2(0, 0.1f)));
-            }
-            else
-            {
-                var left = transform.TransformPoint(Vector3.Scale(new Vector3(-0.5f, LightOrigin.y), size));
-                var right = transform.TransformPoint(Vector3.Scale(new Vector3(0.5f, LightOrigin.y), size));
+                // The emitting bar along local X, spanning Length at the transform origin.
+                var half = Length * 0.5f;
+                var left = transform.TransformPoint(new Vector3(-half, 0f, 0f));
+                var right = transform.TransformPoint(new Vector3(half, 0f, 0f));
                 Gizmos.DrawLine(left, right);
+                return;
             }
+
+            // Point and Spot: a small cross at the emission origin. For Point that is the light centre; for
+            // Spot it is the cone apex - both are the transform position nudged by the LightOrigin XY.
+            var size = sprite.bounds.size * MeshScale;
+            var origin = transform.TransformPoint(
+                new Vector3(LightOrigin.x * size.x, LightOrigin.y * size.y, 0f));
+            Gizmos.DrawLine(origin + transform.TransformDirection(new Vector2(-0.1f, 0)),
+                origin + transform.TransformDirection(new Vector2(0.1f, 0)));
+            Gizmos.DrawLine(origin + transform.TransformDirection(new Vector2(0, -0.1f)),
+                origin + transform.TransformDirection(new Vector2(0, 0.1f)));
         }
 
         // Exact component comparison; Matrix4x4.operator== is epsilon-based and would miss tiny transform changes.

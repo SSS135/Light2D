@@ -1,6 +1,6 @@
 # Light2D
 
-Light2D is a GPU-based dynamic 2D lighting package for Unity with a distinctive look: colored per-channel light transmission through obstacles, soft ambient bounce, and collider-free occlusion authored straight from your sprites, meshes, and tiles. It renders light obstacles, direct lights, and optional ambient propagation into low-resolution textures, then composites the result over a camera. Lights and obstacles move at runtime and require no physics colliders. Light2D targets **Unity 6000.4** (minimum, developed with **Unity 6000.5.4f1**) and supports the Built-in Render Pipeline and URP 17.4.
+Light2D is a GPU-based dynamic 2D lighting package for Unity with a distinctive look: colored per-channel light transmission through obstacles, soft ambient bounce, and collider-free occlusion authored straight from your sprites, meshes, and tiles. It renders light obstacles, direct lights, and optional ambient propagation into low-resolution textures, then composites the result over a camera. Lights and obstacles move at runtime and require no physics colliders. Light2D targets **Unity 6000.3** (minimum, developed with **Unity 6000.5.4f1**) and supports the Built-in Render Pipeline and URP 17.3.
 
 ## Repository layout
 
@@ -34,7 +34,7 @@ https://github.com/SSS135/Light2D.git?path=/Packages/com.sss13594.light2d#v2.0.0
 "com.sss13594.light2d": "file:X:/src/unity/Light2D/Packages/com.sss13594.light2d"
 ```
 
-Unity installs the dependencies declared in the package `package.json`, including URP 17.4 even when the consuming project uses the Built-in Render Pipeline.
+Unity installs the dependencies declared in the package `package.json`, including URP 17.3 even when the consuming project uses the Built-in Render Pipeline.
 
 ## Documentation
 

@@ -17,19 +17,23 @@ Properties {
 }
 
 SubShader {
-	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
+	// RenderPipeline tag "BuiltInPipeline" (any non-UniversalPipeline value) makes URP skip this SubShader so
+	// URP selects the UniversalPipeline SubShader below. Built-in composites this shader through Graphics.Blit,
+	// which always uses SubShader[0] and ignores the RenderPipeline tag, so the Built-in path is unaffected.
+	// This keeps the Built-in SubShader FIRST (required by the Graphics.Blit ordering invariant) while still
+	// letting URP reach its own SubShader (Unity picks the first pipeline-compatible SubShader, and a
+	// no-tag SubShader would otherwise be treated as universally compatible and win under URP).
+	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent" "RenderPipeline"="BuiltInPipeline"}
 	LOD 100
-	
+
 	ZWrite Off
 	//Blend SrcAlpha OneMinusSrcAlpha
 
-	Pass {  
+	Pass {
 		CGPROGRAM
 			#pragma vertex vert
 			#pragma fragment frag
-			#pragma multi_compile DUMMY HDR
-			#pragma multi_compile BLOOM_ON BLOOM_OFF
-			
+
 			#include "UnityCG.cginc"
 
 			struct appdata_t {
@@ -95,8 +99,6 @@ SubShader {
 		HLSLPROGRAM
 		#pragma vertex Light2DOverlayVert
 		#pragma fragment Light2DOverlayFrag
-		#pragma multi_compile DUMMY HDR
-		#pragma multi_compile BLOOM_ON BLOOM_OFF
 		#include "Light2DURPFullscreen.hlsl"
 		ENDHLSL
 	}

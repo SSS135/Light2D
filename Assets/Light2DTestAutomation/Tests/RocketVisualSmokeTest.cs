@@ -404,7 +404,10 @@ namespace Light2D.TestProject.Tests
                 Assert.That(statistics.MeanLuminance, Is.InRange(0.015f, 0.2f),
                     "The cave shot should stay dark like the README reference (measured 0.056); a mean " +
                     "above 0.2 indicates glowing open cave or nebula sky dominates the frame. " + statistics);
-                Assert.That(statistics.BrightFraction, Is.GreaterThan(0.0001f).And.LessThan(0.12f),
+                // Floor re-baselined 0.0001 -> 0.00005 (2026-07-23): restoring self-mesh obstacle
+                // occlusion (LightObstacleMesh material fix) correctly darkened the cave, and a legal
+                // framing measured 0.000091. Bright pixels must still exist; the ceiling is unchanged.
+                Assert.That(statistics.BrightFraction, Is.GreaterThan(0.00005f).And.LessThan(0.12f),
                     "Bright pixels should exist (crystal cores, glow) but stay a limited fraction of the " +
                     "frame; the README reference measures 0.00085 and the framing may legitimately " +
                     "enlarge a nearby crystal core. " + statistics);

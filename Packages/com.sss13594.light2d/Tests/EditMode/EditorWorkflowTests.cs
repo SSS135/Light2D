@@ -79,18 +79,17 @@ namespace Light2D.Tests
                 Assert.That(meshComponent.MultiplicativeColor, Is.EqualTo(new Color32(255, 255, 255, 255)));
 
                 // A functional mesh obstacle mirrors the parent source at creation, not merely exists.
+                // v3 draws obstacles only through the registry, so there is no MeshRenderer at all; the
+                // mirror mesh lives on the kept MeshFilter and the material comes through the draw entry.
                 var obstacleFilter = meshObstacle.GetComponent<MeshFilter>();
-                var obstacleRenderer = meshObstacle.GetComponent<MeshRenderer>();
                 Assert.That(obstacleFilter, Is.Not.Null);
-                Assert.That(obstacleRenderer, Is.Not.Null);
+                Assert.That(meshObstacle.GetComponent<MeshRenderer>(), Is.Null);
                 Assert.That(obstacleFilter.sharedMesh, Is.Not.Null);
                 Assert.That(obstacleFilter.sharedMesh, Is.Not.SameAs(sourceMesh));
                 Assert.That(obstacleFilter.sharedMesh.vertexCount, Is.EqualTo(sourceMesh.vertexCount));
-                // v3 draws obstacles only through the registry, so the mirror's MeshRenderer stays
-                // disabled (the R5 double-draw guard) even though its mesh and material are fully built.
-                Assert.That(obstacleRenderer.enabled, Is.False);
-                Assert.That(obstacleRenderer.sharedMaterial, Is.Not.Null);
-                Assert.That(obstacleRenderer.sharedMaterial.mainTexture, Is.SameAs(sourceTexture));
+                Assert.That(((ILight2DDrawable)meshComponent).TryGetDrawEntry(out var meshEntry), Is.True);
+                Assert.That(meshEntry.Material, Is.Not.Null);
+                Assert.That(meshEntry.Material.mainTexture, Is.SameAs(sourceTexture));
             }
             finally
             {
@@ -150,9 +149,11 @@ namespace Light2D.Tests
                 Assert.That(light.Type, Is.EqualTo(LightSprite.LightType.Point));
                 Assert.That(light.Radius, Is.GreaterThan(0f));
                 Assert.That(light.Intensity, Is.EqualTo(1f));
+                // NormalMapHeight replaces the old LightOrigin.z; a fresh light sits one unit above the plane.
+                Assert.That(light.NormalMapHeight, Is.EqualTo(1f));
 
                 // The generated falloff must drive drawable geometry — the "tiny invisible light" guard.
-                var mesh = created.GetComponent<MeshFilter>().sharedMesh;
+                var mesh = light.Mesh;
                 Assert.That(mesh, Is.Not.Null);
                 Assert.That(mesh.vertexCount, Is.GreaterThan(0));
             }

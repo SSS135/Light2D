@@ -104,7 +104,7 @@ namespace Light2D
             var matrix = transform.localToWorldMatrix;
             var worldBounds = Shape == VolumeShape.Global
                 ? new Bounds(Vector3.zero, new Vector3(GlobalExtent * 2f, GlobalExtent * 2f, GlobalExtent * 2f))
-                : TransformBounds(_localBounds, matrix);
+                : Light2DGeometry.TransformBounds(_localBounds, matrix);
 
             entry = new Light2DDrawEntry(_shapeMesh, _coverageMaterial, matrix, worldBounds, 1, Priority, Owner);
             return true;
@@ -322,7 +322,7 @@ namespace Light2D
                 if (_materialKey == null || _oldSpriteTexture != Sprite.texture)
                 {
                     ReleaseMaterial();
-                    _coverageMaterial = CustomSprite.AcquireMaterial(shared, Sprite.texture, false, out _materialKey);
+                    _coverageMaterial = CustomSprite.AcquireMaterial(shared, Sprite.texture, out _materialKey);
                     _oldSpriteTexture = Sprite.texture;
                 }
                 return;
@@ -370,20 +370,6 @@ namespace Light2D
 
         // Rotation-aware AABB transform: transform the center and sum the absolute projected extents of
         // each local axis. Mirrors the Tilemap occluder's world-bounds idiom.
-        private static Bounds TransformBounds(Bounds local, Matrix4x4 matrix)
-        {
-            var center = matrix.MultiplyPoint3x4(local.center);
-            var ext = local.extents;
-            var axisX = matrix.MultiplyVector(new Vector3(ext.x, 0f, 0f));
-            var axisY = matrix.MultiplyVector(new Vector3(0f, ext.y, 0f));
-            var axisZ = matrix.MultiplyVector(new Vector3(0f, 0f, ext.z));
-            var worldExtents = new Vector3(
-                Mathf.Abs(axisX.x) + Mathf.Abs(axisY.x) + Mathf.Abs(axisZ.x),
-                Mathf.Abs(axisX.y) + Mathf.Abs(axisY.y) + Mathf.Abs(axisZ.y),
-                Mathf.Abs(axisX.z) + Mathf.Abs(axisY.z) + Mathf.Abs(axisZ.z));
-            return new Bounds(center, worldExtents * 2f);
-        }
-
 #if UNITY_EDITOR
         private void OnDrawGizmosSelected()
         {

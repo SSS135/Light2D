@@ -6,7 +6,7 @@ using UnityEngine;
 namespace Light2D
 {
     /// <summary>
-    /// Mirrors sprite geometry into the obstacle layer and stores additive color in UV1.
+    /// Mirrors sprite geometry into the obstacle render target and stores additive color in UV1.
     /// </summary>
     [AddComponentMenu("Light2D/Light Obstacle Sprite")]
     [HelpURL(Light2DDocs.HelpUrl)]
@@ -50,10 +50,6 @@ namespace Light2D
 
             base.OnEnable();
             UpdateMeshData(true);
-            // Register-and-draw model (§0.3): keep the owned renderer disabled so no scene camera draws
-            // the obstacle mesh; it is drawn only through the obstacle registry snapshot.
-            if (_meshRenderer != null)
-                _meshRenderer.enabled = false;
             Light2DRenderRegistry.RegisterObstacle(this);
         }
 
@@ -77,28 +73,40 @@ namespace Light2D
             var settings = Light2DObstacleSettings.GetOrCreate();
             Color = settings.TexturedMultiplicativeColor;
             AdditiveColor = settings.AdditiveColor;
+            SeedDefaultObstacleMaterial();
+        }
+
+        // The Material slot is hidden in the normal inspector (see LightObstacleEditors) because it only
+        // supplies the obstacle-writing shader. Seed it from the packaged default when unset; existing
+        // assignments are left untouched, and a custom-shader material can still be set via the Debug
+        // inspector. OnEnable keeps the build-safe runtime fallback for programmatic adds (no Reset).
+        private void SeedDefaultObstacleMaterial()
+        {
+            if (Material != null)
+                return;
+            var defaults = Light2DDefaultResources.Load();
+            if (defaults != null)
+                Material = defaults.ObstacleMaterial;
         }
 #endif
 
         bool ILight2DDrawable.TryGetDrawEntry(out Light2DDrawEntry entry)
         {
             entry = default;
-            if (!isActiveAndEnabled || _meshFilter == null || _meshRenderer == null)
+            if (!isActiveAndEnabled)
                 return false;
             if (Light2DObjectUtility.IsInPrefabStage(gameObject))
                 return false;
 
-            var mesh = _meshFilter.sharedMesh;
-            var material = _meshRenderer.sharedMaterial;
+            var mesh = Mesh;
+            var material = DrawMaterial;
             if (mesh == null || material == null)
                 return false;
 
-            entry = new Light2DDrawEntry(mesh, material, transform.localToWorldMatrix, _meshRenderer.bounds,
+            entry = new Light2DDrawEntry(mesh, material, transform.localToWorldMatrix, WorldBounds,
                 Mathf.Max(1, mesh.subMeshCount), SortingOrder, Owner);
             return true;
         }
-
-        protected override bool UseNormalTexcoordMaterial { get { return true; } }
 
         private void UpdateSecondaryColor()
         {
@@ -109,7 +117,7 @@ namespace Light2D
 
         protected override void UpdateMeshData(bool forceUpdate = false)
         {
-            if (_meshRenderer == null || _meshFilter == null || IsPartOfStaticBatch)
+            if (_mesh == null)
                 return;
 
             var sourceSprite = ResolveSourceSprite(GameSpriteRenderer);

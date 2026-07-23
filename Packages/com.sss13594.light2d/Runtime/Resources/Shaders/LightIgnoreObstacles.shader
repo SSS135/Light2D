@@ -22,8 +22,6 @@ SubShader {
 		HLSLPROGRAM
 		#pragma vertex Light2DRendererVert
 		#pragma fragment Light2DIgnoreObstaclesFrag
-		#pragma multi_compile ORTHOGRAPHIC_CAMERA PERSPECTIVE_CAMERA
-		#pragma multi_compile LIGHT2D_XY_PLANE LIGHT2D_XZ_PLANE
 		#include "Light2DURPRenderer.hlsl"
 		ENDHLSL
 	}
@@ -41,9 +39,7 @@ SubShader {
 		CGPROGRAM
 			#pragma vertex vert
 			#pragma fragment frag
-			#pragma multi_compile ORTHOGRAPHIC_CAMERA PERSPECTIVE_CAMERA
-			#pragma multi_compile LIGHT2D_XY_PLANE LIGHT2D_XZ_PLANE
-			
+
 			#include "UnityCG.cginc"
 
 			struct appdata_t {
@@ -56,10 +52,8 @@ SubShader {
 				float4 vertex : SV_POSITION;
 				half2 texcoord : TEXCOORD0;
 				fixed4 color : COLOR;
-				float4 scrPos  : TEXCOORD2;
 			};
 			
-		    sampler2D _ObstacleTex;
 			sampler2D _MainTex;
 			half _EmissionColorMul;
 
@@ -68,7 +62,6 @@ SubShader {
 				v2f o;
 				o.vertex = UnityObjectToClipPos(v.vertex);
 				o.texcoord = v.texcoord;
-				o.scrPos = ComputeScreenPos(o.vertex);
 				o.color = v.color;
 				return o;
 			}

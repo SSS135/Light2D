@@ -3,15 +3,15 @@ using UnityEngine;
 namespace Light2D
 {
     /// <summary>
-    /// Emits ambient light. It registers with the render core and owns a MeshFilter/MeshRenderer that
-    /// carries the emission geometry drawn into the ambient emission texture. It covers both ambient
-    /// producers: a sprite-mirroring mode that bakes <see cref="EmissionColor"/> into an owned mesh, and
-    /// a self-mesh mode (both sprite sources empty) that draws the object's externally authored mesh
-    /// untouched, preserving per-vertex emission colors such as MapGenerator's ambient chunk meshes.
+    /// Emits ambient light. It registers with the render core and draws through the registry (it owns no
+    /// renderer). It covers both ambient producers: a sprite-mirroring mode that bakes
+    /// <see cref="EmissionColor"/> into an owned internal mesh, and a self-mesh mode (both sprite sources
+    /// empty) that draws an optional sibling MeshFilter's externally authored mesh untouched, preserving
+    /// per-vertex emission colors such as MapGenerator's ambient chunk meshes. The MeshFilter is only the
+    /// optional self-mesh input; generated modes keep their mesh in an internal field and own no MeshFilter.
     /// </summary>
     [ExecuteAlways]
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [AddComponentMenu("Light2D/Light Ambient Emitter")]
     [HelpURL(Light2DDocs.HelpUrl)]
     public class LightAmbientEmitter : MonoBehaviour, ILight2DAmbientEmitter
@@ -76,7 +76,7 @@ namespace Light2D
         private static Material _runtimeDefaultMaterial;
 
         private MeshFilter _meshFilter;
-        private MeshRenderer _meshRenderer;
+        private Material _drawMaterial;
         private Mesh _mesh;
         private CustomSprite.MaterialKey _materialKey;
 
@@ -98,8 +98,9 @@ namespace Light2D
 
         private void OnEnable()
         {
+            // The MeshFilter is an optional self-mesh input, not a required container; GetComponent
+            // returns null when absent, and ResolveDrawMesh re-resolves it live if one is added later.
             _meshFilter = GetComponent<MeshFilter>();
-            _meshRenderer = GetComponent<MeshRenderer>();
 #if UNITY_EDITOR
             if (Material == null)
             {
@@ -107,7 +108,6 @@ namespace Light2D
                 Material = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(path);
             }
 #endif
-            ReleaseOrphanedResources();
             Light2DRenderRegistry.RegisterAmbient(this);
             Refresh();
         }
@@ -131,38 +131,46 @@ namespace Light2D
 
         private void OnValidate()
         {
-            if (isActiveAndEnabled && _meshFilter != null && _meshRenderer != null)
+            if (isActiveAndEnabled)
                 Refresh();
         }
 
         bool ILight2DDrawable.TryGetDrawEntry(out Light2DDrawEntry entry)
         {
             entry = default;
-            if (!isActiveAndEnabled || _meshFilter == null || _meshRenderer == null)
+            if (!isActiveAndEnabled)
                 return false;
             if (Light2DObjectUtility.IsInPrefabStage(gameObject))
                 return false;
 
-            var mesh = _meshFilter.sharedMesh;
-            var material = _meshRenderer.sharedMaterial;
+            var mesh = ResolveDrawMesh();
+            var material = _drawMaterial;
             if (mesh == null || material == null)
                 return false;
 
-            entry = new Light2DDrawEntry(mesh, material, transform.localToWorldMatrix, _meshRenderer.bounds,
+            entry = new Light2DDrawEntry(mesh, material, transform.localToWorldMatrix,
+                Light2DGeometry.TransformBounds(mesh.bounds, transform.localToWorldMatrix),
                 Mathf.Max(1, mesh.subMeshCount), SortingOrder, Owner);
             return true;
         }
 
+        // The mesh the register-and-draw core draws: the owned generated mesh in sprite/fill mode, or an
+        // optional sibling MeshFilter's externally authored mesh in self-mesh mode (read live so a mesh
+        // assigned after OnEnable — MapGenerator's ambient chunks — is picked up). A missing MeshFilter in
+        // self-mesh mode simply yields no mesh, so the emitter produces no draw entry (same as a null mesh).
+        internal Mesh DrawMesh { get { return ResolveDrawMesh(); } }
+
+        private Mesh ResolveDrawMesh()
+        {
+            if (_mesh != null)
+                return _mesh;
+            if (_meshFilter == null)
+                _meshFilter = GetComponent<MeshFilter>();
+            return _meshFilter != null ? _meshFilter.sharedMesh : null;
+        }
+
         private void Refresh()
         {
-            if (_meshFilter == null || _meshRenderer == null)
-                return;
-
-            // Register-and-draw model (§0.3): the owned renderer stays disabled so no scene camera draws
-            // the emission mesh; it is drawn only through the ambient registry snapshot.
-            _meshRenderer.enabled = false;
-            _meshRenderer.sortingOrder = SortingOrder;
-
             // Shaped-fill mode replaces the sprite-mirror / self-mesh path with an owned procedural primitive.
             if (Fill != FillShape.None)
             {
@@ -194,15 +202,15 @@ namespace Light2D
             if (baseMaterial == null || texture == null)
             {
                 ReleaseMaterial();
-                _meshRenderer.sharedMaterial = null;
+                _drawMaterial = null;
                 return;
             }
 
             if (_oldBaseMaterial != baseMaterial || _oldTexture != texture ||
-                !CustomSprite.IsGeneratedMaterial(_meshRenderer.sharedMaterial))
+                !CustomSprite.IsGeneratedMaterial(_drawMaterial))
             {
                 ReleaseMaterial();
-                _meshRenderer.sharedMaterial = CustomSprite.AcquireMaterial(baseMaterial, texture, false, out _materialKey);
+                _drawMaterial = CustomSprite.AcquireMaterial(baseMaterial, texture, out _materialKey);
                 _oldBaseMaterial = baseMaterial;
                 _oldTexture = texture;
             }
@@ -222,8 +230,8 @@ namespace Light2D
             _oldBaseMaterial = null;
             _oldTexture = null;
 
-            if (_meshRenderer.sharedMaterial == null || CustomSprite.IsGeneratedMaterial(_meshRenderer.sharedMaterial))
-                _meshRenderer.sharedMaterial = Material != null ? Material : GetRuntimeDefaultMaterial();
+            if (_drawMaterial == null || CustomSprite.IsGeneratedMaterial(_drawMaterial))
+                _drawMaterial = Material != null ? Material : GetRuntimeDefaultMaterial();
         }
 
         private void BuildSpriteMesh(Sprite sprite, Color color)
@@ -277,15 +285,15 @@ namespace Light2D
             if (baseMaterial == null || texture == null)
             {
                 ReleaseMaterial();
-                _meshRenderer.sharedMaterial = null;
+                _drawMaterial = null;
                 return;
             }
 
             if (_oldBaseMaterial != baseMaterial || _oldTexture != texture ||
-                !CustomSprite.IsGeneratedMaterial(_meshRenderer.sharedMaterial))
+                !CustomSprite.IsGeneratedMaterial(_drawMaterial))
             {
                 ReleaseMaterial();
-                _meshRenderer.sharedMaterial = CustomSprite.AcquireMaterial(baseMaterial, texture, false, out _materialKey);
+                _drawMaterial = CustomSprite.AcquireMaterial(baseMaterial, texture, out _materialKey);
                 _oldBaseMaterial = baseMaterial;
                 _oldTexture = texture;
                 // Invalidate the sprite-mode cache so a later switch back to sprite mode rebuilds the mesh.
@@ -455,30 +463,13 @@ namespace Light2D
         private void EnsureOwnedMesh()
         {
             if (_mesh != null)
-            {
-                if (_meshFilter.sharedMesh != _mesh)
-                    _meshFilter.sharedMesh = _mesh;
                 return;
-            }
 
+            // Generated (sprite/fill) mode keeps its mesh in this internal field and draws it straight
+            // through the registry; it never assigns to a MeshFilter (that is the self-mesh input only).
             _mesh = new Mesh { name = GeneratedMeshName, hideFlags = HideFlags.DontSave };
             _mesh.MarkDynamic();
-            _meshFilter.sharedMesh = _mesh;
             _meshDirty = true;
-        }
-
-        private void ReleaseOrphanedResources()
-        {
-            if (_meshFilter.sharedMesh != null && _meshFilter.sharedMesh.name == GeneratedMeshName)
-            {
-                Light2DObjectUtility.Destroy(_meshFilter.sharedMesh);
-                _meshFilter.sharedMesh = null;
-            }
-            if (CustomSprite.IsGeneratedMaterial(_meshRenderer.sharedMaterial))
-            {
-                Light2DObjectUtility.Destroy(_meshRenderer.sharedMaterial);
-                _meshRenderer.sharedMaterial = null;
-            }
         }
 
         private void ReleaseOwnedResources()
@@ -489,8 +480,8 @@ namespace Light2D
 
         private void ReleaseOwnedMesh()
         {
-            if (_meshFilter != null && _meshFilter.sharedMesh == _mesh)
-                _meshFilter.sharedMesh = null;
+            // The generated mesh lives only in this field (never assigned to a MeshFilter), so releasing it
+            // must not touch the MeshFilter — doing so would clobber an external self-mesh input.
             if (_mesh != null)
                 Light2DObjectUtility.Destroy(_mesh);
             _mesh = null;
@@ -501,8 +492,8 @@ namespace Light2D
             if (_materialKey != null)
                 CustomSprite.ReleaseMaterial(_materialKey);
             _materialKey = null;
-            if (_meshRenderer != null && CustomSprite.IsGeneratedMaterial(_meshRenderer.sharedMaterial))
-                _meshRenderer.sharedMaterial = null;
+            if (CustomSprite.IsGeneratedMaterial(_drawMaterial))
+                _drawMaterial = null;
         }
 
         // Last-resort runtime material so builds never draw a null material. Scenes/prefabs should

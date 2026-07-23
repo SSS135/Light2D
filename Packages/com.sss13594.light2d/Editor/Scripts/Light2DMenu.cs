@@ -124,9 +124,12 @@ namespace Light2D
         {
             var obj = new GameObject("Ambient Emitter");
             Undo.RegisterCreatedObjectUndo(obj, "Create Ambient Emitter");
-            // AddComponent pulls in the required MeshFilter/MeshRenderer; the emitter's editor OnEnable
-            // assigns its default material. Seeding the sprite gives an immediately visible emitter,
-            // mirroring CreateLightSource; leave both sprite sources empty for self-mesh mode instead.
+            // The emitter no longer requires a MeshFilter: like lights and obstacles it owns no renderer
+            // and draws through the registry, and sprite mode (seeded below) keeps its generated mesh in an
+            // internal field, so AddComponent adds no MeshFilter. A MeshFilter is only an optional self-mesh
+            // input — clear both sprite sources and add a MeshFilter + mesh for self-mesh mode. Its editor
+            // OnEnable assigns the default material; seeding the sprite gives an immediately visible emitter,
+            // mirroring CreateLightSource.
             var emitter = Undo.AddComponent<LightAmbientEmitter>(obj);
             emitter.Sprite = AssetDatabase.LoadAssetAtPath<Sprite>(
                 "Packages/com.sss13594.light2d/Runtime/Resources/DefaultLight.psd");

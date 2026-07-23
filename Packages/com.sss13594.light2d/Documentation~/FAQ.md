@@ -6,11 +6,11 @@ Yes. Add a `LightSprite` to the character's GameObject (or a child of it) with
 **GameObject > Light2D > Light Source**. `LightSprite` builds a sprite-shaped
 point or line light whose `Sprite`, transform, and `Color` define its footprint;
 because the light follows the transform, it moves with the character every frame
-with no extra bookkeeping. Pick a ray-marching material
-(`Light2D/Light 20 Points` … `Light2D/Light 90 Points`, or
-`Light2D/Light Auto Points`) to trade GPU cost for sharper obstacle shadowing, or
+with no extra bookkeeping. Pick the shadow quality with the `LightSprite.Shadows`
+popup to trade GPU cost for sharper obstacle shadowing (the `Light2D/Light Points`
+shader ray-marches at the chosen `_PathTrackingSamples` count), or use
 `Light2D/Light 1 Point` / `Light2D/Light Ignoring Obstacles` for cheap glows.
-`LightOrigin.z` is the light height used by normal mapping. Lights and obstacles
+`NormalMapHeight` is the light height used by normal mapping. Lights and obstacles
 need no colliders.
 
 ## How do I exclude an object from lighting? I remember setting up layers.
@@ -27,8 +27,8 @@ and no source-camera culling mask to edit. An object participates in lighting
 
 To *exclude* an object, simply don't add (or remove/disable) the component. Each
 component registers itself when enabled and is drawn directly into Light2D's
-internal textures through a command buffer; its own `MeshRenderer` is kept
-disabled, so lighting-input geometry never appears in the game image. That is why
+internal textures through a command buffer; it owns no scene renderer at all, so
+lighting-input geometry never appears in the game image. That is why
 the old "exclude these layers from the camera" step is gone — there is nothing to
 exclude.
 
@@ -109,9 +109,9 @@ Yes. Instantiate a prefab that carries a `LightSprite`, an obstacle component, o
 no camera reconfiguration, no manual registration call. This is a direct
 consequence of the 2.0 register-and-draw model and specifically fixes the old
 failure where a spawned object produced no light because its layer was never set
-(issue #2). For obstacles, make sure the source is wired (a `SpriteRenderer`/
-`CustomSprite` for `LightObstacleSprite`, a parent mesh for `LightObstacleMesh`, or
-use `LightObstacleGenerator` to pick the right one at `Start`). The component must
+(issue #2). For obstacles, make sure the source is wired (a `SpriteRenderer` for
+`LightObstacleSprite`, a parent mesh for `LightObstacleMesh`, or use
+`LightObstacleGenerator` to pick the right one at `Start`). The component must
 be enabled to render.
 
 ## What is the status of this project? Should I use it?

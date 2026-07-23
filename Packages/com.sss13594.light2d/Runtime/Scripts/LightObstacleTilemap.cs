@@ -95,6 +95,18 @@ namespace Light2D
             var settings = Light2DObstacleSettings.GetOrCreate();
             MultiplicativeColor = settings.TexturedMultiplicativeColor;
             AdditiveColor = settings.AdditiveColor;
+
+            // The Material slot is hidden in the normal inspector (see LightObstacleEditors) because it only
+            // supplies the obstacle-writing shader for the generated tile-group meshes. Seed it from the
+            // packaged default when unset; existing assignments are left untouched, and a custom-shader
+            // material can still be set via the Debug inspector. ResolveBaseMaterial keeps the runtime
+            // fallback for player builds and programmatic adds.
+            if (Material == null)
+            {
+                var defaults = Light2DDefaultResources.Load();
+                if (defaults != null)
+                    Material = defaults.ObstacleMaterial;
+            }
         }
 #endif
 
@@ -133,8 +145,8 @@ namespace Light2D
                 if (mesh == null || material == null)
                     continue;
                 // Cell corners were built in tilemap-local space, so localToWorldMatrix places them once.
-                buffer.Add(new Light2DDrawEntry(mesh, material, matrix, TransformBounds(mesh.bounds, matrix),
-                    1, SortingOrder, Owner));
+                buffer.Add(new Light2DDrawEntry(mesh, material, matrix,
+                    Light2DGeometry.TransformBounds(mesh.bounds, matrix), 1, SortingOrder, Owner));
             }
         }
 
@@ -206,7 +218,7 @@ namespace Light2D
             var baseMaterial = ResolveBaseMaterial();
             foreach (var pair in groups)
             {
-                var material = CustomSprite.AcquireMaterial(baseMaterial, pair.Key, false, out var key);
+                var material = CustomSprite.AcquireMaterial(baseMaterial, pair.Key, out var key);
                 if (material == null)
                     continue;
 
@@ -255,21 +267,6 @@ namespace Light2D
             // every tile group was skipped, and the tilemap produced NO obstacle geometry in builds.
             return CustomSprite.GetRuntimeDefaultObstacleMaterial();
 #endif
-        }
-
-        // Conservative world-space AABB for one group's local bounds; per-group bounds give per-group cull.
-        private static Bounds TransformBounds(Bounds local, Matrix4x4 matrix)
-        {
-            var center = matrix.MultiplyPoint3x4(local.center);
-            var extents = local.extents;
-            var axisX = matrix.MultiplyVector(new Vector3(extents.x, 0f, 0f));
-            var axisY = matrix.MultiplyVector(new Vector3(0f, extents.y, 0f));
-            var axisZ = matrix.MultiplyVector(new Vector3(0f, 0f, extents.z));
-            var worldExtents = new Vector3(
-                Mathf.Abs(axisX.x) + Mathf.Abs(axisY.x) + Mathf.Abs(axisZ.x),
-                Mathf.Abs(axisX.y) + Mathf.Abs(axisY.y) + Mathf.Abs(axisZ.y),
-                Mathf.Abs(axisX.z) + Mathf.Abs(axisY.z) + Mathf.Abs(axisZ.z));
-            return new Bounds(center, worldExtents * 2f);
         }
 
 #if UNITY_EDITOR

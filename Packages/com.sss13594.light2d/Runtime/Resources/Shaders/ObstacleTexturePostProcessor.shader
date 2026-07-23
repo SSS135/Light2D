@@ -7,7 +7,9 @@ That shader is used after all light obstacles have been drawn to draw one pixel 
 
 Shader "Light2D/Obstacle Texture Post Porcessor" {
 SubShader {
-	Tags {"Queue"="Overlay" "IgnoreProjector"="True" "RenderType"="Transparent"}
+	// RenderPipeline="BuiltInPipeline" makes URP skip this Built-in SubShader and select the UniversalPipeline
+	// one below (this shader is composited fullscreen; keeping the Built-in SubShader first is harmless). See LightOverlay.
+	Tags {"Queue"="Overlay" "IgnoreProjector"="True" "RenderType"="Transparent" "RenderPipeline"="BuiltInPipeline"}
 	LOD 100
 	
 	ZWrite Off

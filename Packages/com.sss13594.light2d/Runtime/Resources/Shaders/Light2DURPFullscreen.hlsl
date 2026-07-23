@@ -71,17 +71,21 @@ half4 Light2DObstaclePostFrag(Light2DFullscreenVaryings input) : SV_Target
 
 half4 Light2DFastBlurFrag(Light2DFullscreenVaryings input) : SV_Target
 {
-    half2 distanceUV = _Distance * _Light2DURPMainTex_TexelSize.xy;
-    half2 diagonal = distanceUV * 0.707h;
+    // Mirror the Built-in FastBlur (FastBlur.shader) tap pattern verbatim. dist.x is the x-derived
+    // pixel step; dist.y is the y-derived step scaled by 0.707. The two vertical cardinal taps use
+    // dist.x (the x-derived distance, exactly as Built-in does), and the four diagonals use
+    // (dist.y, dist.y) so both offset components share the y-derived, 0.707-scaled step.
+    half2 dist = half2(_Distance * _Light2DURPMainTex_TexelSize.x,
+                       _Distance * _Light2DURPMainTex_TexelSize.y * 0.707h);
     half4 sum = SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv);
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(distanceUV.x, 0));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(-distanceUV.x, 0));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(0, distanceUV.y));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(0, -distanceUV.y));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + diagonal);
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + diagonal * half2(1, -1));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + diagonal * half2(-1, 1));
-    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv - diagonal);
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(dist.x, 0));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(-dist.x, 0));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(0, dist.x));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(0, -dist.x));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(dist.y, dist.y));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(dist.y, -dist.y));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(-dist.y, dist.y));
+    sum += SAMPLE_TEXTURE2D(_Light2DURPMainTex, sampler_Light2DURPMainTex, input.uv + half2(-dist.y, -dist.y));
     return sum / 9.0h;
 }
 

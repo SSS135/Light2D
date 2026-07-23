@@ -11,8 +11,7 @@ namespace Light2D
     /// </summary>
     [ExecuteAlways]
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
-    public class CustomSprite : MonoBehaviour
+    public abstract class CustomSprite : MonoBehaviour
     {
         [Tooltip("Tint multiplied into the sprite's vertex colors (default white draws the sprite " +
                  "unmodified).")]
@@ -36,9 +35,8 @@ namespace Light2D
         protected int[] _triangles = Array.Empty<int>();
         protected Vector4[] _tangents = Array.Empty<Vector4>();
         protected bool _isMeshDirty;
-        protected MeshRenderer _meshRenderer;
-        protected MeshFilter _meshFilter;
         protected Mesh _mesh;
+        private Material _generatedMaterial;
         private HdrVertex[] _hdrVertices = Array.Empty<HdrVertex>();
 
         private Color _oldColor;
@@ -66,14 +64,32 @@ namespace Light2D
         private const string GeneratedMaterialName = "Generated Material (DONT change it)";
         private const string GeneratedMeshName = "Generated Mesh (DONT change it)";
 
-        public bool RendererEnabled { get { return _meshRenderer != null && _meshRenderer.enabled; } }
-        public bool IsPartOfStaticBatch { get { return _meshRenderer != null && _meshRenderer.isPartOfStaticBatch; } }
-
-        protected virtual bool UseNormalTexcoordMaterial { get { return false; } }
+        // The owned mesh + generated material + world bounds the register-and-draw registry consumes. There is
+        // no MeshRenderer/MeshFilter: geometry is drawn only through the draw-entry snapshot (CommandBuffer.DrawMesh),
+        // so nothing renders into the game image and there is no renderer bounds to read for culling.
+        internal Mesh Mesh { get { return _mesh; } }
+        internal Material DrawMaterial { get { return _generatedMaterial; } }
+        internal Bounds WorldBounds
+        {
+            get
+            {
+                return _mesh != null
+                    ? Light2DGeometry.TransformBounds(_mesh.bounds, transform.localToWorldMatrix)
+                    : new Bounds(transform.position, Vector3.zero);
+            }
+        }
 
         // Uniform scale baked into the copied sprite vertices so a component can size its mesh
         // independently of the Transform (used by LightSprite.Radius). Base sprites draw at 1:1.
         protected virtual float MeshScale { get { return 1f; } }
+
+        // Maps a raw sprite vertex into the owned mesh's local space. Base sprites scale uniformly by
+        // MeshScale; a light overrides this to reshape its quad per Type (anchor a Spot cone's apex at the
+        // transform origin, or size a Line bar by Length/Throw) without touching this shared build path.
+        protected virtual Vector3 TransformVertex(Vector3 vertex, float scale, Sprite sprite)
+        {
+            return vertex * scale;
+        }
 
         // When true, the vertex color stream is uploaded as Float32 so overbright (> 1) HDR colors
         // survive to the light RT instead of clamping through the default Color32 path. Base sprites
@@ -86,9 +102,6 @@ namespace Light2D
 
         protected virtual void OnEnable()
         {
-            _meshRenderer = GetComponent<MeshRenderer>();
-            _meshFilter = GetComponent<MeshFilter>();
-            ReleaseOrphanedResources();
             CreateMesh();
             LiveSprites.Add(this);
             UpdateMeshData(true);
@@ -125,35 +138,16 @@ namespace Light2D
                 hideFlags = HideFlags.DontSave
             };
             _mesh.MarkDynamic();
-            _meshFilter.sharedMesh = _mesh;
-        }
-
-        private void ReleaseOrphanedResources()
-        {
-            if (_meshFilter.sharedMesh != null && _meshFilter.sharedMesh.name == GeneratedMeshName)
-            {
-                Light2DObjectUtility.Destroy(_meshFilter.sharedMesh);
-                _meshFilter.sharedMesh = null;
-            }
-
-            if (IsGeneratedMaterial(_meshRenderer.sharedMaterial))
-            {
-                Light2DObjectUtility.Destroy(_meshRenderer.sharedMaterial);
-                _meshRenderer.sharedMaterial = null;
-            }
         }
 
         private void ReleaseOwnedResources()
         {
-            if (_meshFilter != null && _meshFilter.sharedMesh == _mesh)
-                _meshFilter.sharedMesh = null;
             if (_mesh != null)
                 Light2DObjectUtility.Destroy(_mesh);
             _mesh = null;
 
             ReleaseMaterialReference();
-            if (_meshRenderer != null && IsGeneratedMaterial(_meshRenderer.sharedMaterial))
-                _meshRenderer.sharedMaterial = null;
+            _generatedMaterial = null;
         }
 
         private Material GetOrCreateMaterial()
@@ -164,7 +158,7 @@ namespace Light2D
                 return null;
 
             var baseMaterial = Material != null ? Material : GetOrCreateDefaultSpriteMaterial();
-            return AcquireMaterial(baseMaterial, sprite.texture, UseNormalTexcoordMaterial, out _oldMaterialKey);
+            return AcquireMaterial(baseMaterial, sprite.texture, out _oldMaterialKey);
         }
 
         private static Material GetOrCreateDefaultSpriteMaterial()
@@ -205,7 +199,7 @@ namespace Light2D
             return _runtimeDefaultObstacleMaterial;
         }
 
-        internal static Material AcquireMaterial(Material baseMaterial, Texture2D texture, bool normalTexcoord,
+        internal static Material AcquireMaterial(Material baseMaterial, Texture2D texture,
             out MaterialKey materialKey)
         {
             if (baseMaterial == null || texture == null)
@@ -214,7 +208,7 @@ namespace Light2D
                 return null;
             }
 
-            var key = materialKey = new MaterialKey(baseMaterial, texture, normalTexcoord);
+            var key = materialKey = new MaterialKey(baseMaterial, texture);
             MaterialValue value;
             if (!MaterialMap.TryGetValue(key, out value) || value.Material == null)
             {
@@ -224,14 +218,14 @@ namespace Light2D
                     name = GeneratedMaterialName,
                     hideFlags = HideFlags.DontSave
                 };
-                ApplyMaterialState(material, baseMaterial, texture, normalTexcoord);
+                ApplyMaterialState(material, baseMaterial, texture);
                 value = new MaterialValue(material, baseMaterial.ComputeCRC());
                 MaterialMap[key] = value;
             }
             else
             {
                 value.UsageCount++;
-                ApplyMaterialState(value.Material, baseMaterial, texture, normalTexcoord);
+                ApplyMaterialState(value.Material, baseMaterial, texture);
                 value.SourceCrc = baseMaterial.ComputeCRC();
             }
 
@@ -251,20 +245,16 @@ namespace Light2D
             if (sourceCrc == value.SourceCrc)
                 return;
 
-            ApplyMaterialState(value.Material, key.Material, key.Texture, key.NormalTexcoord);
+            ApplyMaterialState(value.Material, key.Material, key.Texture);
             value.SourceCrc = sourceCrc;
         }
 
-        private static void ApplyMaterialState(Material target, Material source, Texture2D texture, bool normalTexcoord)
+        private static void ApplyMaterialState(Material target, Material source, Texture2D texture)
         {
             target.CopyPropertiesFromMaterial(source);
             target.shaderKeywords = source.shaderKeywords;
             target.renderQueue = source.renderQueue;
             target.mainTexture = texture;
-            if (normalTexcoord)
-                target.EnableKeyword("NORMAL_TEXCOORD");
-            else
-                target.DisableKeyword("NORMAL_TEXCOORD");
         }
 
         internal static void ReleaseMaterial(MaterialKey key)
@@ -316,8 +306,7 @@ namespace Light2D
                     continue;
                 sprite._oldMaterialKey = null;
                 sprite._oldMaterial = null;
-                if (sprite._meshRenderer != null)
-                    sprite._meshRenderer.sharedMaterial = null;
+                sprite._generatedMaterial = null;
                 sprite.UpdateMeshData(true);
             }
         }
@@ -345,7 +334,7 @@ namespace Light2D
                 _triangles = Array.Empty<int>();
                 _uv0 = Array.Empty<Vector2>();
                 ResizeVertexData(0);
-                _meshRenderer.sharedMaterial = null;
+                _generatedMaterial = null;
                 return;
             }
 
@@ -354,7 +343,7 @@ namespace Light2D
             var scale = MeshScale;
             _vertices = new Vector3[spriteVertices.Length];
             for (var i = 0; i < spriteVertices.Length; i++)
-                _vertices[i] = spriteVertices[i] * scale;
+                _vertices[i] = TransformVertex(spriteVertices[i], scale, sprite);
 
             _triangles = new int[spriteTriangles.Length];
             for (var i = 0; i < spriteTriangles.Length; i++)
@@ -362,7 +351,7 @@ namespace Light2D
 
             _uv0 = sprite.uv;
             ResizeVertexData(_vertices.Length);
-            _meshRenderer.sharedMaterial = GetOrCreateMaterial();
+            _generatedMaterial = GetOrCreateMaterial();
         }
 
         private void ResizeVertexData(int vertexCount)
@@ -435,13 +424,12 @@ namespace Light2D
 
         protected virtual void UpdateMeshData(bool forceUpdate = false)
         {
-            if (_meshRenderer == null || _meshFilter == null || _mesh == null || IsPartOfStaticBatch)
+            if (_mesh == null)
                 return;
 
-            _meshRenderer.sortingOrder = SortingOrder;
             var activeSprite = ActiveSprite;
             var spriteChanged = activeSprite != _oldSprite;
-            if (spriteChanged || Material != _oldMaterial || _meshRenderer.sharedMaterial == null || forceUpdate)
+            if (spriteChanged || Material != _oldMaterial || _generatedMaterial == null || forceUpdate)
             {
                 UpdateSprite();
                 _oldSprite = activeSprite;
@@ -493,15 +481,13 @@ namespace Light2D
         {
             public readonly Texture2D Texture;
             public readonly Material Material;
-            public readonly bool NormalTexcoord;
             private readonly EntityId _textureId;
             private readonly EntityId _materialId;
 
-            public MaterialKey(Material material, Texture2D texture, bool normalTexcoord)
+            public MaterialKey(Material material, Texture2D texture)
             {
                 Material = material;
                 Texture = texture;
-                NormalTexcoord = normalTexcoord;
                 _materialId = material.GetEntityId();
                 _textureId = texture.GetEntityId();
             }
@@ -509,7 +495,7 @@ namespace Light2D
             public bool Equals(MaterialKey other)
             {
                 return !ReferenceEquals(other, null) && _textureId == other._textureId &&
-                    _materialId == other._materialId && NormalTexcoord == other.NormalTexcoord;
+                    _materialId == other._materialId;
             }
 
             public override bool Equals(object obj)
@@ -522,8 +508,7 @@ namespace Light2D
                 unchecked
                 {
                     var hashCode = _textureId.GetHashCode();
-                    hashCode = (hashCode * 397) ^ _materialId.GetHashCode();
-                    return (hashCode * 397) ^ NormalTexcoord.GetHashCode();
+                    return (hashCode * 397) ^ _materialId.GetHashCode();
                 }
             }
         }

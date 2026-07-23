@@ -10,6 +10,10 @@ Shader "Light2D/Transparent Normal Mapped" {
 Properties {
 	_MainTex ("Base (RGB) Trans (A)", 2D) = "white" {}
 	_NormalTex ("Normalmap", 2D) = "bump" {}
+	// LightingSystem-wide obstacle multiplier, supplied per obstacle draw through a MaterialPropertyBlock.
+	// Defaults to white so any draw without the block is a byte-identical no-op. PerRendererData hides it
+	// from the material inspector since it is driven per draw, not per material.
+	[PerRendererData] _Light2DObstacleGlobalMul ("Obstacle Global Mul", Color) = (1,1,1,1)
 }
 
 SubShader {
@@ -72,6 +76,7 @@ SubShader {
 
 			sampler2D _MainTex;
 			float4 _MainTex_ST;
+			fixed4 _Light2DObstacleGlobalMul;
 
 			v2f vert (appdata_t v)
 			{
@@ -86,7 +91,7 @@ SubShader {
 			fixed4 frag (v2f i) : SV_Target
 			{
 				fixed4 col = tex2D(_MainTex, i.texcoord);
-				return col*i.color;
+				return col*i.color*_Light2DObstacleGlobalMul;
 			}
 		ENDCG
 	}

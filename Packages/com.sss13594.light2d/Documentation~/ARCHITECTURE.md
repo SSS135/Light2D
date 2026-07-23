@@ -28,11 +28,15 @@ a snapshot of the registered components for each role and draw them into the
 role's `RenderTexture` with `CommandBuffer.DrawMesh` (`Light2DDraw`). No source
 camera, culling mask, or child camera is involved.
 
-Every input component owns a disabled `MeshRenderer`: it builds the geometry the
-render core draws, but its own renderer is kept `enabled = false` so lighting-input
-geometry never appears in the game image. This invariant replaces the old
-requirement to exclude Light2D layers from the source camera culling mask — there
-are no layers to exclude, and inputs cannot leak into the composited frame.
+No input component owns a scene renderer at all. Each builds a bare mesh plus a
+generated material and hands the render core a draw-entry snapshot; the geometry is
+drawn only through the registry with `CommandBuffer.DrawMesh`, so lighting-input
+geometry never appears in the game image. Light sources and obstacles carry neither
+a `MeshRenderer` nor a `MeshFilter`; the ambient emitter and `LightObstacleMesh`
+keep a `MeshFilter` only as an optional self-mesh *input*. This invariant replaces
+the old requirement to exclude Light2D layers from the source camera culling mask —
+there are no layers to exclude, there is no renderer to disable, and inputs cannot
+leak into the composited frame.
 
 Built-in composition materials (overlay, ambient compute, blur) are supplied by an
 internal `Light2DDefaultResources` ScriptableObject that the creation window assigns
@@ -128,35 +132,43 @@ Create one with **GameObject > Light2D > Light Volume**. With no volumes present
 
 ### `LightingSystem`
 
-Attach one to each source camera that needs Light2D. Important groups are:
+Attach one to each source camera that needs Light2D. `LightingSystem` is
+values-only: it exposes tuning values rather than per-feature override toggles, and
+its material slots are hidden and auto-populated from the internal
+`Light2DDefaultResources` asset (the editor `Reset()` fills them, including
+`ObstacleMaterial`). Every value is applied per frame, so the value fields stay
+editable in play mode while structural fields are locked. Important groups are:
 
-- Coverage and resolution: `LightPixelSize`, `LightCameraSizeAdd`, `LightCameraFovAdd`, `LightObstaclesDistance`.
+- Coverage and resolution: `LightPixelSize`, `LightCameraSizeAdd`, `LightCameraFovAdd`, `LightObstaclesDistance`, and `DefaultCoverage` (the world-wide coverage baseline).
 - Features: `EnableAmbientLight`, `BlurLightSources`, `BlurAmbientLight`, `HDR`, `LightObstaclesAntialiasing`, `EnableNormalMapping`, `AffectOnlyThisCamera`, `XZPlane`.
-- Inputs: the registered role components (drawn through the registry) and the serialized compute, overlay, and blur materials. There are no layer-index fields.
+- Color and ambient tuning: `ObstacleColor` (a global obstacle multiplier applied as `_Light2DObstacleGlobalMul`) and `AmbientColoredBounce` (an obstacle's color tinting the indirect fill; `0` is a neutral no-op).
+- Inputs: the registered role components (drawn through the registry). The compute, overlay, blur, and obstacle materials are hidden slots auto-populated from `Light2DDefaultResources`; there are no layer-index fields.
 
 Runtime rendering clones serialized materials. Change the source material assets for defaults or adjust the clones indirectly through `LightingSystem` inputs; do not depend on runtime writes mutating the asset.
 
 ### `LightSprite`
 
-`LightSprite` derives from `CustomSprite` and generates a four-vertex mesh. It writes point or line origin data into UV1 for the light shader. The sprite and transform define coverage, while `LightOrigin.z` is the light height used by normal mapping.
+`LightSprite` derives from `CustomSprite` and generates a four-vertex mesh. It writes point or line origin data into UV1 for the light shader. The sprite and transform define coverage; `LightOrigin` is a pure XY correction offset, while `NormalMapHeight` is the light height used by normal mapping.
 
-Use the ray-marching materials named `Light2D/Light 20 Points` through `Light2D/Light 90 Points` to trade GPU work for shadow sampling. `Light2D/Light Auto Points` chooses a variable count and is the most expensive option. `Light2D/Light 1 Point` does minimal obstacle sampling; `Light2D/Light Ignoring Obstacles` skips obstacles and is suitable for effects such as particles.
+The single ray-marching shader `Light2D/Light Points` trades GPU work for shadow sampling through its `_PathTrackingSamples` count; pick the quality with `LightSprite.Shadows` rather than swapping per-count materials. `Light2D/Light Auto Points` chooses a variable count and is the most expensive option. `Light2D/Light 1 Point` does minimal obstacle sampling; `Light2D/Light Ignoring Obstacles` skips obstacles and is suitable for effects such as particles.
 
 ### Obstacles
 
-`LightObstacleSprite` mirrors a `SpriteRenderer` or `CustomSprite`. `LightObstacleMesh` mirrors a mesh and texture into a runtime-generated mesh/material. `LightObstacleGenerator` chooses one at play start and then destroys itself. With the `com.unity.2d.tilemap` package, `LightObstacleTilemap` (gated behind the `LIGHT2D_TILEMAP` define) turns a `Tilemap` into a texture-aware obstacle: it emits one obstacle draw per source-tile texture and maps each cell to that tile sprite's UVs, so the obstacle shader samples the tile alpha and transparent tile pixels pass light. Only collidable tiles occlude, and the obstacle mesh rebuilds when tiles change, not every frame. The `LightObstacleTilemap` lives on the same GameObject as the `Tilemap`; the visible `TilemapRenderer` stays enabled.
+`LightObstacleSprite` mirrors a `SpriteRenderer`. `LightObstacleMesh` mirrors a `MeshRenderer`'s mesh and texture into a runtime-generated mesh/material. `LightObstacleGenerator` chooses one at play start and then destroys itself. With the `com.unity.2d.tilemap` package, `LightObstacleTilemap` (gated behind the `LIGHT2D_TILEMAP` define) turns a `Tilemap` into a texture-aware obstacle: it emits one obstacle draw per source-tile texture and maps each cell to that tile sprite's UVs, so the obstacle shader samples the tile alpha and transparent tile pixels pass light. Only collidable tiles occlude, and the obstacle mesh rebuilds when tiles change, not every frame. The `LightObstacleTilemap` lives on the same GameObject as the `Tilemap`; the visible `TilemapRenderer` stays enabled.
 
 `MultiplicativeColor` is stored in vertex color. `AdditiveColor` is packed into UV1 for dual-color obstacle shaders. Textured obstacles default to white (the texture shapes the shadow); solid, untextured mesh obstacles default to opaque black so they cast a full shadow. These defaults are configurable in **Project Settings > Light2D**. Obstacles do not require colliders.
 
 ### Ambient Emitters
 
 `LightAmbientEmitter` feeds the temporal ambient-propagation pass when
-`LightingSystem.EnableAmbientLight` is on. It owns a `MeshFilter`/`MeshRenderer`
-carrying the emission geometry and supports two modes: a sprite-mirroring mode that
-bakes `EmissionColor` into an owned mesh, and a self-mesh mode (both sprite sources
-empty) that draws the object's externally authored mesh untouched, preserving
-per-vertex emission colors. It replaces the pre-2.0 convention of placing any
-renderer on an ambient layer.
+`LightingSystem.EnableAmbientLight` is on. Like every other lighting input it owns no
+renderer and draws through the register-and-draw core. It supports two modes: a
+sprite-mirroring mode that bakes `EmissionColor` into an owned internal mesh, and a
+self-mesh mode (both sprite sources empty) that draws an optional sibling
+`MeshFilter`'s externally authored mesh untouched, preserving per-vertex emission
+colors. The `MeshFilter` is only that optional self-mesh input; generated modes keep
+their mesh in an internal field and own no `MeshFilter`. It replaces the pre-2.0
+convention of placing any renderer on an ambient layer.
 
 An optional `Fill` mode (`None`, `Box`, or `Circle`) makes the emitter emit a flat,
 primitive-shaped ambient region instead of mirroring a sprite or mesh. It flows
@@ -167,18 +179,18 @@ to reveal the raw art.
 
 ### `CustomSprite`
 
-`CustomSprite` builds a quad from a Unity `Sprite`, uses `MeshFilter` and `MeshRenderer`, and reference-counts generated material instances by source material, texture, and UV mode. Generated meshes and materials use `DontSave`; they are runtime/editor working objects, not assets to edit.
+`CustomSprite` is the public **abstract** base of `LightSprite` and `LightObstacleSprite`; it is not a component you add on its own. It builds a quad from a Unity `Sprite` into an owned bare mesh that is drawn through the register-and-draw registry (`CommandBuffer.DrawMesh`) — it owns no `MeshFilter` or `MeshRenderer` — and reference-counts generated material instances by source material, texture, and UV mode. Generated meshes and materials use `DontSave`; they are runtime/editor working objects, not assets to edit.
 
 ## Quality Settings
 
 | Setting | Effect and tradeoff |
 | --- | --- |
 | Light Pixel Size | World units per lighting pixel. Lower values increase texture dimensions, precision, memory, and GPU cost. |
-| Light Texture Height | Inspector view of the derived height. Editing it adjusts Light Pixel Size. Recommended starting ranges are 50-200 mobile and 200-1000 desktop. |
+| Estimated Light Textures | Read-only inspector block reporting the light-texture dimensions derived from Light Pixel Size; it is display-only and edits nothing. Recommended starting heights are 50-200 mobile and 200-1000 desktop — lower Light Pixel Size to raise them. |
 | Light Camera Size Add | Orthographic world-space margin for off-screen contributors. Increase if lights clip near corners. |
 | Light Camera Fov Add | Perspective field-of-view margin for off-screen contributors. |
 | Camera To Light Obstacles Distance | Perspective depth plane used to derive texture coverage. Obstacles should share that effective depth. |
-| 64 Bit Color | Uses half-float lighting textures when supported; otherwise falls back to 8-bit RGBA. In URP, camera and asset HDR settings also matter. |
+| 16-bit HDR Color | Uses half-float lighting textures when supported; otherwise falls back to 8-bit RGBA. In URP, camera and asset HDR settings also matter. |
 | Light Obstacles Antialiasing | Renders obstacles at twice each dimension, then resolves them. This is roughly four times the obstacle texture pixel count. |
 | Texture Filtering | `Point` preserves pixelated lighting; bilinear smooths upscaling. |
 | Blur Light Sources | Adds a source blur pass. With normal mapping it can noticeably reduce normal detail. |

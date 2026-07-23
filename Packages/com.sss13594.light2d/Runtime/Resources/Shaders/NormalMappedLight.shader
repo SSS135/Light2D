@@ -6,6 +6,20 @@ Used to create normal map buffer.
 
 Shader "Light2D/Internal/Normal Mapped Light" {
 SubShader {
+	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
+	ZWrite Off
+	Blend OneMinusDstColor One
+	Pass {
+		Name "NormalMappedLight"
+		Tags { "LightMode"="Light2DFullscreen" }
+		HLSLPROGRAM
+		#pragma vertex Light2DNormalLightVert
+		#pragma fragment Light2DNormalLightFrag
+		#include "Light2DURPFullscreen.hlsl"
+		ENDHLSL
+	}
+}
+SubShader {
 	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
 	LOD 100
 	
@@ -63,20 +77,6 @@ SubShader {
 				return half4(light.rgb*lightness, light.a);
 			}
 		ENDCG
-	}
-}
-SubShader {
-	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
-	ZWrite Off
-	Blend OneMinusDstColor One
-	Pass {
-		Name "NormalMappedLight"
-		Tags { "LightMode"="Light2DFullscreen" }
-		HLSLPROGRAM
-		#pragma vertex Light2DNormalLightVert
-		#pragma fragment Light2DNormalLightFrag
-		#include "Light2DURPFullscreen.hlsl"
-		ENDHLSL
 	}
 }
 

@@ -7,6 +7,32 @@ All notable package changes are documented here. This file at the package root i
 Light-source authoring, an obstacle preview, and shader modernization on the 2.x
 line; the package version is unchanged.
 
+### Breaking changes
+
+- `LightSprite.LightOrigin` changed from `Vector3` to `Vector2` — it is now a pure
+  XY correction offset (center/apex, hidden for Line lights); the light's height
+  above the plane moved to the new `NormalMapHeight` field.
+- Removed the `LightSprite.Shape` enum. A light's footprint now comes from
+  `LightType` (Point/Spot/Line) and its serialized fields, not a shape selector.
+- `CustomSprite` is now a public **abstract** base and can no longer be added as a
+  component on its own.
+- Removed the `CustomSprite` renderer-facade members `Renderer`, `RendererEnabled`,
+  and `IsPartOfStaticBatch`; role components own no scene renderer to expose.
+- Role components (lights, obstacles, volumes) no longer own a `MeshRenderer` or
+  `MeshFilter`. Each builds an internal mesh plus a generated material and draws
+  through the registry; the ambient emitter and `LightObstacleMesh` keep a
+  `MeshFilter` only as an optional/required self-mesh input.
+- `LightingSystem` is now values-only: the per-feature override toggles are removed,
+  and its material slots are hidden and auto-populated from `Light2DDefaultResources`
+  (including the new `ObstacleMaterial`).
+- Renamed the `LightingSystem` HDR setting label "64 Bit Color" to
+  "16-bit HDR Color"; the serialized `HDR` field name is unchanged.
+- Removed the dead shaders `Light2D/Internal/Alpha Replace`,
+  `Light2D/Internal/Light Blender`, and `Light2D/Light Overlay Single Camera`; the
+  orphaned per-count light materials `Light1Point.mat`, `Light30Points.mat`,
+  `Light50Points.mat`, `Light60Points.mat`, and `Light70Points.mat`; and the
+  duplicate sample `AlphaBlended.shader`.
+
 ### Added
 
 - First-class `LightSprite` authoring fields: `LightType` (Point/Spot/Line),
@@ -24,6 +50,33 @@ line; the package version is unchanged.
   emission multiplier, sampling distance, and iteration count) and an optional
   colored ambient bounce that lets an obstacle's color tint the indirect fill; off
   by default.
+- `LightSprite.NormalMapHeight` (default 1): the light's height above the plane used
+  by normal mapping, shown only when a sprite override is set.
+- Line-light shaping on `LightSprite`: `Length`, `Throw`, and `Sides`
+  (`Both`/`Front`/`Back`). `Radius` is unused for a Line light.
+- `LightingSystem.ObstacleColor`, a global obstacle multiplier applied through the
+  `_Light2DObstacleGlobalMul` shader property.
+- `Light2DDefaultResources.ObstacleMaterial`, auto-populating the hidden obstacle
+  material slot on `LightingSystem`.
+- Thruster lights in the Rocket sample (`ThrusterLight.cs`) with a 0.05 s rise and
+  0.3 s fall.
+- A values-only `LightingSystem` inspector with non-collapsible headers, live
+  play-mode value tuning (structural fields stay locked), a "16-bit HDR Color"
+  toggle, and a read-only "Estimated Light Textures" block.
+- A Light Volume visual smoke test that captures a PNG regression artifact.
+
+### Fixed
+
+- URP SubShader selection: the object shaders drawn with `CommandBuffer.DrawMesh`
+  now list their URP SubShader first, and the fullscreen Blit shaders tag their
+  Built-in SubShader `"RenderPipeline"="BuiltInPipeline"`, so URP no longer selects
+  the Built-in pass and renders Light2D black.
+- Spot lights now emit from their apex at the transform position.
+- The `LightSprite` scene gizmo disc now matches the visible reach (`Radius * 0.5`).
+- `Light2DVolume` scene handles now scale correctly under a scaled transform.
+- Self-mesh `LightObstacleMesh` now receives a default obstacle material instead of
+  being silently undrawn.
+- `Light2D/Fast Blur` under URP now matches the Built-in blur tap pattern.
 
 ### Changed
 
@@ -32,6 +85,10 @@ line; the package version is unchanged.
 - Unified the per-sample-count ray-march light shaders `Light2D/Light 20 Points`
   through `Light2D/Light 90 Points` into a single `Light2D/Light Points` shader
   driven by a `_PathTrackingSamples` property.
+- Migrated the Small Examples sample walls to `SpriteRenderer`-sourced obstacles;
+  the obstacle `Material` slots are hidden.
+- Re-baselined the Light Volume world-gate visual reference from 0.45 to 0.42, an
+  intentional scene edit.
 
 ### Removed
 

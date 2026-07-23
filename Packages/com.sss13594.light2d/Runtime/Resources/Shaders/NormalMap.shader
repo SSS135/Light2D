@@ -10,6 +10,21 @@ Properties {
 	_NormalTex ("Normalmap", 2D) = "bump" {}
 }
 
+SubShader {
+	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" "LightObstacle"="True" }
+	Blend SrcAlpha OneMinusSrcAlpha
+	Cull Off
+	ZWrite Off
+	Pass {
+		Name "NormalMap"
+		Tags { "LightMode"="Light2DNormals" }
+		HLSLPROGRAM
+		#pragma vertex Light2DNormalMapVert
+		#pragma fragment Light2DNormalMapFrag
+		#include "Light2DURPRenderer.hlsl"
+		ENDHLSL
+	}
+}
 SubShader {	
 	Tags {
 		"Queue"="Transparent" 
@@ -72,21 +87,6 @@ SubShader {
                 return fixed4(bumpOut, 0, col.a);
 			}
 		ENDCG
-	}
-}
-SubShader {
-	Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" "LightObstacle"="True" }
-	Blend SrcAlpha OneMinusSrcAlpha
-	Cull Off
-	ZWrite Off
-	Pass {
-		Name "NormalMap"
-		Tags { "LightMode"="Light2DNormals" }
-		HLSLPROGRAM
-		#pragma vertex Light2DNormalMapVert
-		#pragma fragment Light2DNormalMapFrag
-		#include "Light2DURPRenderer.hlsl"
-		ENDHLSL
 	}
 }
 

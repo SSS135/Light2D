@@ -64,7 +64,10 @@ namespace Light2D
         private void DrawBoxHandle(Light2DVolume volume)
         {
             var t = volume.transform;
-            using (new Handles.DrawingScope(HandleColor, Matrix4x4.TRS(t.position, t.rotation, Vector3.one)))
+            // Draw in the volume's full local-to-world space (including lossyScale) so the handle shares the
+            // exact space of the coverage mesh and gizmo. A unit-scale matrix desyncs the handle from the cursor
+            // whenever the transform (or a parent) is scaled — the dragged edge outruns the mouse.
+            using (new Handles.DrawingScope(HandleColor, t.localToWorldMatrix))
             {
                 _boxHandle.center = Vector3.zero;
                 _boxHandle.size = new Vector3(volume.Size.x, volume.Size.y, 0f);
@@ -82,7 +85,9 @@ namespace Light2D
                 if (center != Vector3.zero)
                 {
                     Undo.RecordObjects(new Object[] { volume, t }, "Resize Light Volume");
-                    t.position += t.rotation * new Vector3(center.x, center.y, 0f);
+                    // center is a local-space offset; TransformVector maps it to world (rotation + lossyScale)
+                    // so the transform shifts by the same world amount the dragged face moved.
+                    t.position += t.TransformVector(new Vector3(center.x, center.y, 0f));
                 }
                 else
                 {
@@ -97,13 +102,17 @@ namespace Light2D
         private void DrawCircleHandle(Light2DVolume volume)
         {
             var t = volume.transform;
-            using (new Handles.DrawingScope(HandleColor, Matrix4x4.TRS(t.position, t.rotation, Vector3.one)))
+            // Full local-to-world space (including lossyScale) so the dots sit on the same edge the coverage
+            // mesh and gizmo draw; a unit-scale matrix would let the radius outrun the cursor when scaled.
+            using (new Handles.DrawingScope(HandleColor, t.localToWorldMatrix))
             {
                 Handles.DrawWireDisc(Vector3.zero, Vector3.forward, volume.Radius);
 
-                // Screen-constant dot size measured at the world center (the matrix is unit-scaled, so a world
-                // size drawn in local space keeps the same on-screen scale for every dot).
-                var dotSize = HandleUtility.GetHandleSize(t.position) * 0.08f;
+                // Screen-constant dot size: GetHandleSize returns a world size, so divide by the planar scale to
+                // express it in the (now scaled) local space and keep every dot the same on-screen size.
+                var lossy = t.lossyScale;
+                var planarScale = Mathf.Max(Mathf.Abs(lossy.x), Mathf.Abs(lossy.y), 1e-4f);
+                var dotSize = HandleUtility.GetHandleSize(t.position) * 0.08f / planarScale;
                 var newRadius = volume.Radius;
 
                 EditorGUI.BeginChangeCheck();

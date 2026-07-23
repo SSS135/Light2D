@@ -149,7 +149,9 @@ namespace Light2D.Tests
                 emitter.Material = material;
                 emitter.SendMessage("Update");
 
-                var ownedMesh = gameObject.GetComponent<MeshFilter>().sharedMesh;
+                // Sprite mode keeps its generated mesh in an internal field (no MeshFilter); the draw entry
+                // reads it directly, so the snapshot mesh is the emitter's own DrawMesh, not a MeshFilter's.
+                var ownedMesh = emitter.DrawMesh;
                 Assert.That(ownedMesh, Is.Not.Null);
 
                 var snapshot = new List<Light2DDrawEntry>();

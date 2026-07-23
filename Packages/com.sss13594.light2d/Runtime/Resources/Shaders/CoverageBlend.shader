@@ -20,7 +20,9 @@ Properties {
 }
 
 SubShader {
-	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent"}
+	// RenderPipeline="BuiltInPipeline" makes URP skip this Built-in SubShader and select the UniversalPipeline
+	// one below (this shader is composited fullscreen; keeping the Built-in SubShader first is harmless). See LightOverlay.
+	Tags {"Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent" "RenderPipeline"="BuiltInPipeline"}
 	LOD 100
 
 	ZWrite Off

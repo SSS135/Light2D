@@ -12,7 +12,7 @@ Light2D is developed as an embedded UPM package inside this repository: the repo
 
 ## Before you open a pull request
 
-- Run the **EditMode** suite and any relevant **PlayMode** tests, and make sure they pass. If a test is knowingly blocked, say so — for example, the URP behavioral tests are blocked by an external Unity 6000.4.7f1 / ShaderGraph 17.4 defect and skip on affected hosts by design.
+- Run the **EditMode** suite and any relevant **PlayMode** tests, and make sure they pass. If a test is knowingly blocked, say so — for example, the URP PlayMode tests skip only through the `IgnoreIfPipelineInactive` guard when a runtime-created URP pipeline does not activate under batchmode, not because of any ShaderGraph defect.
 - **Preserve `.meta` files and asset GUIDs.** Serialized scenes, prefabs, and materials depend on them.
 - **Don't break the compatibility contracts** — legacy shader names, pass tags, properties, keywords, and serialized field names — unless your change includes a tested migration. The protected list is in [`CLAUDE.md`](CLAUDE.md).
 - **Keep samples mirrored:** `Packages/com.sss13594.light2d/Samples~/Examples/` and the dev-mirror copy under `Assets/Samples/Light2D/Examples/` must stay byte-identical; mirror any change to both.

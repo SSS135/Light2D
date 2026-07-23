@@ -3,11 +3,9 @@ using UnityEngine;
 namespace Light2D
 {
     /// <summary>
-    /// Pure light-camera geometry math shared by both backends. Promoted from the URP feature's private
-    /// CalculateLightCameraGeometry/CalculateSnappedPosition so Built-in (which today mutates a helper
-    /// camera) and URP (which builds matrices directly) can derive one identical result. Uses only
-    /// UnityEngine types; the URP feature keeps its private copy until it is switched over in a later
-    /// chunk, so the two definitions may coexist meanwhile.
+    /// Pure light-camera geometry math: the single shared light-camera geometry helper that both the
+    /// Built-in and URP backends call to derive one identical view/projection result. Uses only
+    /// UnityEngine types.
     /// </summary>
     internal readonly struct Light2DCameraGeometry
     {
@@ -31,7 +29,6 @@ namespace Light2D
         /// Derives the light-camera view/projection for a source <paramref name="camera"/> snapped to
         /// <paramref name="position"/>. When <paramref name="extended"/> is true the projection covers the
         /// larger obstacle/ambient render target; otherwise it covers the small light-source target.
-        /// Mirrors Light2DUniversalRendererFeature.CalculateLightCameraGeometry.
         /// </summary>
         internal static Light2DCameraGeometry Calculate(Camera camera, Vector3 position, Vector2Int smallSize,
             Vector2Int extendedSize, bool extended, float fovAdd, float obstaclesDistance)
@@ -65,7 +62,7 @@ namespace Light2D
 
         /// <summary>
         /// Snaps the camera position to the lighting pixel grid to keep low-resolution lighting stable
-        /// under camera motion. Mirrors Light2DUniversalRendererFeature.CalculateSnappedPosition.
+        /// under camera motion.
         /// </summary>
         internal static Vector3 CalculateSnappedPosition(Camera camera, float pixelsPerMeter)
         {

@@ -53,6 +53,17 @@ namespace Light2D
 
             MultiplicativeColor = settings.MultiplicativeFor(textured);
             AdditiveColor = settings.AdditiveColor;
+
+            // The Material slot is hidden in the normal inspector (see LightObstacleEditors) because it only
+            // supplies the obstacle-writing shader forwarded to the generated obstacle. Seed it from the
+            // packaged default when unset; existing assignments are left untouched, and a custom-shader
+            // material can still be set via the Debug inspector. Start keeps the build-safe runtime fallback.
+            if (Material == null)
+            {
+                var defaults = Light2DDefaultResources.Load();
+                if (defaults != null)
+                    Material = defaults.ObstacleMaterial;
+            }
         }
 #endif
 

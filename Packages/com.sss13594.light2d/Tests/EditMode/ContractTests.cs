@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -108,6 +109,79 @@ namespace Light2D.Tests
             var halfRed = Light2DColorEncoding.EncodeAdditiveColorToUv(new Color(0.5f, 0f, 0f, 0f));
             Assert.That(halfRed.x, Is.EqualTo(127f / 255f).Within(0.0001f));
             Assert.That(halfRed.y, Is.Zero);
+        }
+
+        [Test]
+        public void ObstacleColorFlowsToObstacleGlobalMulShaderProperty()
+        {
+            // The Built-in obstacle pass pushes LightingSystem.ObstacleColor onto every obstacle draw through
+            // a MaterialPropertyBlock keyed on _Light2DObstacleGlobalMul (RenderObstacles). That SetColor runs
+            // only inside OnRenderImage, so without a render loop EditMode asserts the static plumbing instead:
+            // the serialized default, the private property-ID constant the pass writes to, and that the
+            // obstacle shader exposes it.
+            var cameraObject = new GameObject("Obstacle color plumbing");
+            try
+            {
+                var system = cameraObject.AddComponent<LightingSystem>();
+                // The serialized default is the byte-identical no-op multiplier (white, full alpha).
+                Assert.That(system.ObstacleColor, Is.EqualTo(Color.white));
+            }
+            finally
+            {
+                Object.DestroyImmediate(cameraObject);
+            }
+
+            // The pass writes ObstacleColor to exactly this property ID.
+            var idField = typeof(LightingSystem).GetField("ObstacleGlobalMulId",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(idField, Is.Not.Null, "LightingSystem.ObstacleGlobalMulId plumbing constant is missing");
+            Assert.That((int)idField.GetValue(null),
+                Is.EqualTo(Shader.PropertyToID("_Light2DObstacleGlobalMul")));
+
+            // The Built-in obstacle shader declares the property the pass drives.
+            var shader = Shader.Find("Light2D/Transparent Dual Color Normal Mapped");
+            Assert.That(shader, Is.Not.Null, "The Built-in obstacle shader must be present");
+            var material = new Material(shader);
+            try
+            {
+                Assert.That(material.HasProperty("_Light2DObstacleGlobalMul"), Is.True,
+                    "The obstacle shader must expose the _Light2DObstacleGlobalMul multiplier the pass writes");
+            }
+            finally
+            {
+                Object.DestroyImmediate(material);
+            }
+        }
+
+        [Test]
+        public void NormalMapHeightFlowsToLightPosZShaderProperty()
+        {
+            // The Built-in normal-mapped source pass packs LightSprite.NormalMapHeight into the z component of
+            // the _LightPos vector it sets per light (RenderNormalMappedLightSources:
+            // new Vector4(center.x, center.y, light.NormalMapHeight, 0f)), and the Normal Mapped Light shader
+            // reads _LightPos.z. That SetVector runs only inside OnRenderImage, so without a render loop
+            // EditMode asserts the static plumbing: the serialized default height and the private _LightPos
+            // property-ID constant the pass writes to.
+            var lightObject = new GameObject("Normal map height plumbing");
+            try
+            {
+                var light = lightObject.AddComponent<LightSprite>();
+                // A fresh light sits one unit above the plane.
+                Assert.That(light.NormalMapHeight, Is.EqualTo(1f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(lightObject);
+            }
+
+            var idField = typeof(LightingSystem).GetField("LightPosId",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(idField, Is.Not.Null, "LightingSystem.LightPosId plumbing constant is missing");
+            Assert.That((int)idField.GetValue(null), Is.EqualTo(Shader.PropertyToID("_LightPos")));
+
+            // The Built-in Normal Mapped Light shader that consumes _LightPos.z must be present.
+            Assert.That(Shader.Find("Light2D/Internal/Normal Mapped Light"), Is.Not.Null,
+                "The Built-in Normal Mapped Light shader that reads _LightPos.z must be present");
         }
 
         private sealed class UnsupportedPipelineAsset : RenderPipelineAsset

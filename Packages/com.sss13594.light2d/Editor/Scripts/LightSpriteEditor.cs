@@ -5,10 +5,11 @@ namespace Light2D
 {
     /// <summary>
     /// First-class inspector for <see cref="LightSprite"/>. It surfaces the light's real controls in a
-    /// top-down order (Type, HDR Color, Intensity, Radius, Falloff, Spot Angle, Shadows, an optional
-    /// Sprite override, then placement) instead of the raw serialized fields, adds draggable Scene-view
-    /// handles for Radius and the Spot cone, and warns about the common setup traps (no light material,
-    /// no LightingSystem, overbright without HDR) with one-click fixes.
+    /// top-down order (Type, HDR Color, Intensity, then the Type-specific size controls - Radius for
+    /// Point/Spot or Length/Throw/Sides for Line - Falloff, Spot Angle, Shadows, an optional Sprite
+    /// override, then placement) instead of the raw serialized fields, adds one draggable Scene-view handle
+    /// per Type (the Radius disc for Point, the cone for Spot, the bar for Line), and warns about the common
+    /// setup traps (no light material, no LightingSystem, overbright without HDR) with one-click fixes.
     ///
     /// The <c>Shadows</c> popup is a view over the real <see cref="CustomSprite.Material"/> slot: it
     /// reverse-maps the assigned material's GUID back to a <see cref="LightSprite.ShadowQuality"/> preset
@@ -42,15 +43,23 @@ namespace Light2D
 
         private const float IntensitySliderMax = 8f;
         private const float RadiusSliderMax = 20f;
+        private const float LengthSliderMax = 20f;
+        private const float ThrowSliderMax = 20f;
 
         private static readonly GUIContent TypeLabel = new GUIContent("Type",
-            "Point emits radially, Spot projects a soft cone from the origin apex, and Line emits along the sprite's horizontal extent.");
+            "Point emits radially, Spot projects a soft cone whose apex sits at the transform, and Line emits along a Length-by-Throw bar.");
         private static readonly GUIContent ColorLabel = new GUIContent("Color",
             "Light colour, multiplied by Intensity. HDR: channels above 1 need the owning LightingSystem's 64 Bit Color enabled.");
         private static readonly GUIContent IntensityLabel = new GUIContent("Intensity",
             "Brightness multiplied into the light colour. Type a value above the slider to overdrive it.");
         private static readonly GUIContent RadiusLabel = new GUIContent("Radius",
-            "Light size in world units, baked into the mesh independently of the Transform scale.");
+            "Point/Spot light size in world units, baked into the mesh independently of the Transform scale.");
+        private static readonly GUIContent LengthLabel = new GUIContent("Length",
+            "Line light extent along its local X axis, in world units.");
+        private static readonly GUIContent ThrowLabel = new GUIContent("Throw",
+            "Line light perpendicular reach before it fades, in world units.");
+        private static readonly GUIContent SidesLabel = new GUIContent("Sides",
+            "Which side(s) of a Line light emit: Both (two-sided), Front (+normal only), or Back (-normal only).");
         private static readonly GUIContent FalloffLabel = new GUIContent("Falloff",
             "Edge hardness of the generated falloff, 0 soft to 1 hard. Ignored when a Sprite override is assigned.");
         private static readonly GUIContent SpotAngleLabel = new GUIContent("Spot Angle",
@@ -59,11 +68,19 @@ namespace Light2D
             "Ray-march shadow quality. Maps to the light material; Custom hands the Material slot back to you.");
         private static readonly GUIContent MaterialLabel = new GUIContent("Custom Material",
             "Light material used when Shadows is Custom. Leave empty to fall back to Sprites/Default (wrong blend).");
-        private static readonly GUIContent SpriteOverrideLabel = new GUIContent("Override Sprite");
-        private static readonly GUIContent SpriteLabel = new GUIContent("Sprite",
+        private static readonly GUIContent SpriteOverrideLabel = new GUIContent("Override Sprite",
             "Optional sprite that replaces the generated falloff. Leave empty to generate from Type/Falloff/Spot Angle.");
-        private static readonly GUIContent LightOriginLabel = new GUIContent("Light Origin",
-            "Emission origin in sprite-local space; Z is the light's height above the plane for normal mapping.");
+        // Light Origin is a pure XY correction offset; the label/tooltip changes with Type (it is hidden for Line).
+        private static readonly GUIContent LightOriginCenterLabel = new GUIContent("Light Origin",
+            "Correction offset for the light centre, in the sprite's local XY (leave at 0,0 for no correction). " +
+            "Switching Type never rewrites this.");
+        private static readonly GUIContent LightOriginApexLabel = new GUIContent("Light Origin",
+            "Correction offset for the cone apex, in the sprite's local XY (leave at 0,0 to originate exactly at " +
+            "the transform). Switching Type never rewrites this.");
+        // Normal Map Height only feeds the normal-mapped light pass, so it is shown only when an Override Sprite is set.
+        private static readonly GUIContent NormalMapHeightLabel = new GUIContent("Normal Map Height",
+            "Height of the light above the 2D plane, used only by the normal-mapped light pass (needs normal " +
+            "mapping enabled on the owning LightingSystem). Ignored otherwise.");
         private static readonly GUIContent SortingOrderLabel = new GUIContent("Sorting Order",
             "Draw order among lights; lower values draw first.");
         private static readonly GUIContent OwnerLabel = new GUIContent("Owner",
@@ -73,16 +90,18 @@ namespace Light2D
         private SerializedProperty _color;
         private SerializedProperty _intensity;
         private SerializedProperty _radius;
+        private SerializedProperty _length;
+        private SerializedProperty _throw;
+        private SerializedProperty _sides;
         private SerializedProperty _falloff;
         private SerializedProperty _spotAngle;
         private SerializedProperty _shadows;
         private SerializedProperty _material;
         private SerializedProperty _sprite;
         private SerializedProperty _lightOrigin;
+        private SerializedProperty _normalMapHeight;
         private SerializedProperty _sortingOrder;
         private SerializedProperty _owner;
-
-        private bool _showSpriteOverride;
 
         private void OnEnable()
         {
@@ -90,17 +109,18 @@ namespace Light2D
             _color = serializedObject.FindProperty("Color");
             _intensity = serializedObject.FindProperty("Intensity");
             _radius = serializedObject.FindProperty("Radius");
+            _length = serializedObject.FindProperty("Length");
+            _throw = serializedObject.FindProperty("Throw");
+            _sides = serializedObject.FindProperty("Sides");
             _falloff = serializedObject.FindProperty("Falloff");
             _spotAngle = serializedObject.FindProperty("SpotAngle");
             _shadows = serializedObject.FindProperty("Shadows");
             _material = serializedObject.FindProperty("Material");
             _sprite = serializedObject.FindProperty("Sprite");
             _lightOrigin = serializedObject.FindProperty("LightOrigin");
+            _normalMapHeight = serializedObject.FindProperty("NormalMapHeight");
             _sortingOrder = serializedObject.FindProperty("SortingOrder");
             _owner = serializedObject.FindProperty("Owner");
-
-            // Reveal the override foldout when a sprite is already assigned so the user sees their override.
-            _showSpriteOverride = _sprite.objectReferenceValue != null;
         }
 
         public override void OnInspectorGUI()
@@ -112,20 +132,37 @@ namespace Light2D
             EditorGUILayout.PropertyField(_type, TypeLabel);
             DrawHdrColor();
             OverflowSlider(_intensity, IntensityLabel, 0f, IntensitySliderMax);
-            OverflowSlider(_radius, RadiusLabel, 0f, RadiusSliderMax);
+
+            var type = (LightSprite.LightType)_type.enumValueIndex;
+            var isLine = !_type.hasMultipleDifferentValues && type == LightSprite.LightType.Line;
+            var isSpot = !_type.hasMultipleDifferentValues && type == LightSprite.LightType.Spot;
+
+            // Line is sized by Length/Throw/Sides; Point and Spot are sized by Radius.
+            if (isLine)
+            {
+                OverflowSlider(_length, LengthLabel, 0f, LengthSliderMax);
+                OverflowSlider(_throw, ThrowLabel, 0f, ThrowSliderMax);
+                EditorGUILayout.PropertyField(_sides, SidesLabel);
+            }
+            else
+            {
+                OverflowSlider(_radius, RadiusLabel, 0f, RadiusSliderMax);
+            }
+
             EditorGUILayout.PropertyField(_falloff, FalloffLabel);
-            if (_type.enumValueIndex == (int)LightSprite.LightType.Spot)
+            if (isSpot)
                 EditorGUILayout.PropertyField(_spotAngle, SpotAngleLabel);
 
             DrawShadowsField();
             DrawSpriteOverride();
 
             EditorGUILayout.Space();
-            EditorGUILayout.PropertyField(_lightOrigin, LightOriginLabel);
+            // Light Origin is a correction offset for Point (centre) and Spot (apex); Line ignores it, so hide it.
+            if (!isLine)
+                EditorGUILayout.PropertyField(_lightOrigin, isSpot ? LightOriginApexLabel : LightOriginCenterLabel);
             EditorGUILayout.PropertyField(_sortingOrder, SortingOrderLabel);
             EditorGUILayout.PropertyField(_owner, OwnerLabel);
 
-            // Shape is intentionally not drawn: it is derived from Type by LightSprite.ApplyLightTypeShape.
             serializedObject.ApplyModifiedProperties();
         }
 
@@ -192,17 +229,19 @@ namespace Light2D
 
         private void DrawSpriteOverride()
         {
-            _showSpriteOverride = EditorGUILayout.Foldout(_showSpriteOverride, SpriteOverrideLabel, true);
-            if (!_showSpriteOverride)
-                return;
-
-            EditorGUI.indentLevel++;
-            EditorGUILayout.PropertyField(_sprite, SpriteLabel);
-            if (_sprite.objectReferenceValue == null && !_sprite.hasMultipleDifferentValues)
+            EditorGUILayout.PropertyField(_sprite, SpriteOverrideLabel);
+            if (_sprite.objectReferenceValue != null)
+            {
+                // The normal-mapped light pass runs only for lights with an override sprite, so Normal Map
+                // Height is meaningful only here (and further, only when the LightingSystem enables normal mapping).
+                EditorGUILayout.PropertyField(_normalMapHeight, NormalMapHeightLabel);
+            }
+            else if (!_sprite.hasMultipleDifferentValues)
+            {
                 EditorGUILayout.HelpBox(
                     "Empty: the falloff is generated from Type, Falloff, and Spot Angle. Assign a sprite to override generation.",
                     MessageType.None);
-            EditorGUI.indentLevel--;
+            }
         }
 
         private void DrawWarnings()
@@ -312,9 +351,20 @@ namespace Light2D
             if (light == null)
                 return;
 
-            DrawRadiusHandle(light);
-            if (light.Type == LightSprite.LightType.Spot)
-                DrawSpotHandle(light);
+            // One handle per Type: the radius disc for Point, the cone for Spot, the bar for Line. Drawing
+            // the disc for Spot/Line was the gizmo/render disagreement this redesign removes.
+            switch (light.Type)
+            {
+                case LightSprite.LightType.Spot:
+                    DrawSpotHandle(light);
+                    break;
+                case LightSprite.LightType.Line:
+                    DrawLineHandle(light);
+                    break;
+                default:
+                    DrawRadiusHandle(light);
+                    break;
+            }
         }
 
         private static void DrawRadiusHandle(LightSprite light)
@@ -322,37 +372,42 @@ namespace Light2D
             var t = light.transform;
             using (new Handles.DrawingScope(HandleColor, Matrix4x4.TRS(t.position, t.rotation, Vector3.one)))
             {
-                Handles.DrawWireDisc(Vector3.zero, Vector3.forward, light.Radius);
+                // Radius sizes the light quad edge-to-edge (half-extent = Radius * 0.5), and the radial
+                // falloff fades to zero at that half-extent, so the visible light reaches Radius * 0.5.
+                var visibleRadius = light.Radius * 0.5f;
+                Handles.DrawWireDisc(Vector3.zero, Vector3.forward, visibleRadius);
 
                 var dotSize = HandleUtility.GetHandleSize(t.position) * 0.08f;
-                var newRadius = light.Radius;
+                var newVisibleRadius = visibleRadius;
 
                 EditorGUI.BeginChangeCheck();
                 foreach (var dir in CircleHandleDirections)
                 {
-                    var moved = Handles.Slider(dir * light.Radius, dir, dotSize, Handles.DotHandleCap, 0f);
+                    var moved = Handles.Slider(dir * visibleRadius, dir, dotSize, Handles.DotHandleCap, 0f);
                     var candidate = Vector3.Dot(moved, dir);
                     // Only the dragged dot deviates from the current radius; pick the largest deviation.
-                    if (Mathf.Abs(candidate - light.Radius) > Mathf.Abs(newRadius - light.Radius))
-                        newRadius = candidate;
+                    if (Mathf.Abs(candidate - visibleRadius) > Mathf.Abs(newVisibleRadius - visibleRadius))
+                        newVisibleRadius = candidate;
                 }
 
                 if (!EditorGUI.EndChangeCheck())
                     return;
 
                 Undo.RecordObject(light, "Resize Light Radius");
-                light.Radius = Mathf.Max(1e-4f, newRadius);
+                light.Radius = Mathf.Max(1e-4f, newVisibleRadius * 2f);
                 EditorUtility.SetDirty(light);
             }
         }
 
-        // Spot cone handle: the cone opens from the transform origin along transform.up (its local +Y aim,
-        // matching the apex-at-bottom generated cone texture). Two edge rays and an arc show the span; a dot
-        // at one edge tip widens/narrows SpotAngle.
+        // Spot cone handle: the cone opens from the apex along transform.up (its local +Y aim, matching the
+        // apex-at-bottom generated cone texture). The apex is the transform origin nudged by the LightOrigin
+        // XY correction - the exact world point the rendered cone now originates from. Two edge rays and an
+        // arc show the span; a dot at one edge tip widens/narrows SpotAngle.
         private static void DrawSpotHandle(LightSprite light)
         {
             var t = light.transform;
-            var apex = t.position;
+            var apex = t.TransformPoint(new Vector3(light.LightOrigin.x * light.Radius,
+                light.LightOrigin.y * light.Radius, 0f));
             var aim = t.up;
             var normal = t.forward;
             var length = Mathf.Max(light.Radius, 1e-3f);
@@ -383,6 +438,69 @@ namespace Light2D
                 light.SpotAngle = Mathf.Clamp(angle * 2f, 1f, 179f);
                 EditorUtility.SetDirty(light);
             }
+        }
+
+        // Line handle: the emitting bar along local X (Length), a rectangle showing the perpendicular reach
+        // (Throw) on each emitting side per Sides, plus dots to drag Length (bar ends) and Throw (reach tip).
+        // Everything is drawn in the light's unscaled local frame so it matches the rendered bar geometry.
+        private static void DrawLineHandle(LightSprite light)
+        {
+            var t = light.transform;
+            using (new Handles.DrawingScope(HandleColor, Matrix4x4.TRS(t.position, t.rotation, Vector3.one)))
+            {
+                var half = light.Length * 0.5f;
+                var reach = Mathf.Max(light.Throw, 0f);
+                var left = new Vector3(-half, 0f, 0f);
+                var right = new Vector3(half, 0f, 0f);
+                Handles.DrawLine(left, right);
+
+                // Both emits +Y and -Y; Front only +Y (the +normal side); Back only -Y.
+                var emitsFront = light.Sides != LightSprite.LightSides.Back;
+                var emitsBack = light.Sides != LightSprite.LightSides.Front;
+                if (emitsFront)
+                    DrawThrowEdge(left, right, Vector3.up * reach);
+                if (emitsBack)
+                    DrawThrowEdge(left, right, Vector3.down * reach);
+
+                var dotSize = HandleUtility.GetHandleSize(t.position) * 0.08f;
+
+                // Length dots at the two bar ends; the dragged end sets the new half-length.
+                EditorGUI.BeginChangeCheck();
+                var newHalf = half;
+                var movedRight = Handles.Slider(right, Vector3.right, dotSize, Handles.DotHandleCap, 0f);
+                var rightCandidate = Vector3.Dot(movedRight, Vector3.right);
+                if (Mathf.Abs(rightCandidate - half) > Mathf.Abs(newHalf - half))
+                    newHalf = rightCandidate;
+                var movedLeft = Handles.Slider(left, Vector3.left, dotSize, Handles.DotHandleCap, 0f);
+                var leftCandidate = Vector3.Dot(movedLeft, Vector3.left);
+                if (Mathf.Abs(leftCandidate - half) > Mathf.Abs(newHalf - half))
+                    newHalf = leftCandidate;
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(light, "Resize Line Length");
+                    light.Length = Mathf.Max(1e-4f, newHalf * 2f);
+                    EditorUtility.SetDirty(light);
+                }
+
+                // Throw dot on an emitting side (prefer +Y; use -Y when only Back emits).
+                var throwDir = emitsFront ? Vector3.up : Vector3.down;
+                EditorGUI.BeginChangeCheck();
+                var movedThrow = Handles.Slider(throwDir * reach, throwDir, dotSize, Handles.DotHandleCap, 0f);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(light, "Adjust Line Throw");
+                    light.Throw = Mathf.Max(1e-4f, Vector3.Dot(movedThrow, throwDir));
+                    EditorUtility.SetDirty(light);
+                }
+            }
+        }
+
+        // Two perpendicular reach lines from the bar ends plus the far edge that closes them into a rectangle.
+        private static void DrawThrowEdge(Vector3 left, Vector3 right, Vector3 offset)
+        {
+            Handles.DrawLine(left, left + offset);
+            Handles.DrawLine(right, right + offset);
+            Handles.DrawLine(left + offset, right + offset);
         }
     }
 }

@@ -34,7 +34,7 @@ Light2DRendererVaryings Light2DRendererVert(Light2DRendererAttributes input)
 
 half4 Light2DTransparentFrag(Light2DRendererVaryings input) : SV_Target
 {
-    return SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv.xy) * input.color;
+    return SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv.xy) * input.color * _Light2DObstacleGlobalMul;
 }
 
 Light2DRendererVaryings Light2DDualColorVert(Light2DRendererAttributes input)
@@ -49,7 +49,7 @@ Light2DRendererVaryings Light2DDualColorVert(Light2DRendererAttributes input)
 half4 Light2DDualColorFrag(Light2DRendererVaryings input) : SV_Target
 {
     half4 color = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv.xy);
-    return color * input.color + half4(input.data.rgb, input.data.a * input.data.a * color.a * 10.0h);
+    return color * input.color * _Light2DObstacleGlobalMul + half4(input.data.rgb, input.data.a * input.data.a * color.a * 10.0h);
 }
 
 Light2DRendererVaryings Light2DNormalMapVert(Light2DRendererAttributes input)

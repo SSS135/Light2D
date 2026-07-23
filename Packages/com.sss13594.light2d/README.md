@@ -137,7 +137,7 @@ into Light2D's internal textures through a command buffer.
 - `LightSprite` renders a sprite-shaped point or line light. Ray-marching materials
   trade GPU cost for more obstacle samples; `Light 1 Point` and
   `Light Ignoring Obstacles` are cheaper alternatives.
-- `LightObstacleSprite` mirrors a sprite or `CustomSprite`; `LightObstacleMesh`
+- `LightObstacleSprite` mirrors a sprite (`SpriteRenderer`); `LightObstacleMesh`
   mirrors mesh data; `LightObstacleGenerator` adds the right one at runtime; and
   `LightObstacleTilemap` (with `com.unity.2d.tilemap`) makes a Tilemap a
   texture-aware obstacle.
@@ -195,7 +195,7 @@ The package name is `com.sss13594.light2d`. Runtime types are in the `Light2D` n
 
 ## Public API Policy
 
-The supported public runtime API is limited to the scene components (`LightingSystem`, `LightSprite`, `CustomSprite`, `LightObstacleSprite`, `LightObstacleMesh`, `LightObstacleGenerator`, `LightAmbientEmitter`, `Light2DVolume`, and — when `com.unity.2d.tilemap` is installed — `LightObstacleTilemap`), the `Light2DUniversalRendererFeature`, the diagnostics surface (`Light2DProfiling`, `Light2DDiagnostics`, `Light2DFrameMetrics`), and the `Light2DPipeline` readiness classification exposed through `LightingSystem.ActivePipeline` and `LightingSystem.IsRenderingReady`. Serialized field names on these components are compatibility contracts and are preserved across releases. Everything else is internal implementation and may change without notice; a contract test enforces the exported type list. The legacy `Util` and `Point2` helpers were removed in 2.0.0.
+The supported public runtime API is limited to the scene components (`LightingSystem`, `LightSprite`, `LightObstacleSprite`, `LightObstacleMesh`, `LightObstacleGenerator`, `LightAmbientEmitter`, `Light2DVolume`, and — when `com.unity.2d.tilemap` is installed — `LightObstacleTilemap`), the `CustomSprite` abstract base shared by `LightSprite`/`LightObstacleSprite`, the `Light2DUniversalRendererFeature`, the diagnostics surface (`Light2DProfiling`, `Light2DDiagnostics`, `Light2DFrameMetrics`), and the `Light2DPipeline` readiness classification exposed through `LightingSystem.ActivePipeline` and `LightingSystem.IsRenderingReady`. Serialized field names on these components are compatibility contracts and are preserved across releases. Everything else is internal implementation and may change without notice; a contract test enforces the exported type list. The legacy `Util` and `Point2` helpers were removed in 2.0.0.
 
 ## License
 

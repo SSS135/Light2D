@@ -112,6 +112,37 @@ namespace Light2D.Tests
         }
 
         [Test]
+        public void DistinctLineSidesYieldDistinctTextures()
+        {
+            var both = Light2DLightTextureGenerator.GetTexture(LightSprite.LightType.Line, 0.5f, 0f,
+                LightSprite.LightSides.Both);
+            var front = Light2DLightTextureGenerator.GetTexture(LightSprite.LightType.Line, 0.5f, 0f,
+                LightSprite.LightSides.Front);
+            var back = Light2DLightTextureGenerator.GetTexture(LightSprite.LightType.Line, 0.5f, 0f,
+                LightSprite.LightSides.Back);
+            Assert.That(front, Is.Not.SameAs(both));
+            Assert.That(back, Is.Not.SameAs(both));
+            Assert.That(front, Is.Not.SameAs(back));
+        }
+
+        [Test]
+        public void OneSidedLineTexturesAreBrightAtTheirSegmentEdge()
+        {
+            // Front places the emitting segment (bright edge) at v == 0 and fades toward v == 1; Back mirrors it.
+            var front = Light2DLightTextureGenerator.GetTexture(LightSprite.LightType.Line, 0.5f, 0f,
+                LightSprite.LightSides.Front);
+            Assert.That(front.GetPixelBilinear(0.5f, 0.02f).a,
+                Is.GreaterThan(front.GetPixelBilinear(0.5f, 0.98f).a),
+                "A Front strip is brightest at its v==0 segment edge.");
+
+            var back = Light2DLightTextureGenerator.GetTexture(LightSprite.LightType.Line, 0.5f, 0f,
+                LightSprite.LightSides.Back);
+            Assert.That(back.GetPixelBilinear(0.5f, 0.98f).a,
+                Is.GreaterThan(back.GetPixelBilinear(0.5f, 0.02f).a),
+                "A Back strip is brightest at its v==1 segment edge.");
+        }
+
+        [Test]
         public void CacheIsBoundedByLruCapAndProtectsRecentlyUsedEntries()
         {
             Light2DLightTextureGenerator.ClearCache();
@@ -156,7 +187,7 @@ namespace Light2D.Tests
                 light.Intensity = 2f;
                 Rebuild(light);
 
-                var mesh = light.GetComponent<MeshFilter>().sharedMesh;
+                var mesh = light.Mesh;
                 var colors = mesh.colors;
                 Assert.That(colors.Length, Is.GreaterThan(0));
 
@@ -175,15 +206,21 @@ namespace Light2D.Tests
         }
 
         [Test]
-        public void SpotTypeSetsPointShapeAndApexOrigin()
+        public void SwitchingToSpotDoesNotMutateLightOrigin()
         {
             var light = CreateLight();
             try
             {
+                // The redesign makes LightOrigin a pure user-owned correction: a Type switch must never
+                // rewrite it (the old model forced LightOrigin.y to -0.5 for Spot).
+                light.LightOrigin = new Vector2(0.1f, 0.2f);
                 light.Type = LightSprite.LightType.Spot;
                 Rebuild(light);
-                Assert.That(light.Shape, Is.EqualTo(LightSprite.LightShape.Point));
-                Assert.That(light.LightOrigin.y, Is.EqualTo(-0.5f).Within(1e-4f));
+                Assert.That(light.LightOrigin, Is.EqualTo(new Vector2(0.1f, 0.2f)));
+
+                light.Type = LightSprite.LightType.Line;
+                Rebuild(light);
+                Assert.That(light.LightOrigin, Is.EqualTo(new Vector2(0.1f, 0.2f)));
             }
             finally
             {
@@ -192,14 +229,54 @@ namespace Light2D.Tests
         }
 
         [Test]
-        public void LineTypeSetsLineShape()
+        public void SpotApexOriginatesAtTheTransform()
+        {
+            var light = CreateLight();
+            try
+            {
+                // With the default (0,0) correction the cone apex (the mesh's bottom edge) sits at the
+                // transform origin, so the local mesh spans y in [0, Radius] and the gizmo/render coincide.
+                light.Type = LightSprite.LightType.Spot;
+                light.Radius = 4f;
+                light.LightOrigin = Vector2.zero;
+                Rebuild(light);
+
+                Bounds bounds = light.Mesh.bounds;
+                Assert.That(bounds.min.y, Is.EqualTo(0f).Within(light.Radius * 0.05f),
+                    "The Spot cone apex row should sit at the transform origin.");
+                Assert.That(bounds.max.y, Is.EqualTo(light.Radius).Within(light.Radius * 0.05f),
+                    "The Spot cone should reach one Radius past its apex.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(light.gameObject);
+            }
+        }
+
+        [Test]
+        public void LineMeshIsSizedByLengthAndThrow()
         {
             var light = CreateLight();
             try
             {
                 light.Type = LightSprite.LightType.Line;
+                light.Length = 6f;
+                light.Throw = 2f;
+                light.Sides = LightSprite.LightSides.Both;
                 Rebuild(light);
-                Assert.That(light.Shape, Is.EqualTo(LightSprite.LightShape.Line));
+
+                Bounds both = light.Mesh.bounds;
+                Assert.That(both.size.x, Is.EqualTo(6f).Within(0.05f), "Length sizes the bar along X.");
+                Assert.That(both.size.y, Is.EqualTo(4f).Within(0.05f),
+                    "A two-sided Line reaches Throw above and below the segment.");
+
+                // A one-sided Line keeps the segment at the origin and only extends to +Throw (Front).
+                light.Sides = LightSprite.LightSides.Front;
+                Rebuild(light);
+                Bounds front = light.Mesh.bounds;
+                Assert.That(front.size.y, Is.EqualTo(2f).Within(0.05f), "Front reaches only Throw on one side.");
+                Assert.That(front.min.y, Is.EqualTo(0f).Within(0.05f), "Front keeps the emitting segment at the origin.");
+                Assert.That(front.max.y, Is.EqualTo(2f).Within(0.05f));
             }
             finally
             {
@@ -215,11 +292,11 @@ namespace Light2D.Tests
             {
                 light.Radius = 2f;
                 Rebuild(light);
-                var size2 = light.Renderer.bounds.size.x;
+                var size2 = light.WorldBounds.size.x;
 
                 light.Radius = 4f;
                 Rebuild(light);
-                var size4 = light.Renderer.bounds.size.x;
+                var size4 = light.WorldBounds.size.x;
 
                 Assert.That(size2, Is.GreaterThan(0f));
                 Assert.That(size4, Is.EqualTo(size2 * 2f).Within(size2 * 0.05f));
