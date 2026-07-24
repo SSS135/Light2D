@@ -3,21 +3,14 @@
 </p>
 
 <p align="center">
-  <img src="docs/readme/sample-light-volume.png" width="49%" alt="Light Volume sample: a bright daylight overworld above a dark cave where a lantern casts warm light. A Light2DVolume confines the lighting to the cave.">
-  <img src="docs/readme/sample-small-examples.png" width="49%" alt="Small Examples sample: point lights in many colors wash a normal-mapped brick wall while floating brick blocks glow and cast colored shadows.">
+  <img src="docs/media/hero.gif" width="100%" alt="Rocket sample: a small lander flies through a dark pixelated cave, its thruster flame and glowing red, purple, and green crystals lighting the terrain and casting moving shadows as it moves.">
 </p>
 
-<p align="center"><i>Real in-engine captures from the bundled samples: a <code>Light2DVolume</code> keeps the lighting inside the cave while the overworld shows its raw art (left); colored point lights wash a normal-mapped brick wall in the Small Examples scene (right).</i></p>
+<p align="center"><i>The <b>Rocket</b> sample, recorded live in-engine: a lander threads a dark cave while its thruster flame and glowing red, purple, and green crystals light the terrain and cast moving shadows in real time.</i></p>
 
 Light2D is a GPU-based dynamic 2D lighting package for Unity with a distinctive look: colored per-channel light transmission through obstacles, soft ambient bounce, and collider-free occlusion authored straight from your sprites, meshes, and tiles. Lights and obstacles move freely at runtime and need no physics colliders. One package drives both the Built-in Render Pipeline and URP 17.3+ on Unity 6000.3 or newer, under the MIT license.
 
 ## Showcase
-
-<p align="center">
-  <img src="docs/media/hero.gif" width="100%" alt="Rocket sample: a small lander flies through a dark pixelated cave, its thruster flame and glowing red, purple, and green crystals lighting the terrain and casting moving shadows as it moves.">
-</p>
-
-<p align="center"><i>The <b>Rocket</b> sample: a lander threads a dark cave while its thruster flame and glowing red, purple, and green crystals light the terrain and cast moving shadows in real time.</i></p>
 
 All of these are live in-engine recordings from the bundled <b>Examples</b> sample:
 
@@ -108,14 +101,16 @@ Unity has announced Built-in's deprecation, so new projects should target URP. C
 
 ## Samples
 
-![Rocket sample: a lander with glowing thrusters descending through a dark cave lit by colored particle lights](Packages/com.sss13594.light2d/Documentation~/Images/overall.png)
+<p align="center">
+  <img src="docs/readme/sample-light-volume.png" width="80%" alt="Light Volume sample: a bright daylight overworld above a dark cave where a lantern casts warm light. A Light2DVolume confines the lighting to the cave.">
+</p>
 
 Import **Examples** from the package's Samples list in Package Manager:
 
 - **Small Examples** cycles through direct lights, sprite and mesh obstacles, ambient emitters, and normal mapping.
-- **Rocket** is a playable lander in a colored-light cave with generated obstacle meshes (pictured above).
+- **Rocket** is a playable lander in a colored-light cave with generated obstacle meshes (the hero clip above).
 - **Rocket Tilemap** rebuilds the same cave from a `Tilemap` with the texture-aware obstacle.
-- **Light Volume** is the "bright overworld, dark cave" coverage-volume demo.
+- **Light Volume** is the "bright overworld, dark cave" coverage-volume demo (pictured above): the `Light2DVolume` keeps the lighting inside the cave while the overworld shows its raw art.
 
 ## This repository
 
