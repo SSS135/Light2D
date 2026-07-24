@@ -56,14 +56,22 @@ namespace Light2D
                  "LightingSystem's HDR enabled to avoid clamping (default 1).")]
         public float Intensity = 1f;
 
-        [Tooltip("Edge hardness of the generated falloff texture, 0 soft to 1 hard (default 0.5). " +
-                 "Ignored when a Sprite override is assigned.")]
-        [Range(0f, 1f)]
+        [Tooltip("Shape of the generated falloff texture (default 0.5). 0..1 is edge hardness as before " +
+                 "(0 soft, 1 hard); below 0 morphs toward a progressively longer, dimmer inverse-square-style " +
+                 "tail (softer than 0). Ignored when a Sprite override is assigned.")]
+        [Range(-1f, 1f)]
         public float Falloff = 0.5f;
 
-        [Tooltip("Cone angle in degrees, used when Type is Spot (default 45).")]
-        [Range(1f, 179f)]
+        [Tooltip("Cone angle in degrees for Spot (default 45). Up to 180 it is a cone whose apex sits at the " +
+                 "origin; past 180 the emission origin migrates toward the centre and the shape opens up, " +
+                 "becoming a full Point light at 360.")]
+        [Range(1f, 360f)]
         public float SpotAngle = 45f;
+
+        [Tooltip("Angular penumbra for Spot, in degrees: how many degrees the cone edge takes to fade, " +
+                 "independent of the radial Falloff. Negative means Auto - derive the edge softness from " +
+                 "Falloff exactly as before (default). 0 is a hard edge; 180 fades across the whole half-cone.")]
+        public float SpotSoftness = -1f;
 
         [Tooltip("Ray-march shadow quality; the editor maps it to the light material. Custom hands the " +
                  "Material slot back to you (default Balanced).")]
@@ -79,9 +87,11 @@ namespace Light2D
         private float _oldIntensity;
         private float _oldFalloff;
         private float _oldSpotAngle;
+        private float _oldSpotSoftness;
         private float _oldLength;
         private float _oldThrow;
         private LightSides _oldSides;
+        private ShadowQuality _oldShadows;
 
         public static LightSprite[] AllLightSprites { get { return CreateSnapshot(); } }
 
@@ -100,8 +110,24 @@ namespace Light2D
             {
                 return Sprite != null
                     ? Sprite
-                    : Light2DLightTextureGenerator.GetSprite(Type, Falloff, SpotAngle, Sides);
+                    : Light2DLightTextureGenerator.GetSprite(Type, Falloff, SpotAngle, Sides, SpotSoftness);
             }
+        }
+
+        // Lights auto-resolve their draw material from Shadows so a LightSprite "just works" with no Material
+        // assigned (the register-and-draw core draws through DrawMaterial in both backends). An explicitly
+        // assigned Material always wins - the custom-shader escape, or a serialized preset asset from a scene
+        // authored before auto-resolution. Shadows == Custom has no preset, so a null Custom slot falls back
+        // to the base Sprites/Default path (the one remaining wrong-blend case the inspector warns about);
+        // every other quality resolves its packaged preset material (editor asset load / build-safe shader).
+        protected override Material ResolveBaseMaterial()
+        {
+            if (Material != null)
+                return Material;
+            if (Shadows == ShadowQuality.Custom)
+                return base.ResolveBaseMaterial();
+            var preset = Light2DLightPresets.ResolvePresetMaterial(Shadows);
+            return preset != null ? preset : base.ResolveBaseMaterial();
         }
 
         // Fold Intensity into rgb (the authored texture alpha stays intact). The Float32 vertex-color
@@ -227,6 +253,14 @@ namespace Light2D
                 _uv1[i] = uv;
         }
 
+        // Spot->Point morph parameter shared by the falloff generator, the mesh lift, and the Scene gizmo so
+        // they migrate in lockstep: 0 for SpotAngle <= 180 (a cone with its apex at the origin), rising
+        // linearly to 1 at 360 (a Point-style radial light centred on the origin).
+        internal static float SpotOriginBlend(float spotAngle)
+        {
+            return Mathf.Clamp01((spotAngle - 180f) / 180f);
+        }
+
         // Reshapes the copied sprite quad per Type. Point keeps the centered quad; Spot lifts it so the
         // generated cone's apex row (the sprite's bottom edge) sits at the LightOrigin-corrected transform
         // origin; Line rebuilds it as a Length-by-Throw bar with the emitting segment placed by Sides.
@@ -246,10 +280,17 @@ namespace Light2D
                 {
                     if (sprite == null)
                         return vertex * scale;
+                    // The legacy lift baked the cone apex (the sprite's bottom edge, nudged by LightOrigin) to
+                    // the transform origin. Origin migration fades that whole lift out as the Spot morphs to a
+                    // Point: at blend == 0 (SpotAngle <= 180) the offsets are exactly the legacy values, so the
+                    // apex stays at the origin; at blend == 1 (360) both offsets are zero, so the quad is
+                    // centred exactly like Point (vertex * scale). Across the range the emission origin stays
+                    // pinned to the LightOrigin-corrected transform (see the derivation in UpdatePosition).
                     var size = sprite.bounds.size * scale;
-                    var offsetX = LightOrigin.x * size.x;
-                    var offsetY = LightOrigin.y * size.y - sprite.bounds.min.y * scale;
-                    return vertex * scale + new Vector3(offsetX, offsetY, 0f);
+                    var legacyOffsetX = LightOrigin.x * size.x;
+                    var legacyOffsetY = LightOrigin.y * size.y - sprite.bounds.min.y * scale;
+                    var blend = 1f - SpotOriginBlend(SpotAngle);
+                    return vertex * scale + new Vector3(legacyOffsetX * blend, legacyOffsetY * blend, 0f);
                 }
                 default:
                     return vertex * scale;
@@ -266,9 +307,12 @@ namespace Light2D
             // Radius/Intensity/Falloff/SpotAngle, the Line dimensions (Length/Throw/Sides), and Type each
             // change alone and must rebuild the mesh or repaint. LightOrigin also rebuilds the mesh because
             // the Spot apex offset is baked into the vertices.
+            // Shadows drives only the resolved draw material, not geometry, but it re-resolves through the
+            // shared UpdateSprite path, so a change must force the base rebuild that re-runs material resolution.
             var lightDataDirty = lightTypeChanged || _oldRadius != Radius || _oldIntensity != Intensity ||
-                _oldFalloff != Falloff || _oldSpotAngle != SpotAngle || _oldLength != Length ||
-                _oldThrow != Throw || _oldSides != Sides || _oldLightOrigin != LightOrigin;
+                _oldFalloff != Falloff || _oldSpotAngle != SpotAngle || _oldSpotSoftness != SpotSoftness ||
+                _oldLength != Length || _oldThrow != Throw || _oldSides != Sides ||
+                _oldLightOrigin != LightOrigin || _oldShadows != Shadows;
 
             var activeSprite = ActiveSprite;
             var matrix = transform.localToWorldMatrix;
@@ -287,9 +331,11 @@ namespace Light2D
             _oldIntensity = Intensity;
             _oldFalloff = Falloff;
             _oldSpotAngle = SpotAngle;
+            _oldSpotSoftness = SpotSoftness;
             _oldLength = Length;
             _oldThrow = Throw;
             _oldSides = Sides;
+            _oldShadows = Shadows;
             _oldLightType = Type;
             UpdatePosition(_xzPlane);
             _isMeshDirty = true;

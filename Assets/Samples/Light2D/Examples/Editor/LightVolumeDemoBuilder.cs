@@ -44,7 +44,6 @@ namespace Light2D.Examples
     ///
     /// Run headlessly with:
     ///   -executeMethod Light2D.Examples.LightVolumeDemoBuilder.Build
-    /// or via the menu "Light2D/Samples/Build Light Volume Scene".
     /// </summary>
     internal static class LightVolumeDemoBuilder
     {
@@ -133,7 +132,6 @@ namespace Light2D.Examples
         private const int HaloOrder = 8;
         private const int LanternOrder = 10;
 
-        [MenuItem("Light2D/Samples/Build Light Volume Scene")]
         public static void Build()
         {
             try

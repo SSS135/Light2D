@@ -138,15 +138,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 61930e16e81db5c43a4ecc22422a0953, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Color: {r: 1, g: 1, b: 0, a: 0.5019608}
-  Sprite: {fileID: 21300000, guid: 0846a06dcf035814d9cee71f4ba273f9, type: 3}
+  Color: {r: 1, g: 1, b: 0, a: 1}
+  Sprite: {fileID: 0}
   SortingOrder: 0
   Material: {fileID: 2100000, guid: ab37f3042fbc56e4b9288c3ba9cd32d8, type: 2}
   LightOrigin: {x: 0, y: 0}
   NormalMapHeight: 1
   Owner: {fileID: 0}
   Type: 0
-  Radius: 3
+  Radius: 8
   Length: 3
   Throw: 1.5
   Sides: 0
@@ -166,7 +166,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 435061a9fe66bef4c9efaec9164d81db, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MinRadius: 10
+  MinRadius: 20
   MaxRadius: 35
   MinLightAlpha: 0.4
   MaxLightAlpha: 0.8

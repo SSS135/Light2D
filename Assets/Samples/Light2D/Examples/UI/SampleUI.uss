@@ -1,0 +1,149 @@
+/* SampleUI.uss - overlay styling for the Light2D samples, rebuilt with UI Toolkit.
+   Reproduces the legacy uGUI look: a translucent dark hint panel with small medium-grey rich text,
+   and translucent grey rounded touch buttons with large grey labels. */
+
+.sample-ui-root {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+/* Top-left column stacking the feature label above the keyboard hint. */
+.top-left-stack {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    flex-direction: column;
+    align-items: flex-start;
+    max-width: 460px;
+}
+
+/* Feature label: what this example demonstrates. A dark, fairly opaque panel with light text so it
+   stays readable over any game background (bright sky or dark cave alike). */
+.feature-label {
+    padding-top: 6px;
+    padding-right: 12px;
+    padding-bottom: 6px;
+    padding-left: 12px;
+    margin-bottom: 6px;
+    background-color: rgba(0, 0, 0, 0.62);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    color: rgb(235, 235, 235);
+    font-size: 16px;
+    white-space: normal;
+    -unity-text-align: upper-left;
+}
+
+/* Keyboard hint below the label: same dark readable panel, slightly smaller muted text, bold key
+   names via rich text. */
+.hint-block {
+    padding-top: 6px;
+    padding-right: 10px;
+    padding-bottom: 6px;
+    padding-left: 10px;
+    background-color: rgba(0, 0, 0, 0.55);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    color: rgb(200, 200, 200);
+    font-size: 14px;
+    -unity-text-align: upper-left;
+    white-space: normal;
+}
+
+/* Full-screen container for the touch cluster; it ignores pointers so only the buttons are hit.
+   Hidden by default so desktop never flashes the touch pad; the controller reveals it on mobile. */
+.touch-controls {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+}
+
+/* Translucent grey rounded button with a large grey centered label. Directional buttons wrap a Label
+   child and inherit color/font; action buttons (Button) render their own text with the same style. */
+.touch-button {
+    width: 130px;
+    height: 130px;
+    margin-top: 6px;
+    margin-right: 6px;
+    margin-bottom: 6px;
+    margin-left: 6px;
+    padding-top: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+    background-color: rgba(255, 255, 255, 0.19);
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    color: rgb(142, 142, 142);
+    font-size: 40px;
+    -unity-text-align: middle-center;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Keep the translucent look on hover, and lighten slightly on press for feedback, instead of the
+   default theme button tints. */
+.touch-button:hover {
+    background-color: rgba(255, 255, 255, 0.19);
+}
+
+.touch-button:active {
+    background-color: rgba(255, 255, 255, 0.30);
+}
+
+.touch-button__label {
+    color: rgb(142, 142, 142);
+    font-size: 40px;
+    -unity-text-align: middle-center;
+}
+
+/* Restart is a wider button centered at the top of the touch cluster. */
+.restart-row {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    right: 0;
+    flex-direction: row;
+    justify-content: center;
+}
+
+.restart-button {
+    width: 210px;
+    height: 64px;
+}
+
+/* Up over Down, flush to the bottom-left corner. */
+.cluster-left {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    flex-direction: column;
+}
+
+/* Flare/Legs over Left/Right, flush to the bottom-right corner. */
+.cluster-right {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    flex-direction: column;
+}
+
+.cluster-row {
+    flex-direction: row;
+}

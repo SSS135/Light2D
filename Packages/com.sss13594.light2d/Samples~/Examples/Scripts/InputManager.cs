@@ -11,8 +11,21 @@ namespace Light2D.Examples
         public GameObject TouchControls;
         public ButtonHelper UpButton, DownButton, LeftButton, RightButton;
 
+        // Optional UI Toolkit controller. When assigned, its held-state and click signals are ORed with
+        // the legacy ButtonHelper path so both input surfaces work while scenes are migrated. It manages
+        // its own touch-pad visibility, so the legacy TouchControls toggle below is only for the uGUI
+        // scenes that have not been converted yet.
+        public SampleUiController Ui;
+
         private IEnumerator Start()
         {
+            if (Ui != null)
+            {
+                Ui.FlareClicked += FlareClick;
+                Ui.LegsClicked += LegsClick;
+                Ui.RestartClicked += Restart;
+            }
+
             if (TouchControls != null)
                 TouchControls.SetActive(Application.isMobilePlatform && SampleInput.TouchSupported);
 
@@ -38,10 +51,10 @@ namespace Light2D.Examples
             ControlledSpacecraft.SideLeftEngine.ForcePercent = 0;
 
             var moveDir = Vector2.zero;
-            if (SampleInput.GetKey(KeyCode.UpArrow) || IsPressed(UpButton)) moveDir += Vector2.up;
-            if (SampleInput.GetKey(KeyCode.DownArrow) || IsPressed(DownButton)) moveDir += Vector2.down;
-            if (SampleInput.GetKey(KeyCode.RightArrow) || IsPressed(RightButton)) moveDir += Vector2.right;
-            if (SampleInput.GetKey(KeyCode.LeftArrow) || IsPressed(LeftButton)) moveDir += Vector2.left;
+            if (SampleInput.GetKey(KeyCode.UpArrow) || SampleInput.GetKey(KeyCode.W) || IsPressed(UpButton) || (Ui != null && Ui.UpHeld)) moveDir += Vector2.up;
+            if (SampleInput.GetKey(KeyCode.DownArrow) || SampleInput.GetKey(KeyCode.S) || IsPressed(DownButton) || (Ui != null && Ui.DownHeld)) moveDir += Vector2.down;
+            if (SampleInput.GetKey(KeyCode.RightArrow) || SampleInput.GetKey(KeyCode.D) || IsPressed(RightButton) || (Ui != null && Ui.RightHeld)) moveDir += Vector2.right;
+            if (SampleInput.GetKey(KeyCode.LeftArrow) || SampleInput.GetKey(KeyCode.A) || IsPressed(LeftButton) || (Ui != null && Ui.LeftHeld)) moveDir += Vector2.left;
 
             ControlledSpacecraft.BottomLeftEngine.ForcePercent = moveDir.y*2f + moveDir.x;
             ControlledSpacecraft.BottomRightEngine.ForcePercent = moveDir.y*2f - moveDir.x;
@@ -69,6 +82,16 @@ namespace Light2D.Examples
         public void Restart()
         {
             SceneManager.LoadScene(gameObject.scene.name);
+        }
+
+        private void OnDestroy()
+        {
+            if (Ui != null)
+            {
+                Ui.FlareClicked -= FlareClick;
+                Ui.LegsClicked -= LegsClick;
+                Ui.RestartClicked -= Restart;
+            }
         }
 
         private static bool IsPressed(ButtonHelper button)

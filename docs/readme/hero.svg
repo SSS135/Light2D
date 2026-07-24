@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="400" viewBox="0 0 1200 400"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Light2D: GPU dynamic 2D lighting for Unity 6</title>
+  <desc id="desc">A dark vector cave scene with a small rocket lander held in a magenta light beam, a warm lantern glow, a cyan point light, and rim-lit blocky cave walls. The text reads: Light2D. Colored light through obstacles, soft ambient bounce, and collider-free shadows straight from your sprites, meshes, and tiles. Built-in RP + URP 17, Unity 6000.3+, UPM, MIT.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#04050B"/>
+      <stop offset="1" stop-color="#0B0D16"/>
+    </linearGradient>
+    <linearGradient id="mark2d" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFC44D"/>
+      <stop offset="1" stop-color="#C86BFF"/>
+    </linearGradient>
+    <radialGradient id="warmGlow">
+      <stop offset="0" stop-color="#FFD87A" stop-opacity="0.9"/>
+      <stop offset="0.45" stop-color="#FFB347" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FFB347" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="magentaGlow">
+      <stop offset="0" stop-color="#E9A8FF" stop-opacity="0.85"/>
+      <stop offset="0.5" stop-color="#C86BFF" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#C86BFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cyanGlow">
+      <stop offset="0" stop-color="#CFF3FF" stop-opacity="0.9"/>
+      <stop offset="0.4" stop-color="#56D9FF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#56D9FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="thrusterGlow">
+      <stop offset="0" stop-color="#FFF3C4" stop-opacity="0.95"/>
+      <stop offset="0.4" stop-color="#FFC06B" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#FFC06B" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="400" rx="24" fill="url(#bg)"/>
+
+  <g id="stars" fill="#EAF2FF">
+    <circle cx="712" cy="34" r="1.6" opacity="0.5"/>
+    <circle cx="806" cy="72" r="1.2" opacity="0.35"/>
+    <circle cx="878" cy="26" r="1.8" opacity="0.55"/>
+    <circle cx="960" cy="96" r="1.2" opacity="0.3"/>
+    <circle cx="1146" cy="52" r="1.5" opacity="0.45"/>
+    <circle cx="1042" cy="120" r="1.2" opacity="0.3"/>
+    <circle cx="756" cy="150" r="1.4" opacity="0.35"/>
+    <circle cx="664" cy="96" r="1.2" opacity="0.3"/>
+    <circle cx="1108" cy="150" r="1.3" opacity="0.3"/>
+    <circle cx="920" cy="180" r="1.1" opacity="0.25"/>
+    <circle cx="130" cy="330" r="1.2" opacity="0.2"/>
+    <circle cx="360" cy="352" r="1.2" opacity="0.2"/>
+    <circle cx="608" cy="52" r="1.3" opacity="0.3"/>
+  </g>
+
+  <!-- soft ambient fill over the scene half -->
+  <ellipse cx="840" cy="210" rx="430" ry="210" fill="url(#warmGlow)" opacity="0.06"/>
+
+  <!-- magenta light beam from the upper right -->
+  <g id="beam">
+    <polygon points="1010,-10 1120,-10 1180,400 700,400" fill="#C86BFF" opacity="0.10"/>
+    <polygon points="1032,-10 1096,-10 1092,400 832,400" fill="#D98CFF" opacity="0.12"/>
+    <circle cx="1064" cy="8" r="130" fill="url(#magentaGlow)" opacity="0.55"/>
+  </g>
+
+  <!-- cyan point light -->
+  <g id="cyan-light">
+    <circle cx="812" cy="262" r="78" fill="url(#cyanGlow)" opacity="0.6"/>
+    <circle cx="812" cy="262" r="3.5" fill="#CFF3FF"/>
+  </g>
+
+  <!-- rocket lander held in the beam -->
+  <g id="rocket" transform="translate(70 0)">
+    <circle cx="935" cy="182" r="58" fill="url(#thrusterGlow)" opacity="0.75"/>
+    <polygon points="935,94 959,120 959,164 911,164 911,120" fill="#B9BDC6"/>
+    <polygon points="935,94 959,120 959,164 935,164" fill="#8F949F"/>
+    <circle cx="935" cy="134" r="7" fill="#9FE8FF" opacity="0.95"/>
+    <line x1="913" y1="162" x2="893" y2="194" stroke="#8A8F99" stroke-width="4" stroke-linecap="round"/>
+    <line x1="957" y1="162" x2="977" y2="194" stroke="#8A8F99" stroke-width="4" stroke-linecap="round"/>
+    <polygon points="924,166 946,166 935,196" fill="#FFD27A" opacity="0.9"/>
+    <polygon points="929,166 941,166 935,183" fill="#FFF3C4"/>
+  </g>
+
+  <!-- lantern light on the cave floor -->
+  <g id="lantern">
+    <circle cx="655" cy="348" r="150" fill="url(#warmGlow)" opacity="0.7"/>
+    <rect x="648" y="336" width="14" height="18" rx="3" fill="#2A2620"/>
+    <rect x="651.5" y="340" width="7" height="10" rx="1.5" fill="#FFD87A"/>
+  </g>
+
+  <!-- particle sparkles near the lights -->
+  <g id="sparkles">
+    <circle cx="628" cy="316" r="1.8" fill="#FFD87A" opacity="0.6"/>
+    <circle cx="688" cy="326" r="1.5" fill="#FFD87A" opacity="0.5"/>
+    <circle cx="668" cy="300" r="1.3" fill="#FFE9B0" opacity="0.45"/>
+    <circle cx="1030" cy="230" r="1.8" fill="#E9A8FF" opacity="0.55"/>
+    <circle cx="988" cy="286" r="1.4" fill="#D98CFF" opacity="0.45"/>
+    <circle cx="822" cy="238" r="1.4" fill="#CFF3FF" opacity="0.5"/>
+  </g>
+
+  <!-- blocky cave silhouettes with rim lighting -->
+  <g id="cave">
+    <path d="M1200 150 L1160 150 L1160 178 L1128 178 L1128 210 L1148 210 L1148 244 L1116 244 L1116 280 L1090 280 L1090 316 L1120 316 L1120 352 L1150 352 L1150 400 L1200 400 Z" fill="#0D0F17"/>
+    <path d="M540 400 L540 378 L588 378 L588 356 L640 356 L640 372 L700 372 L700 350 L760 350 L760 368 L828 368 L828 344 L888 344 L888 362 L952 362 L952 340 L1010 340 L1010 400 Z" fill="#0C0E15"/>
+    <path d="M0 400 L0 372 L44 372 L44 386 L96 386 L96 400 Z" fill="#0C0E15"/>
+    <polyline points="1160,150 1160,178 1128,178 1128,210 1148,210 1148,244 1116,244 1116,280 1090,280" fill="none" stroke="#FF6E58" stroke-width="2.5" opacity="0.32"/>
+    <polyline points="588,356 640,356 640,372 700,372 700,350 760,350" fill="none" stroke="#FFC44D" stroke-width="2" opacity="0.38"/>
+    <polyline points="828,344 888,344 888,362 952,362 952,340 1010,340" fill="none" stroke="#D98CFF" stroke-width="2" opacity="0.3"/>
+  </g>
+
+  <g id="title-block" transform="translate(64 58)">
+    <ellipse cx="190" cy="86" rx="250" ry="80" fill="url(#warmGlow)" opacity="0.12"/>
+    <text x="0" y="20" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" letter-spacing="4" fill="#94A0B4">UNITY 6 · GPU DYNAMIC 2D LIGHTING</text>
+    <text x="0" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="96" font-weight="800" fill="#F4F1E8">Light<tspan fill="url(#mark2d)">2D</tspan></text>
+    <text x="0" y="176" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="26" fill="#C9CFDA">Colored light through obstacles, soft ambient</text>
+    <text x="0" y="212" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="26" fill="#C9CFDA">bounce, and collider-free shadows straight</text>
+    <text x="0" y="248" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="26" fill="#C9CFDA">from your sprites, meshes, and tiles.</text>
+    <text x="0" y="300" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="19" fill="#8B96A8">Built-in RP + URP 17 · Unity 6000.3+ · UPM · MIT</text>
+  </g>
+</svg>

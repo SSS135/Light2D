@@ -197,6 +197,10 @@ namespace Light2D.Examples
                 case KeyCode.DownArrow: return keyboard.downArrowKey;
                 case KeyCode.LeftArrow: return keyboard.leftArrowKey;
                 case KeyCode.RightArrow: return keyboard.rightArrowKey;
+                case KeyCode.W: return keyboard.wKey;
+                case KeyCode.A: return keyboard.aKey;
+                case KeyCode.S: return keyboard.sKey;
+                case KeyCode.D: return keyboard.dKey;
                 case KeyCode.Space: return keyboard.spaceKey;
                 case KeyCode.F1: return keyboard.f1Key;
                 case KeyCode.R: return keyboard.rKey;

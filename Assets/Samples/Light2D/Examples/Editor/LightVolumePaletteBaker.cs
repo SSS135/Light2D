@@ -30,7 +30,7 @@ namespace Light2D.Examples
     ///
     /// Run headlessly with:
     ///   -executeMethod Light2D.Examples.LightVolumePaletteBaker.Bake
-    /// or via the menu "Light2D/Samples/Bake Light Volume Palette". This whole file is gated on LIGHT2D_TILEMAP,
+    /// This whole file is gated on LIGHT2D_TILEMAP,
     /// which the sample Editor asmdef defines only when com.unity.2d.tilemap is installed (the same gate
     /// RocketTilemapBaker and LightVolumeDemoBuilder use).
     /// </summary>
@@ -51,7 +51,6 @@ namespace Light2D.Examples
         private static readonly Vector3 CellSize = new Vector3(1f, 1f, 0f);
         private static readonly Vector3 SortAxis = new Vector3(0f, 0f, 1f);
 
-        [MenuItem("Light2D/Samples/Bake Light Volume Palette")]
         public static void Bake()
         {
             try

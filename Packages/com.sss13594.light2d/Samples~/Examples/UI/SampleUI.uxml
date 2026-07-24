@@ -1,0 +1,36 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="SampleUI.uss" />
+    <ui:VisualElement name="root" class="sample-ui-root" picking-mode="Ignore">
+        <ui:VisualElement name="top-left-stack" class="top-left-stack" picking-mode="Ignore">
+            <ui:Label name="feature-label" class="feature-label" picking-mode="Ignore" />
+            <ui:Label name="hint-block" class="hint-block" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:VisualElement name="touch-controls" class="touch-controls" picking-mode="Ignore">
+            <ui:VisualElement name="restart-row" class="restart-row" picking-mode="Ignore">
+                <ui:Button name="restart-button" text="Restart" class="touch-button restart-button" />
+            </ui:VisualElement>
+            <ui:VisualElement name="cluster-left" class="cluster-left" picking-mode="Ignore">
+                <ui:VisualElement name="up-button" class="touch-button">
+                    <ui:Label text="Up" class="touch-button__label" picking-mode="Ignore" />
+                </ui:VisualElement>
+                <ui:VisualElement name="down-button" class="touch-button">
+                    <ui:Label text="Down" class="touch-button__label" picking-mode="Ignore" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement name="cluster-right" class="cluster-right" picking-mode="Ignore">
+                <ui:VisualElement name="cluster-right-top" class="cluster-row" picking-mode="Ignore">
+                    <ui:Button name="flare-button" text="Flare" class="touch-button" />
+                    <ui:Button name="legs-button" text="Legs" class="touch-button" />
+                </ui:VisualElement>
+                <ui:VisualElement name="cluster-right-bottom" class="cluster-row" picking-mode="Ignore">
+                    <ui:VisualElement name="left-button" class="touch-button">
+                        <ui:Label text="Left" class="touch-button__label" picking-mode="Ignore" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="right-button" class="touch-button">
+                        <ui:Label text="Right" class="touch-button__label" picking-mode="Ignore" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

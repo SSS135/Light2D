@@ -65,5 +65,121 @@ namespace Light2D.Tests
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
             Assert.That(material, Is.Not.Null, path);
         }
+
+        // Auto-resolution surface: every non-Custom quality resolves a light material whose shader is the
+        // ray-march light shader for that preset (never Sprites/Default), so a null Material "just works".
+        [TestCase(LightSprite.ShadowQuality.Fast, "Light2D/Light Points")]
+        [TestCase(LightSprite.ShadowQuality.Balanced, "Light2D/Light Points")]
+        [TestCase(LightSprite.ShadowQuality.High, "Light2D/Light Points")]
+        [TestCase(LightSprite.ShadowQuality.Auto, "Light2D/Light Auto Points")]
+        [TestCase(LightSprite.ShadowQuality.IgnoreObstacles, "Light2D/Light Ignoring Obstacles")]
+        public void ResolvePresetMaterialUsesTheLightShaderForEachPreset(LightSprite.ShadowQuality quality,
+            string shaderName)
+        {
+            var material = Light2DLightPresets.ResolvePresetMaterial(quality);
+            Assert.That(material, Is.Not.Null);
+            Assert.That(material.shader, Is.Not.Null);
+            Assert.That(material.shader.name, Is.EqualTo(shaderName));
+        }
+
+        [Test]
+        public void ResolvePresetMaterialForCustomIsNull()
+        {
+            Assert.That(Light2DLightPresets.ResolvePresetMaterial(LightSprite.ShadowQuality.Custom), Is.Null);
+        }
+
+        // The defect this fix closes: a programmatically added light with default Shadows (Balanced) and no
+        // Material must resolve a real ray-march light draw material, NOT the alpha-blending Sprites/Default
+        // that stamped darkness into the light-sources texture.
+        [Test]
+        public void NullMaterialWithDefaultShadowsResolvesLightShaderNotSpritesDefault()
+        {
+            var lightObject = new GameObject("Auto-resolving light");
+            try
+            {
+                var light = lightObject.AddComponent<LightSprite>();
+                Assert.That(light.Shadows, Is.EqualTo(LightSprite.ShadowQuality.Balanced));
+                Assert.That(light.Material, Is.Null, "The light must resolve with no Material assigned");
+                light.SendMessage("Update");
+
+                var drawMaterial = light.DrawMaterial;
+                Assert.That(drawMaterial, Is.Not.Null,
+                    "A null-Material light with a preset quality must still resolve a draw material");
+                Assert.That(drawMaterial.shader.name, Is.EqualTo("Light2D/Light Points"));
+                Assert.That(drawMaterial.shader.name, Is.Not.EqualTo("Sprites/Default"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(lightObject);
+            }
+        }
+
+        // Switching Shadows re-resolves the draw material at runtime (dirty-tracked), so IgnoreObstacles
+        // picks up its own shader even with the Material slot left empty the whole time.
+        [Test]
+        public void ChangingShadowsReResolvesTheDrawMaterial()
+        {
+            var lightObject = new GameObject("Shadows-switching light");
+            try
+            {
+                var light = lightObject.AddComponent<LightSprite>();
+                light.SendMessage("Update");
+                Assert.That(light.DrawMaterial.shader.name, Is.EqualTo("Light2D/Light Points"));
+
+                light.Shadows = LightSprite.ShadowQuality.IgnoreObstacles;
+                light.SendMessage("Update");
+                Assert.That(light.Material, Is.Null, "Auto-resolution must not populate the Material slot");
+                Assert.That(light.DrawMaterial.shader.name, Is.EqualTo("Light2D/Light Ignoring Obstacles"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(lightObject);
+            }
+        }
+
+        // Precedence: an explicitly assigned Material always wins over Shadows auto-resolution.
+        [Test]
+        public void ExplicitMaterialTakesPrecedenceOverShadows()
+        {
+            var lightObject = new GameObject("Explicit-material light");
+            var explicitMaterial = new Material(Shader.Find("Sprites/Default"));
+            try
+            {
+                var light = lightObject.AddComponent<LightSprite>();
+                light.Shadows = LightSprite.ShadowQuality.Balanced;
+                light.Material = explicitMaterial;
+                light.SendMessage("Update");
+
+                // The generated draw material clones the explicit base material's shader, not the preset.
+                Assert.That(light.DrawMaterial.shader.name, Is.EqualTo("Sprites/Default"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(lightObject);
+                UnityEngine.Object.DestroyImmediate(explicitMaterial);
+            }
+        }
+
+        // The one remaining fallback: Custom with no Material still uses Sprites/Default (the case the
+        // inspector warns about), so the Custom raw-slot escape keeps working.
+        [Test]
+        public void CustomShadowsWithNullMaterialFallsBackToSpritesDefault()
+        {
+            var lightObject = new GameObject("Custom-no-material light");
+            try
+            {
+                var light = lightObject.AddComponent<LightSprite>();
+                light.Shadows = LightSprite.ShadowQuality.Custom;
+                light.Material = null;
+                light.SendMessage("Update");
+
+                Assert.That(light.DrawMaterial, Is.Not.Null);
+                Assert.That(light.DrawMaterial.shader.name, Is.EqualTo("Sprites/Default"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(lightObject);
+            }
+        }
     }
 }

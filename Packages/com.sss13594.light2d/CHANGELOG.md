@@ -36,8 +36,9 @@ line; the package version is unchanged.
 ### Added
 
 - First-class `LightSprite` authoring fields: `LightType` (Point/Spot/Line),
-  `Radius`, `Intensity`, an HDR light color, `Falloff` (edge hardness), `SpotAngle`,
-  and `ShadowQuality`.
+  `Radius`, `Intensity`, an HDR light color, `Falloff` (edge hardness over `0..1`,
+  or a progressively longer/dimmer inverse-square-style tail over `-1..0`),
+  `SpotAngle`, and `ShadowQuality`.
 - Procedurally generated light falloff textures — no light bitmaps are shipped —
   shared, cached, and LRU-bounded across lights with matching parameters. An
   assigned `Sprite` overrides the generated falloff.

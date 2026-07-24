@@ -157,8 +157,17 @@ namespace Light2D
             if (sprite == null)
                 return null;
 
-            var baseMaterial = Material != null ? Material : GetOrCreateDefaultSpriteMaterial();
+            var baseMaterial = ResolveBaseMaterial();
             return AcquireMaterial(baseMaterial, sprite.texture, out _oldMaterialKey);
+        }
+
+        // The base material the per-draw generated material is cloned from. Base sprites draw with the
+        // explicitly assigned Material, or a generated Sprites/Default when none is set. Subclasses (lights)
+        // override this to auto-resolve a role-appropriate default from their own settings, so the component
+        // "just works" with no Material assigned instead of alpha-blending through Sprites/Default.
+        protected virtual Material ResolveBaseMaterial()
+        {
+            return Material != null ? Material : GetOrCreateDefaultSpriteMaterial();
         }
 
         private static Material GetOrCreateDefaultSpriteMaterial()

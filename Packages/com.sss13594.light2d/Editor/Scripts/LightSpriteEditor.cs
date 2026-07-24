@@ -11,12 +11,14 @@ namespace Light2D
     /// per Type (the Radius disc for Point, the cone for Spot, the bar for Line), and warns about the common
     /// setup traps (no light material, no LightingSystem, overbright without HDR) with one-click fixes.
     ///
-    /// The <c>Shadows</c> popup is a view over the real <see cref="CustomSprite.Material"/> slot: it
-    /// reverse-maps the assigned material's GUID back to a <see cref="LightSprite.ShadowQuality"/> preset
-    /// (via <see cref="Light2DLightPresets"/>) so the popup always reflects reality, and writes the resolved
-    /// preset material back into the slot when a level is chosen. <see cref="LightSprite.ShadowQuality.Custom"/>
-    /// stops syncing and hands the raw material slot back. All edits go through the serialized object (Undo
-    /// automatic) except the Scene handles, which mutate the target directly with <c>Undo.RecordObject</c>.
+    /// The <c>Shadows</c> popup drives the serialized <see cref="LightSprite.Shadows"/> value the light now
+    /// auto-resolves its material from, so choosing a preset leaves the <see cref="CustomSprite.Material"/>
+    /// slot empty (nothing to assign - it "just works"). When a Material IS assigned (a legacy scene, or a
+    /// hand-set custom material) the popup reverse-maps that material's GUID back to a preset (via
+    /// <see cref="Light2DLightPresets"/>) so it still reflects reality, and an explicit assignment always wins
+    /// at draw time. <see cref="LightSprite.ShadowQuality.Custom"/> exposes the raw Material slot for a
+    /// hand-assigned light material. All edits go through the serialized object (Undo automatic) except the
+    /// Scene handles, which mutate the target directly with <c>Undo.RecordObject</c>.
     /// </summary>
     [CustomEditor(typeof(LightSprite))]
     [CanEditMultipleObjects]
@@ -24,6 +26,9 @@ namespace Light2D
     {
         // Warm light-coloured handles so the Scene-view gizmos read as "this is the light".
         private static readonly Color HandleColor = new Color(1f, 0.85f, 0.4f, 0.9f);
+
+        // Fainter warm tint for the secondary penumbra (hotspot) arc, Unity-spotlight style.
+        private static readonly Color FaintHandleColor = new Color(1f, 0.85f, 0.4f, 0.35f);
 
         // Cardinal directions for the Radius dots, in the light's local XY plane (mirrors Light2DVolumeEditor).
         private static readonly Vector3[] CircleHandleDirections =
@@ -42,9 +47,10 @@ namespace Light2D
         };
 
         private const float IntensitySliderMax = 8f;
-        private const float RadiusSliderMax = 20f;
+        private const float RadiusSliderMax = 150f;
         private const float LengthSliderMax = 20f;
         private const float ThrowSliderMax = 20f;
+        private const float SpotSoftnessSliderMax = 180f;
 
         private static readonly GUIContent TypeLabel = new GUIContent("Type",
             "Point emits radially, Spot projects a soft cone whose apex sits at the transform, and Line emits along a Length-by-Throw bar.");
@@ -61,9 +67,14 @@ namespace Light2D
         private static readonly GUIContent SidesLabel = new GUIContent("Sides",
             "Which side(s) of a Line light emit: Both (two-sided), Front (+normal only), or Back (-normal only).");
         private static readonly GUIContent FalloffLabel = new GUIContent("Falloff",
-            "Edge hardness of the generated falloff, 0 soft to 1 hard. Ignored when a Sprite override is assigned.");
+            "Shape of the generated falloff. 0..1 is edge hardness (0 soft, 1 hard); below 0 morphs toward a " +
+            "longer, dimmer inverse-square-style tail. Ignored when a Sprite override is assigned.");
         private static readonly GUIContent SpotAngleLabel = new GUIContent("Spot Angle",
-            "Cone angle in degrees, used when Type is Spot.");
+            "Cone angle in degrees for Spot. Up to 180 it is a cone; past 180 the origin migrates toward the centre and it opens into a full Point light at 360.");
+        private static readonly GUIContent SpotSoftnessLabel = new GUIContent("Angle Softness",
+            "Angular penumbra in degrees: how many degrees the cone edge takes to fade. 0 is a hard edge; 180 fades across the whole half-cone.");
+        private static readonly GUIContent SpotSoftnessAutoLabel = new GUIContent("Auto Angle Softness",
+            "Derive the cone-edge softness from Falloff, exactly as before. Turn off to set an explicit angular penumbra in degrees.");
         private static readonly GUIContent ShadowsLabel = new GUIContent("Shadows",
             "Ray-march shadow quality. Maps to the light material; Custom hands the Material slot back to you.");
         private static readonly GUIContent MaterialLabel = new GUIContent("Custom Material",
@@ -95,6 +106,7 @@ namespace Light2D
         private SerializedProperty _sides;
         private SerializedProperty _falloff;
         private SerializedProperty _spotAngle;
+        private SerializedProperty _spotSoftness;
         private SerializedProperty _shadows;
         private SerializedProperty _material;
         private SerializedProperty _sprite;
@@ -114,6 +126,7 @@ namespace Light2D
             _sides = serializedObject.FindProperty("Sides");
             _falloff = serializedObject.FindProperty("Falloff");
             _spotAngle = serializedObject.FindProperty("SpotAngle");
+            _spotSoftness = serializedObject.FindProperty("SpotSoftness");
             _shadows = serializedObject.FindProperty("Shadows");
             _material = serializedObject.FindProperty("Material");
             _sprite = serializedObject.FindProperty("Sprite");
@@ -151,7 +164,10 @@ namespace Light2D
 
             EditorGUILayout.PropertyField(_falloff, FalloffLabel);
             if (isSpot)
+            {
                 EditorGUILayout.PropertyField(_spotAngle, SpotAngleLabel);
+                DrawSpotSoftnessField();
+            }
 
             DrawShadowsField();
             DrawSpriteOverride();
@@ -201,6 +217,41 @@ namespace Light2D
             EditorGUI.EndProperty();
         }
 
+        // Angular penumbra control for Spot. SpotSoftness < 0 is the Auto sentinel (edge softness derived from
+        // Falloff - the byte-identical legacy behaviour). An Auto toggle exposes it; with Auto off, a 0-180
+        // degree slider sets an explicit penumbra. Toggling Auto off seeds the slider with the current
+        // auto-equivalent width so the handoff does not visibly jump.
+        private void DrawSpotSoftnessField()
+        {
+            var isAuto = !_spotSoftness.hasMultipleDifferentValues && _spotSoftness.floatValue < 0f;
+
+            EditorGUI.showMixedValue = _spotSoftness.hasMultipleDifferentValues;
+            EditorGUI.BeginChangeCheck();
+            var wantAuto = EditorGUILayout.Toggle(SpotSoftnessAutoLabel, isAuto);
+            EditorGUI.showMixedValue = false;
+            if (EditorGUI.EndChangeCheck())
+            {
+                _spotSoftness.floatValue = wantAuto ? -1f : SuggestExplicitSoftness();
+                isAuto = wantAuto;
+            }
+
+            if (!isAuto)
+            {
+                EditorGUI.indentLevel++;
+                OverflowSlider(_spotSoftness, SpotSoftnessLabel, 0f, SpotSoftnessSliderMax);
+                EditorGUI.indentLevel--;
+            }
+        }
+
+        // The auto-equivalent angular penumbra (degrees) at the current Falloff/Spot Angle, so switching from
+        // Auto to explicit does not visibly jump: the legacy softBand = lerp(0.5, 0.05, Falloff) fraction of
+        // the half-aperture, expressed in degrees.
+        private float SuggestExplicitSoftness()
+        {
+            var softBand = Mathf.Lerp(0.5f, 0.05f, Mathf.Clamp01(_falloff.floatValue));
+            return Mathf.Clamp(_spotAngle.floatValue * 0.5f * softBand, 0f, SpotSoftnessSliderMax);
+        }
+
         private void DrawShadowsField()
         {
             var display = ComputeDisplayQuality();
@@ -212,13 +263,15 @@ namespace Light2D
             if (EditorGUI.EndChangeCheck())
             {
                 _shadows.enumValueIndex = (int)selected;
+                // Presets auto-resolve from Shadows with an empty Material slot ("just works" - no asset to
+                // assign), so clear any prior assignment when a preset is chosen. Custom keeps the slot so a
+                // per-light custom material survives and can be assigned below.
                 if (selected != LightSprite.ShadowQuality.Custom)
-                    _material.objectReferenceValue = LoadPresetMaterial(selected);
-                // Custom: leave Material untouched so per-light custom assignments survive.
+                    _material.objectReferenceValue = null;
                 display = selected;
             }
 
-            // Custom (or an unrecognised/null material) exposes the raw Material slot for manual assignment.
+            // Custom exposes the raw Material slot for a hand-assigned light material.
             if (display == LightSprite.ShadowQuality.Custom)
             {
                 EditorGUI.indentLevel++;
@@ -248,15 +301,18 @@ namespace Light2D
         {
             var warned = false;
 
-            // Trap 1: Custom shadow quality with no material falls back to Sprites/Default (wrong blend).
+            // Trap 1: only Custom shadow quality with no material still falls back to Sprites/Default (wrong
+            // blend). Every other quality with a null Material now auto-resolves its preset, so it is no
+            // longer a trap - the warning fires only for the remaining Custom-with-no-material case.
             if (ComputeDisplayQuality() == LightSprite.ShadowQuality.Custom &&
                 !_material.hasMultipleDifferentValues && _material.objectReferenceValue == null)
             {
                 EditorGUILayout.HelpBox(
-                    "No light material is assigned, so the light falls back to Sprites/Default and blends incorrectly. Assign a shadow-quality material.",
+                    "Shadows is set to Custom but no light material is assigned, so the light falls back to " +
+                    "Sprites/Default and blends incorrectly. Pick a shadow-quality preset or assign a custom light material.",
                     MessageType.Warning);
-                if (GUILayout.Button("Assign Balanced Material"))
-                    AssignPresetMaterial(LightSprite.ShadowQuality.Balanced);
+                if (GUILayout.Button("Use Balanced Preset"))
+                    UseBalancedPreset();
                 warned = true;
             }
 
@@ -289,14 +345,20 @@ namespace Light2D
                 EditorGUILayout.Space();
         }
 
-        // Popup value: Custom stays sticky once chosen; otherwise the assigned material's GUID is reverse-mapped
-        // back to its preset (a null/unrecognised material reads as Custom), so the popup mirrors reality.
+        // Popup value: a serialized Custom is sticky (the user chose the raw-slot escape, so keep the slot
+        // visible even if the assigned material happens to reverse-map to a preset). Otherwise an assigned
+        // Material reverse-maps to its preset (a custom/unrecognised material reads as Custom); with no
+        // Material assigned the light auto-resolves from the serialized Shadows value, so honor it directly
+        // instead of reading a null material as Custom.
         private LightSprite.ShadowQuality ComputeDisplayQuality()
         {
             var serialized = (LightSprite.ShadowQuality)_shadows.enumValueIndex;
             if (serialized == LightSprite.ShadowQuality.Custom)
                 return LightSprite.ShadowQuality.Custom;
-            return ResolveQualityFromMaterial(_material.objectReferenceValue as Material);
+            var material = _material.objectReferenceValue as Material;
+            if (material != null)
+                return ResolveQualityFromMaterial(material);
+            return serialized;
         }
 
         private static LightSprite.ShadowQuality ResolveQualityFromMaterial(Material material)
@@ -315,19 +377,12 @@ namespace Light2D
             return LightSprite.ShadowQuality.Custom;
         }
 
-        private static Material LoadPresetMaterial(LightSprite.ShadowQuality quality)
+        // Quick fix for the Custom-with-no-material trap: switch to the Balanced preset and clear the Material
+        // slot so the light auto-resolves the Balanced preset material (no asset to hand-assign).
+        private void UseBalancedPreset()
         {
-            var guid = Light2DLightPresets.GetMaterialGuid(quality);
-            if (string.IsNullOrEmpty(guid))
-                return null;
-            var path = AssetDatabase.GUIDToAssetPath(guid);
-            return AssetDatabase.LoadAssetAtPath<Material>(path);
-        }
-
-        private void AssignPresetMaterial(LightSprite.ShadowQuality quality)
-        {
-            _shadows.enumValueIndex = (int)quality;
-            _material.objectReferenceValue = LoadPresetMaterial(quality);
+            _shadows.enumValueIndex = (int)LightSprite.ShadowQuality.Balanced;
+            _material.objectReferenceValue = null;
         }
 
         private bool HasOwningSystem()
@@ -399,29 +454,39 @@ namespace Light2D
             }
         }
 
-        // Spot cone handle: the cone opens from the apex along transform.up (its local +Y aim, matching the
-        // apex-at-bottom generated cone texture). The apex is the transform origin nudged by the LightOrigin
-        // XY correction - the exact world point the rendered cone now originates from. Two edge rays and an
-        // arc show the span; a dot at one edge tip widens/narrows SpotAngle.
+        // Spot cone handle. The cone opens from the emission origin along transform.up (its local +Y aim,
+        // matching the generated cone texture). For SpotAngle <= 180 the origin is the LightOrigin-corrected
+        // apex; past 180 it migrates toward the transform centre and the visible reach shrinks from Radius to
+        // Radius*0.5, so at 360 the disc matches the Point handle (DrawRadiusHandle's Radius*0.5). Two edge
+        // rays and an arc show the aperture (a "pac-man" mouth past 180, a full disc at 360); a fainter inner
+        // arc marks the fully-lit hotspot inside the angular penumbra; a dot at one edge tip widens/narrows
+        // SpotAngle smoothly across the whole 1..360 range.
         private static void DrawSpotHandle(LightSprite light)
         {
             var t = light.transform;
-            var apex = t.TransformPoint(new Vector3(light.LightOrigin.x * light.Radius,
-                light.LightOrigin.y * light.Radius, 0f));
+            var blend = LightSprite.SpotOriginBlend(light.SpotAngle);
+            var origin = t.TransformPoint(new Vector3(light.LightOrigin.x * light.Radius * (1f - blend),
+                light.LightOrigin.y * light.Radius * (1f - blend), 0f));
             var aim = t.up;
             var normal = t.forward;
-            var length = Mathf.Max(light.Radius, 1e-3f);
+            var reach = Mathf.Max(light.Radius / (1f + blend), 1e-3f);
             var half = light.SpotAngle * 0.5f;
 
             using (new Handles.DrawingScope(HandleColor))
             {
                 var leftDir = Quaternion.AngleAxis(half, normal) * aim;
                 var rightDir = Quaternion.AngleAxis(-half, normal) * aim;
-                Handles.DrawLine(apex, apex + leftDir * length);
-                Handles.DrawLine(apex, apex + rightDir * length);
-                Handles.DrawWireArc(apex, normal, rightDir, light.SpotAngle, length);
+                Handles.DrawWireArc(origin, normal, rightDir, light.SpotAngle, reach);
+                // Below 360 the edge rays show the cone / pac-man mouth; at 360 the arc is already a full disc.
+                if (light.SpotAngle < 360f)
+                {
+                    Handles.DrawLine(origin, origin + leftDir * reach);
+                    Handles.DrawLine(origin, origin + rightDir * reach);
+                }
 
-                var handlePos = apex + leftDir * length;
+                DrawSpotPenumbraArc(light, origin, aim, normal, reach, half, blend);
+
+                var handlePos = origin + leftDir * reach;
                 var dotSize = HandleUtility.GetHandleSize(handlePos) * 0.08f;
 
                 EditorGUI.BeginChangeCheck();
@@ -429,15 +494,51 @@ namespace Light2D
                 if (!EditorGUI.EndChangeCheck())
                     return;
 
-                var newDir = Vector3.ProjectOnPlane(moved - apex, normal);
+                var newDir = Vector3.ProjectOnPlane(moved - origin, normal);
                 if (newDir.sqrMagnitude <= 1e-6f)
                     return;
 
+                // Vector3.Angle is the unsigned half-angle in [0,180], so 2x reaches the full 360 range and the
+                // drag passes smoothly through 180 (straight down == 360).
                 var angle = Vector3.Angle(aim, newDir.normalized);
                 Undo.RecordObject(light, "Adjust Spot Angle");
-                light.SpotAngle = Mathf.Clamp(angle * 2f, 1f, 179f);
+                light.SpotAngle = Mathf.Clamp(angle * 2f, 1f, 360f);
                 EditorUtility.SetDirty(light);
             }
+        }
+
+        // A fainter inner arc at the hotspot boundary (SpotAngle - 2*penumbra), Unity-spotlight style, so the
+        // angular penumbra is visible. The inner half-angle matches the generated falloff: Auto derives it from
+        // Falloff (legacy softBand of the half-aperture); an explicit SpotSoftness is a degrees inset from each
+        // edge. It fades out as the Spot morphs to a Point (blend -> 1), where the angular mask fully opens and
+        // no penumbra remains.
+        private static void DrawSpotPenumbraArc(LightSprite light, Vector3 origin, Vector3 aim, Vector3 normal,
+            float reach, float half, float blend)
+        {
+            var fade = 1f - blend;
+            if (fade <= 0.01f)
+                return;
+
+            float innerHalf;
+            if (light.SpotSoftness < 0f)
+            {
+                var softBand = Mathf.Lerp(0.5f, 0.05f, Mathf.Clamp01(light.Falloff));
+                innerHalf = half * (1f - softBand);
+            }
+            else
+            {
+                innerHalf = Mathf.Max(0f, half - light.SpotSoftness);
+            }
+
+            // Draw only when the penumbra is visible: the hotspot cone strictly inside the aperture, non-degenerate.
+            if (innerHalf <= 0.5f || innerHalf >= half - 0.5f)
+                return;
+
+            var color = FaintHandleColor;
+            color.a *= fade;
+            var innerFrom = Quaternion.AngleAxis(-innerHalf, normal) * aim;
+            using (new Handles.DrawingScope(color))
+                Handles.DrawWireArc(origin, normal, innerFrom, innerHalf * 2f, reach);
         }
 
         // Line handle: the emitting bar along local X (Length), a rectangle showing the perpendicular reach

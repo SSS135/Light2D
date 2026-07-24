@@ -261,18 +261,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Color: {r: 0.50507104, g: 1, b: 0.102941155, a: 0.7607843}
-  Sprite: {fileID: 21300000, guid: de67f3bc3c6d41f4f9811ec4e3393c09, type: 3}
+  Sprite: {fileID: 0}
   SortingOrder: 0
-  Material: {fileID: 2100000, guid: ab37f3042fbc56e4b9288c3ba9cd32d8, type: 2}
+  Material: {fileID: 0}
   LightOrigin: {x: 0, y: 0}
   NormalMapHeight: 1
   Owner: {fileID: 0}
   Type: 0
-  Radius: 25
+  Radius: 30
   Length: 3
   Throw: 1.5
   Sides: 0
-  Intensity: 1
+  Intensity: 0.8
   Falloff: 0.5
   SpotAngle: 45
   Shadows: 1

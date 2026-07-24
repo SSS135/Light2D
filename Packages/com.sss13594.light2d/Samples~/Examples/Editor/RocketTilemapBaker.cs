@@ -23,8 +23,8 @@ namespace Light2D.Examples
     /// walls occlude AND collide; Background tiles pass light and do not collide). The ship spawns in an
     /// open pocket (never inside a wall), and the Main Camera (with its LightingSystem + CameraFollower) is
     /// reframed on that pocket, lit by a bright warm central light plus two distinctly coloured crystal
-    /// lights. The camera clears to a dark solid colour instead of Rocket's bright nebula skybox so empty
-    /// cave/void cells read dark for the dark-cave gate.
+    /// lights. The camera keeps Rocket's nebula skybox background (inherited from the source scene), so
+    /// empty cave/void cells show the nebula through the cave exactly as the Rocket reference does.
     ///
     /// The output scene (+ meta) is written into the imported sample tree and mirrored byte-identically into
     /// Samples~/Examples so both trees match. The Tiles assets are untouched by the bake and stay identical
@@ -32,8 +32,8 @@ namespace Light2D.Examples
     ///
     /// Run headlessly with:
     ///   -executeMethod Light2D.Examples.RocketTilemapBaker.Bake
-    /// or via the menu "Light2D/Samples/Bake Rocket Tilemap Scene". This whole file is gated on
-    /// LIGHT2D_TILEMAP, which the sample Editor asmdef defines only when com.unity.2d.tilemap is installed.
+    /// This whole file is gated on LIGHT2D_TILEMAP, which the sample Editor asmdef defines only when
+    /// com.unity.2d.tilemap is installed.
     /// </summary>
     internal static class RocketTilemapBaker
     {
@@ -74,7 +74,6 @@ namespace Light2D.Examples
         private const string SourceSceneFileName = "Rocket.unity";
         private const string TilesFolderName = "Tiles";
 
-        [MenuItem("Light2D/Samples/Bake Rocket Tilemap Scene")]
         public static void Bake()
         {
             try
@@ -418,24 +417,17 @@ namespace Light2D.Examples
                 UnityEngine.Object.DestroyImmediate(container.gameObject);
         }
 
-        // Keeps Rocket's Main Camera (LightingSystem + CameraFollower + AudioListener) but frames it on the
-        // spawn pocket and clears to a dark solid colour so empty cave/void cells read dark for the gate
-        // instead of showing Rocket's bright nebula skybox.
+        // Keeps Rocket's Main Camera (LightingSystem + CameraFollower + AudioListener) and its nebula
+        // skybox background, only reframing it on the spawn pocket. The Skybox clear flags, background
+        // colour and the per-camera Skybox component are inherited unchanged from the Rocket source scene,
+        // so the nebula shows through the cave's open cells just as it does in the Rocket reference.
         private static void ReframeCamera(Camera camera, Vector2 spawnWorld)
         {
-            camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.02f, 0.02f, 0.03f, 0f);
             camera.orthographic = true;
             camera.orthographicSize = OrthographicSize;
             var cameraTransform = camera.transform;
             var position = cameraTransform.position;
             cameraTransform.position = new Vector3(spawnWorld.x, spawnWorld.y, position.z);
-
-            // The per-camera Skybox component only renders under Skybox clear flags; disable it so nothing
-            // reintroduces the bright nebula into the dark cave.
-            var skybox = camera.GetComponent<Skybox>();
-            if (skybox != null)
-                skybox.enabled = false;
         }
 
         // Moves the whole articulated craft so its hull (MainRigidbody) sits at the spawn pocket centre,
