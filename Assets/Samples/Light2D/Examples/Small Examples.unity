@@ -584,7 +584,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.22745098}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.44705883}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -804,7 +804,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.22745098}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.44705883}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -1216,7 +1216,7 @@ ParticleSystem:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 65626376}
   serializedVersion: 8
-  lengthInSec: 5
+  lengthInSec: 3
   simulationSpeed: 1
   stopAction: 0
   cullingMode: 3
@@ -1478,7 +1478,7 @@ ParticleSystem:
         m_RotationOrder: 4
     startSizeY:
       serializedVersion: 2
-      minMaxState: 0
+      minMaxState: 3
       scalar: 1
       minScalar: 1
       maxCurve:
@@ -1531,7 +1531,7 @@ ParticleSystem:
         m_RotationOrder: 4
     startSizeZ:
       serializedVersion: 2
-      minMaxState: 0
+      minMaxState: 3
       scalar: 1
       minScalar: 1
       maxCurve:
@@ -2009,7 +2009,7 @@ ParticleSystem:
     rateOverTime:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 10
+      scalar: 4
       minScalar: 10
       maxCurve:
         serializedVersion: 2
@@ -5895,11 +5895,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ae00baf83ebe4c429c75f16e52bacc0e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Light2D.Samples.Runtime::Light2D.Examples.ParticleLightSource
-  Radius: 1
-  Intensity: 2.5
+  Radius: 5
+  Intensity: 0.68
+  AlphaResponse: 1
   ColorTint: {r: 1, g: 1, b: 1, a: 1}
-  MaxLights: 32
-  Shadows: 1
+  MaxLights: 16
+  Shadows: 0
+  Falloff: -0.173
 --- !u!1 &71985832
 GameObject:
   m_ObjectHideFlags: 0
@@ -6055,7 +6057,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.3529412}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.4392157}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -7880,8 +7882,7 @@ GameObject:
   m_Component:
   - component: {fileID: 233882888}
   - component: {fileID: 233882887}
-  - component: {fileID: 233882886}
-  - component: {fileID: 233882885}
+  - component: {fileID: 233882889}
   m_Layer: 0
   m_Name: EventSystem
   m_TagString: Untagged
@@ -7889,40 +7890,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &233882885
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 233882884}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2d49b7c1bcd2e07499844da127be038d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_SendPointerHoverToParent: 1
-  m_ForceModuleActive: 0
---- !u!114 &233882886
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 233882884}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4f231c4fb786f3946a6b90b886c48677, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_SendPointerHoverToParent: 1
-  m_HorizontalAxis: Horizontal
-  m_VerticalAxis: Vertical
-  m_SubmitButton: Submit
-  m_CancelButton: Cancel
-  m_InputActionsPerSecond: 10
-  m_RepeatDelay: 0.5
-  m_ForceModuleActive: 0
 --- !u!114 &233882887
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7953,6 +7920,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &233882889
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 233882884}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01614664b831546d2ae94a42149d80ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.UI.InputSystemUIInputModule
+  m_SendPointerHoverToParent: 1
+  m_MoveRepeatDelay: 0.5
+  m_MoveRepeatRate: 0.1
+  m_XRTrackingOrigin: {fileID: 0}
+  m_ActionsAsset: {fileID: -944628639613478452, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_PointAction: {fileID: -1654692200621890270, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_MoveAction: {fileID: -8784545083839296357, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_SubmitAction: {fileID: 392368643174621059, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_CancelAction: {fileID: 7727032971491509709, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_LeftClickAction: {fileID: 3001919216989983466, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_MiddleClickAction: {fileID: -2185481485913320682, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_RightClickAction: {fileID: -4090225696740746782, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_ScrollWheelAction: {fileID: 6240969308177333660, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_TrackedDevicePositionAction: {fileID: 6564999863303420839, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_TrackedDeviceOrientationAction: {fileID: 7970375526676320489, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_DeselectOnBackgroundClick: 1
+  m_PointerBehavior: 0
+  m_CursorLockBehavior: 0
+  m_ScrollDeltaPerTick: 6
 --- !u!1 &237434882
 GameObject:
   m_ObjectHideFlags: 0
@@ -8108,7 +8106,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.3529412}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.4392157}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -10220,7 +10218,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.22745098}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.44705883}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -11436,7 +11434,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.3529412}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.4392157}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -17907,7 +17905,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.22745098}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.44705883}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -19069,7 +19067,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.3529412}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.4392157}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -20890,7 +20888,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.3529412}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.4392157}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -24081,7 +24079,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.22745098}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.44705883}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -24603,7 +24601,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.3529412}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.4392157}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -28966,7 +28964,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.22745098}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.44705883}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -33251,7 +33249,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.22745098}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.44705883}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -33361,7 +33359,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.3529412}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.4392157}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -33581,7 +33579,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.3529412}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.4392157}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -34435,7 +34433,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a0184ff86886f974d95dfead14754f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.22745098}
+  MultiplicativeColor: {r: 0, g: 0, b: 0, a: 0.44705883}
   AdditiveColor: {r: 0, g: 0, b: 0, a: 0}
   Material: {fileID: 2100000, guid: e18844addd988d44ba071ff8521bbe53, type: 2}
   LightObstacleScale: 1
@@ -35066,7 +35064,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   TweenInterval: 2.5
-  ColorMul: 1.5
+  ColorMul: 1.1
 --- !u!212 &2075708506
 SpriteRenderer:
   serializedVersion: 3
@@ -36090,7 +36088,7 @@ ParticleSystem:
         m_RotationOrder: 4
     startSizeY:
       serializedVersion: 2
-      minMaxState: 0
+      minMaxState: 3
       scalar: 1
       minScalar: 1
       maxCurve:
@@ -36143,7 +36141,7 @@ ParticleSystem:
         m_RotationOrder: 4
     startSizeZ:
       serializedVersion: 2
-      minMaxState: 0
+      minMaxState: 3
       scalar: 1
       minScalar: 1
       maxCurve:
@@ -40522,11 +40520,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ae00baf83ebe4c429c75f16e52bacc0e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Light2D.Samples.Runtime::Light2D.Examples.ParticleLightSource
-  Radius: 0.8
-  Intensity: 1.5
+  Radius: 3.78
+  Intensity: 0.44
+  AlphaResponse: 1
   ColorTint: {r: 1, g: 1, b: 1, a: 1}
   MaxLights: 24
-  Shadows: 1
+  Shadows: 0
+  Falloff: 0.037
 --- !u!1 &2135643275
 GameObject:
   m_ObjectHideFlags: 0
