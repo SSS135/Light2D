@@ -35,6 +35,39 @@ namespace Light2D.Tests
         }
 
         [Test]
+        public void RendererFeatureStatusTreatsAnInactiveFeatureAsNotInstalled()
+        {
+            var rendererData = ScriptableObject.CreateInstance<UniversalRendererData>();
+            var feature = ScriptableObject.CreateInstance<Light2DUniversalRendererFeature>();
+            var duplicate = ScriptableObject.CreateInstance<Light2DUniversalRendererFeature>();
+            try
+            {
+                Assert.That(Light2DUniversalRendererFeatureInstaller.EvaluateRendererFeatures(rendererData),
+                    Is.EqualTo(Light2DRendererFeatureStatus.Missing));
+
+                rendererData.rendererFeatures.Add(feature);
+                Assert.That(Light2DUniversalRendererFeatureInstaller.EvaluateRendererFeatures(rendererData),
+                    Is.EqualTo(Light2DRendererFeatureStatus.Installed));
+
+                feature.SetActive(false);
+                Assert.That(Light2DUniversalRendererFeatureInstaller.EvaluateRendererFeatures(rendererData),
+                    Is.EqualTo(Light2DRendererFeatureStatus.Inactive),
+                    "URP skips inactive renderer features, so a disabled feature must warn instead of reporting Installed.");
+
+                rendererData.rendererFeatures.Add(duplicate);
+                Assert.That(Light2DUniversalRendererFeatureInstaller.EvaluateRendererFeatures(rendererData),
+                    Is.EqualTo(Light2DRendererFeatureStatus.Duplicate),
+                    "Duplicate detection stays ahead of the inactive check.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(duplicate);
+                UnityEngine.Object.DestroyImmediate(feature);
+                UnityEngine.Object.DestroyImmediate(rendererData);
+            }
+        }
+
+        [Test]
         public void RendererFeatureOwnsPassAndContextPerLightingSystem()
         {
             Type featureType = typeof(Light2DUniversalRendererFeature);
@@ -73,6 +106,27 @@ namespace Light2D.Tests
             Assert.That(Light2DUniversalRendererFeature.IsCameraSupported(true, CameraRenderType.Overlay, true,
                 out reason), Is.False);
             StringAssert.Contains("XR", reason);
+        }
+
+        [Test]
+        public void XrCameraInspectorWarningRequiresAnXrCapableProject()
+        {
+            Assert.That(LightingSystemEditor.ShouldWarnAboutXrCamera(false), Is.False,
+                "A camera with Allow XR Rendering off is never an XR camera.");
+
+#if LIGHT2D_XR
+            // XR Plug-in Management is installed, so a provider can initialize and the warning must stand.
+            Assert.That(LightingSystemEditor.IsProjectXrCapable(), Is.True);
+            Assert.That(LightingSystemEditor.ShouldWarnAboutXrCamera(true), Is.True);
+#else
+            // No XR package: only an already-initialized XR display may report capability, and the
+            // default-true allowXRRendering flag must not warn on its own.
+            Assert.That(LightingSystemEditor.IsProjectXrCapable(), Is.EqualTo(XRSRPSettings.enabled),
+                "Without an XR package, XR capability must come from an active XR display only.");
+            Assert.That(LightingSystemEditor.ShouldWarnAboutXrCamera(true), Is.EqualTo(XRSRPSettings.enabled),
+                "UniversalAdditionalCameraData.allowXRRendering defaults to true on every URP camera, so the " +
+                "flag alone must not raise the XR warning in a project without XR.");
+#endif
         }
 
         [Test]
@@ -195,6 +249,52 @@ namespace Light2D.Tests
 
             // The sample count is a per-material property that drives the uniform-bound ray-march [loop].
             Assert.That(lightPoints.FindPropertyIndex("_PathTrackingSamples"), Is.GreaterThanOrEqualTo(0));
+        }
+
+        // A material value always overrides Shader/CommandBuffer.SetGlobal*, so a uniform declared in a
+        // Properties block can only be driven per-material. The two fullscreen composition shaders sit on
+        // opposite sides of that rule for the same three sampling-transform uniforms, and each backend's
+        // delivery mechanism must match its shader: Light2D/Coverage Blend declares them (both backends set
+        // them on the coverage-blend material) while Light2D/Light Overlay does not (the URP overlay pass
+        // delivers them as globals). Moving either shader across the line without moving its C# delivery
+        // silently reverts to the Properties defaults asserted below - which is exactly how URP lost the
+        // extended->small coverage remap and rendered the coverage region extended/small too small.
+        [Test]
+        public void FullscreenSamplingTransformDeliveryMatchesShaderProperties()
+        {
+            Shader coverageBlend = Shader.Find("Light2D/Coverage Blend");
+            Shader overlay = Shader.Find("Light2D/Light Overlay");
+            Assert.That(coverageBlend, Is.Not.Null);
+            Assert.That(overlay, Is.Not.Null);
+
+            foreach (string uniform in new[] { "_Scale", "_Offset", "_ExtendedToSmallTextureScale" })
+            {
+                Assert.That(coverageBlend.FindPropertyIndex(uniform), Is.GreaterThanOrEqualTo(0),
+                    uniform + " is a Light2D/Coverage Blend material property, so both backends must push it " +
+                    "onto the coverage-blend material; a global can never reach it.");
+                Assert.That(overlay.FindPropertyIndex(uniform), Is.LessThan(0),
+                    uniform + " must stay out of Light2D/Light Overlay's Properties block: the URP overlay pass " +
+                    "delivers it as a global, which a material property would override.");
+            }
+
+            var material = new Material(coverageBlend);
+            try
+            {
+                // The identity mapping a global-only coverage blend renders with: no extended->small remap.
+                Vector4 extendedToSmall = material.GetVector("_ExtendedToSmallTextureScale");
+                Vector4 scale = material.GetVector("_Scale");
+                Vector4 offset = material.GetVector("_Offset");
+                Assert.That(extendedToSmall.x, Is.EqualTo(1f));
+                Assert.That(extendedToSmall.y, Is.EqualTo(1f));
+                Assert.That(scale.x, Is.EqualTo(1f));
+                Assert.That(scale.y, Is.EqualTo(1f));
+                Assert.That(offset.x, Is.EqualTo(0f));
+                Assert.That(offset.y, Is.EqualTo(0f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(material);
+            }
         }
 
         private static bool HasPassWithLightMode(Shader shader, string lightMode)

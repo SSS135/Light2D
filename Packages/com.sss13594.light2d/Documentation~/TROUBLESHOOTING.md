@@ -9,7 +9,9 @@
 
 ## URP Feature Missing or on the Wrong Renderer
 
-If a camera has an enabled `LightingSystem` under URP but no `Light2DUniversalRendererFeature` is installed on its renderer, lighting is a silent no-op; `LightingSystem` logs a warning pointing here. The `LightingSystem` inspector reports missing, duplicate, wrong-renderer, and unsupported-renderer states. Select the source camera and use **Install / Repair Renderer Feature**, or run **Tools > Light2D > Universal Render Pipeline > Install Renderer Feature**.
+If a camera has an enabled `LightingSystem` under URP but no `Light2DUniversalRendererFeature` is installed on its renderer, lighting is a silent no-op; `LightingSystem` logs a warning pointing here. The `LightingSystem` inspector reports missing, duplicate, disabled, wrong-renderer, and unsupported-renderer states. Select the source camera and use **Install / Repair Renderer Feature**, or run **Tools > Light2D > Universal Render Pipeline > Install Renderer Feature**.
+
+A feature that is present but has its **Active** checkbox cleared counts as not installed: URP skips inactive renderer features, so it composites nothing. The inspector reports that separately and **Install / Repair Renderer Feature** re-enables the existing feature rather than adding a second one.
 
 The renderer data must be a persistent writable asset. A camera can override the URP asset’s default renderer through Universal Additional Camera Data; the feature must be installed on that selected renderer. Only Universal Renderer Data and 2D Renderer Data are supported.
 
@@ -48,6 +50,14 @@ Set `Camera To Light Obstacles Distance` to the effective distance between the c
 ## HDR Looks Clamped or Different in URP
 
 Enable HDR on the camera and URP asset. When **16-bit HDR Color** is enabled, set the URP asset **HDR Color Buffer Precision** to **64 Bits**. Light2D falls back when the platform cannot render to the required half-float format.
+
+The `LightingSystem` inspector reports both mismatches while they last and fixes them in place: **Enable HDR** turns on whichever of the camera flag and the active URP asset's HDR support is off, and **Use 64-bit Precision** switches that asset to 64-bit HDR color. Both edits are undoable and write to the pipeline asset currently assigned in Graphics settings.
+
+## XR Camera Warning
+
+Light2D does not support XR cameras: the renderer feature skips a camera whose URP data resolves to XR rendering, and the `LightingSystem` inspector reports it with a **Disable XR Rendering** button that clears **Allow XR Rendering** on the camera's Universal Additional Camera Data.
+
+The inspector raises this only for a project that can actually run XR — one with XR Plug-in Management installed, or with an XR display already initialized. `Allow XR Rendering` defaults to on for every URP camera and URP's camera inspector hides the toggle when no XR provider is installed, so the flag by itself does not mean the camera is an XR camera and is not reported in a project without XR.
 
 ## `Affect Only This Camera` Fails
 

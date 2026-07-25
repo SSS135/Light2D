@@ -124,6 +124,8 @@ namespace Light2D
                     return $"Light2D is installed on another renderer, not the selected camera renderer '{rendererName}'.";
                 case Light2DRendererFeatureStatus.Duplicate:
                     return $"Renderer '{rendererName}' contains duplicate Light2D features. Installation will keep exactly one.";
+                case Light2DRendererFeatureStatus.Inactive:
+                    return $"The Light2D feature on '{rendererName}' is disabled. Installation will re-enable it.";
                 case Light2DRendererFeatureStatus.UnsupportedRenderer:
                     return "The selected camera must use a Universal Renderer or 2D Renderer.";
                 case Light2DRendererFeatureStatus.MissingCamera:

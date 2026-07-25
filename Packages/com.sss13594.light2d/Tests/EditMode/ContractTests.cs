@@ -168,6 +168,14 @@ namespace Light2D.Tests
                 var light = lightObject.AddComponent<LightSprite>();
                 // A fresh light sits one unit above the plane.
                 Assert.That(light.NormalMapHeight, Is.EqualTo(1f));
+                // Both backends' normal-mapped passes gate on the sprite the light actually draws
+                // (LightSprite.ActiveLightSprite), never on the override-only Sprite: a fresh light has no
+                // override yet still draws its generated falloff sprite, so it must reach the normal-mapped
+                // path and receive its own _LightPos.z. Gating on Sprite dropped every such light.
+                Assert.That(light.Sprite, Is.Null, "A fresh light must carry no Sprite override");
+                Assert.That(light.ActiveLightSprite, Is.Not.Null,
+                    "A light with no Sprite override must still expose its generated falloff sprite to the " +
+                    "normal-mapped light passes");
             }
             finally
             {

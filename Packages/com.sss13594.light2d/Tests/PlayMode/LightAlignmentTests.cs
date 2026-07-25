@@ -71,6 +71,58 @@ namespace Light2D.Tests
             }
         }
 
+        /// <summary>
+        /// Normal mapping must not move the light. With EnableNormalMapping on, the flat light-sources pass is
+        /// replaced by the per-light single-light + normal-modulation pair, and that pair renders through its own
+        /// scratch target - one extra render-target hop where a doubly-applied render-texture GPU projection
+        /// adjustment cancels the Y flip and stores the light upside down. This test pins the screen position of
+        /// a deliberately off-centre light so such a mirror is a hard failure, and reports the mirrored
+        /// expectation explicitly when it happens. Built-in is the backend a batchmode host can measure; the URP
+        /// normal path shares the same raw-projection convention (both draw through a native command buffer that
+        /// applies the adjustment itself) but cannot be measured here (no runtime URP pipeline in batchmode).
+        /// </summary>
+        [UnityTest, Timeout(60000)]
+        public IEnumerator NormalMappedLightCompositesAtExpectedScreenPositionAndIsNotMirrored()
+        {
+            RenderPipelineAsset oldDefault = GraphicsSettings.defaultRenderPipeline;
+            RenderPipelineAsset oldQuality = QualitySettings.renderPipeline;
+            AlignmentFixture fixture = null;
+            try
+            {
+                QualitySettings.renderPipeline = null;
+                GraphicsSettings.defaultRenderPipeline = null;
+                yield return WaitForBuiltInPipeline();
+                fixture = new AlignmentFixture(enableAmbient: false, enableNormalMapping: true);
+                yield return null;
+
+                // Off-centre in BOTH axes so a horizontal or vertical mirror lands far outside the tolerance.
+                var lightWorld = new Vector3(0.8f, 1f, 0f);
+                fixture.SetLightWorldPosition(lightWorld);
+
+                LightLocation lit = fixture.RenderAndLocateLight(new Vector3(0f, 0f, -10f), lightWorld);
+
+                Assert.That(lit.Found, Is.True,
+                    "No bright light region was found with normal mapping enabled. " + lit);
+
+                // Asserted before the generic alignment check so a flipped light-input render target reports the
+                // mirror explicitly instead of a nondescript misalignment.
+                var mirrored = new Vector2(lit.Expected.x, fixture.TargetHeightPixels - lit.Expected.y);
+                float mirroredError = Vector2.Distance(mirrored, lit.Measured);
+                Assert.That(mirroredError, Is.GreaterThan(lit.Error),
+                    "Normal-mapped light composited at the vertically MIRRORED screen position (mirror px=(" +
+                    mirrored.x.ToString("F1") + "," + mirrored.y.ToString("F1") + ")). " + lit);
+
+                Assert.That(lit.Error, Is.LessThan(PixelTolerance),
+                    "Normal-mapped light is misaligned with its world position. " + lit);
+            }
+            finally
+            {
+                fixture?.Dispose();
+                QualitySettings.renderPipeline = oldQuality;
+                GraphicsSettings.defaultRenderPipeline = oldDefault;
+            }
+        }
+
         [UnityTest, Timeout(60000)]
         public IEnumerator AmbientFillKeepsNonShadowedRegionAboveDarkFloor()
         {
@@ -195,6 +247,10 @@ namespace Light2D.Tests
 
             internal readonly LightingSystem Lighting;
 
+            // Frame height in pixels, so a test can express the vertically MIRRORED expectation
+            // (height - expectedY) that a flipped light-input render target would produce.
+            internal int TargetHeightPixels { get { return TargetSize; } }
+
             private readonly GameObject _cameraObject;
             private readonly GameObject _lightObject;
             private readonly GameObject _ambientObject;
@@ -206,7 +262,8 @@ namespace Light2D.Tests
             private readonly Material _emitterMaterial;
             private readonly Material _blurMaterial;
 
-            internal AlignmentFixture(bool enableAmbient, bool useBoxFill = false)
+            internal AlignmentFixture(bool enableAmbient, bool useBoxFill = false,
+                bool enableNormalMapping = false)
             {
                 _cameraObject = new GameObject("Alignment Light2D Camera");
                 _cameraObject.SetActive(false);
@@ -239,7 +296,7 @@ namespace Light2D.Tests
                 Lighting.BlurLightSources = false;
                 Lighting.BlurAmbientLight = false;
                 Lighting.HDR = false;
-                Lighting.EnableNormalMapping = false;
+                Lighting.EnableNormalMapping = enableNormalMapping;
                 Lighting.LightObstaclesAntialiasing = false;
                 Lighting.LightTexturesFilterMode = FilterMode.Bilinear;
                 Lighting.LightPixelSize = 0.05f;

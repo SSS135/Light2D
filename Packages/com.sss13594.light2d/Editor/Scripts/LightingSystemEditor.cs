@@ -268,12 +268,12 @@ namespace Light2D
                     EditorGUILayout.HelpBox("Affect Only This Camera is incompatible with a camera Target Texture in the Built-in Render Pipeline.", MessageType.Error);
 
                 if (_hdr.boolValue && (!camera.allowHDR || urpAsset != null && !urpAsset.supportsHDR))
-                    EditorGUILayout.HelpBox("16-bit HDR Color is enabled, but HDR is disabled on the camera or current URP asset.", MessageType.Warning);
+                    DrawHdrDisabledWarning(camera, urpAsset);
 
                 if (urpAsset != null && camera.TryGetComponent<UniversalAdditionalCameraData>(out var cameraData))
                 {
-                    if (cameraData.allowXRRendering)
-                        EditorGUILayout.HelpBox("XR cameras are not supported by Light2D. Disable Allow XR Rendering on this camera.", MessageType.Error);
+                    if (ShouldWarnAboutXrCamera(cameraData.allowXRRendering))
+                        DrawXrCameraWarning(cameraData);
                     if (cameraData.renderType == CameraRenderType.Overlay)
                         EditorGUILayout.HelpBox("URP Overlay cameras are not supported. Attach Light2D to an independent Base camera.", MessageType.Error);
                     else if (cameraData.cameraStack.Count > 0)
@@ -288,7 +288,95 @@ namespace Light2D
                 EditorGUILayout.HelpBox("This platform does not support the ARGBHalf render texture format required by 16-bit HDR Color.", MessageType.Warning);
             if (_hdr.boolValue && urpAsset != null &&
                 urpAsset.hdrColorBufferPrecision != HDRColorBufferPrecision._64Bits)
-                EditorGUILayout.HelpBox("The URP asset HDR Color Buffer Precision is 32 bits. Select 64 bits to preserve Light2D HDR precision through camera composition.", MessageType.Warning);
+                DrawHdrPrecisionWarning(urpAsset);
+        }
+
+        // Quick fix for the HDR mismatch warning. It repairs whichever half is actually off - the camera flag,
+        // the active URP asset's HDR support, or both - under one collapsed undo step. URP 17 exposes public
+        // setters for both serialized values, so no SerializedObject access is needed; the asset is the same
+        // one the warning tested (GraphicsSettings.currentRenderPipeline), and it is saved because a pipeline
+        // asset is a project asset rather than scene state.
+        private static void DrawHdrDisabledWarning(Camera camera, UniversalRenderPipelineAsset urpAsset)
+        {
+            EditorGUILayout.HelpBox("16-bit HDR Color is enabled, but HDR is disabled on the camera or current URP asset.", MessageType.Warning);
+            if (!GUILayout.Button("Enable HDR"))
+                return;
+
+            Undo.IncrementCurrentGroup();
+            Undo.SetCurrentGroupName("Enable HDR");
+            var undoGroup = Undo.GetCurrentGroup();
+
+            if (!camera.allowHDR)
+            {
+                Undo.RecordObject(camera, "Enable HDR");
+                camera.allowHDR = true;
+                EditorUtility.SetDirty(camera);
+            }
+
+            if (urpAsset != null && !urpAsset.supportsHDR)
+            {
+                Undo.RecordObject(urpAsset, "Enable HDR");
+                urpAsset.supportsHDR = true;
+                EditorUtility.SetDirty(urpAsset);
+                AssetDatabase.SaveAssetIfDirty(urpAsset);
+            }
+
+            Undo.CollapseUndoOperations(undoGroup);
+        }
+
+        private static void DrawHdrPrecisionWarning(UniversalRenderPipelineAsset urpAsset)
+        {
+            EditorGUILayout.HelpBox("The URP asset HDR Color Buffer Precision is 32 bits. Select 64 bits to preserve Light2D HDR precision through camera composition.", MessageType.Warning);
+            if (!GUILayout.Button("Use 64-bit Precision"))
+                return;
+
+            Undo.RecordObject(urpAsset, "Use 64-bit HDR Precision");
+            urpAsset.hdrColorBufferPrecision = HDRColorBufferPrecision._64Bits;
+            EditorUtility.SetDirty(urpAsset);
+            AssetDatabase.SaveAssetIfDirty(urpAsset);
+        }
+
+        // UniversalAdditionalCameraData.allowXRRendering defaults to true on every camera, and URP's camera
+        // inspector hides the Allow XR Rendering toggle unless the project can render XR - so in a project
+        // with no XR packages the flag is always true and cannot even be turned off. URP itself honours the
+        // flag only when an XR display is active (it computes cameraData.xrRendering as
+        // allowXRRendering && XRSystem.displayActive, which is what Light2DUniversalRendererFeature rejects),
+        // so this warning mirrors that and fires only for a project that can actually initialize XR.
+        internal static bool ShouldWarnAboutXrCamera(bool allowXRRendering)
+        {
+            return allowXRRendering && IsProjectXrCapable();
+        }
+
+        internal static bool IsProjectXrCapable()
+        {
+            // XRSRPSettings is SRP core's XR-module-safe accessor (it is compiled against the engine's own
+            // ENABLE_VR/ENABLE_XR_MODULE guards and returns false when the XR modules are absent), so this
+            // call compiles and answers correctly whether or not any XR package is installed. It reports an
+            // XR display that is already initialized - Play mode, or a provider loaded in the Editor.
+            if (XRSRPSettings.enabled)
+                return true;
+
+#if LIGHT2D_XR
+            // XR Plug-in Management is installed (LIGHT2D_XR comes from the asmdef versionDefines entry for
+            // com.unity.xr.management, which every current XR provider package depends on), so a provider can
+            // initialize at runtime even though none is loaded while this inspector draws. Warn.
+            return true;
+#else
+            // No XR package and no active XR display: this project has no way to run XR, so the default-true
+            // allowXRRendering flag is not evidence of anything and must not warn.
+            return false;
+#endif
+        }
+
+        private static void DrawXrCameraWarning(UniversalAdditionalCameraData cameraData)
+        {
+            EditorGUILayout.HelpBox("XR cameras are not supported by Light2D. Disable Allow XR Rendering on this camera.", MessageType.Error);
+            if (!GUILayout.Button("Disable XR Rendering"))
+                return;
+
+            Undo.RecordObject(cameraData, "Disable XR Rendering");
+            cameraData.allowXRRendering = false;
+            EditorUtility.SetDirty(cameraData);
         }
 
         private static void DrawRendererFeatureWarning(Camera camera)
@@ -306,6 +394,10 @@ namespace Light2D
                 case Light2DRendererFeatureStatus.Duplicate:
                     message = "This camera's renderer contains duplicate Light2D renderer features.";
                     break;
+                case Light2DRendererFeatureStatus.Inactive:
+                    message = "The Light2D renderer feature on this camera's renderer is disabled. URP skips " +
+                        "inactive renderer features, so no lighting is composited.";
+                    break;
                 case Light2DRendererFeatureStatus.UnsupportedRenderer:
                     message = "This camera must use a Universal Renderer or 2D Renderer.";
                     break;
@@ -317,7 +409,8 @@ namespace Light2D
             EditorGUILayout.HelpBox(message, MessageType.Error);
             var canInstall = status == Light2DRendererFeatureStatus.Missing ||
                              status == Light2DRendererFeatureStatus.InstalledOnDifferentRenderer ||
-                             status == Light2DRendererFeatureStatus.Duplicate;
+                             status == Light2DRendererFeatureStatus.Duplicate ||
+                             status == Light2DRendererFeatureStatus.Inactive;
             if (rendererData != null && canInstall && GUILayout.Button("Install / Repair Renderer Feature"))
             {
                 try

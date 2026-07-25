@@ -15,6 +15,11 @@
       "name": "com.unity.2d.tilemap",
       "expression": "",
       "define": "LIGHT2D_TILEMAP"
+    },
+    {
+      "name": "com.unity.xr.management",
+      "expression": "",
+      "define": "LIGHT2D_XR"
     }
   ]
 }

@@ -15,7 +15,11 @@ namespace Light2D
         Duplicate,
         UnsupportedPipeline,
         UnsupportedRenderer,
-        MissingCamera
+        MissingCamera,
+        // Exactly one feature is present on the camera's renderer but its Active checkbox is off. URP skips
+        // inactive renderer features (ScriptableRenderer.AddRenderPasses), so this renders no lighting at all
+        // and must never be reported as Installed.
+        Inactive
     }
 
     public static class Light2DUniversalRendererFeatureInstaller
@@ -43,6 +47,19 @@ namespace Light2D
             else
                 selectedRenderer = pipelineAsset.scriptableRenderer;
 
+            // UniversalAdditionalCameraData.scriptableRenderer reads UniversalRenderPipeline.asset, which is
+            // null until URP has created its pipeline instance, so before the first URP frame the per-camera
+            // lookup answers nothing at all. The pipeline asset's own default renderer is what URP would use
+            // in that state - and what URP falls back to for an out-of-range per-camera index - so retry with
+            // it instead of reporting an unsupported renderer.
+            if (selectedRenderer == null)
+                selectedRenderer = pipelineAsset.scriptableRenderer;
+            // Without this guard a null selection matched a null GetRenderer(index) below and resolved to an
+            // arbitrary renderer data - which could report the feature installed on a renderer this camera
+            // does not use.
+            if (selectedRenderer == null)
+                return false;
+
             var rendererDataList = pipelineAsset.rendererDataList;
             for (var index = 0; index < rendererDataList.Length; index++)
             {
@@ -67,11 +84,9 @@ namespace Light2D
             if (!TryGetRendererData(camera, out rendererData))
                 return Light2DRendererFeatureStatus.UnsupportedRenderer;
 
-            var count = CountFeatures(rendererData);
-            if (count > 1)
-                return Light2DRendererFeatureStatus.Duplicate;
-            if (count == 1)
-                return Light2DRendererFeatureStatus.Installed;
+            var status = EvaluateRendererFeatures(rendererData);
+            if (status != Light2DRendererFeatureStatus.Missing)
+                return status;
 
             foreach (var candidate in pipelineAsset.rendererDataList)
             {
@@ -125,6 +140,16 @@ namespace Light2D
                         .GetArrayElementAtIndex(featureIndex).objectReferenceValue);
                     DeleteFeatureAt(features, featureIndex);
                 }
+            }
+
+            // Repair semantics: URP skips a feature whose Active checkbox is off, so keeping exactly one
+            // instance is not enough - the surviving instance must also be active. A freshly created feature
+            // already defaults to active, so this only fires for the repair path.
+            if (!installedFeature.isActive)
+            {
+                Undo.RecordObject(installedFeature, "Install Light2D Renderer Feature");
+                installedFeature.SetActive(true);
+                EditorUtility.SetDirty(installedFeature);
             }
 
             RebuildFeatureMap(features, featureMap);
@@ -195,7 +220,8 @@ namespace Light2D
             var status = GetStatus(GetSelectedCamera(), out _);
             return status == Light2DRendererFeatureStatus.Missing ||
                    status == Light2DRendererFeatureStatus.InstalledOnDifferentRenderer ||
-                   status == Light2DRendererFeatureStatus.Duplicate;
+                   status == Light2DRendererFeatureStatus.Duplicate ||
+                   status == Light2DRendererFeatureStatus.Inactive;
         }
 
         [MenuItem(RemoveMenuPath)]
@@ -211,12 +237,38 @@ namespace Light2D
         {
             var status = GetStatus(GetSelectedCamera(), out _);
             return status == Light2DRendererFeatureStatus.Installed ||
-                   status == Light2DRendererFeatureStatus.Duplicate;
+                   status == Light2DRendererFeatureStatus.Duplicate ||
+                   status == Light2DRendererFeatureStatus.Inactive;
         }
 
         private static bool IsSupportedRenderer(ScriptableRendererData rendererData)
         {
             return rendererData is UniversalRendererData || rendererData is Renderer2DData;
+        }
+
+        // Classifies one already-resolved renderer data. Kept separate from GetStatus so the mapping is
+        // testable without an active pipeline asset and a camera.
+        internal static Light2DRendererFeatureStatus EvaluateRendererFeatures(ScriptableRendererData rendererData)
+        {
+            var count = CountFeatures(rendererData);
+            if (count > 1)
+                return Light2DRendererFeatureStatus.Duplicate;
+            if (count == 0)
+                return Light2DRendererFeatureStatus.Missing;
+
+            return HasActiveFeature(rendererData)
+                ? Light2DRendererFeatureStatus.Installed
+                : Light2DRendererFeatureStatus.Inactive;
+        }
+
+        private static bool HasActiveFeature(ScriptableRendererData rendererData)
+        {
+            foreach (var feature in rendererData.rendererFeatures)
+            {
+                if (feature is Light2DUniversalRendererFeature && feature.isActive)
+                    return true;
+            }
+            return false;
         }
 
         private static int CountFeatures(ScriptableRendererData rendererData)

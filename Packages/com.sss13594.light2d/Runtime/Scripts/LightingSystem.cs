@@ -921,6 +921,9 @@ namespace Light2D
         // (shadowed by the global obstacle texture), then modulates it by the normal buffer and accumulates
         // into the light-sources target. Mirrors the URP feature's AddSingleLightPass/AddNormalLightPass but
         // keeps the built-in Normal Mapped Light shader's world-space _LightPos semantics. XY-plane only.
+        // This is the ONLY writer of LightSourcesTexture while normal mapping is on (RenderLightSources is
+        // either/or), so every light in the snapshot must pass through it - including the generated-falloff
+        // lights whose override Sprite is null.
         private void RenderNormalMappedLightSources(in Light2DCameraGeometry geometry)
         {
             var normalMaterial = _resources.NormalMappedLightMaterial;
@@ -939,7 +942,12 @@ namespace Light2D
                 for (int i = 0; i < _lightSpritesCache.Count; i++)
                 {
                     var light = _lightSpritesCache[i];
-                    if (light == null || light.Sprite == null)
+                    if (light == null)
+                        continue;
+                    // The sprite the light actually draws: the generated falloff sprite, or the Sprite override
+                    // when one is assigned. Only the emission-origin footprint below needs it.
+                    var activeSprite = light.ActiveLightSprite;
+                    if (activeSprite == null)
                         continue;
                     var mesh = light.Mesh;
                     var lightMaterial = light.DrawMaterial;
@@ -955,7 +963,7 @@ namespace Light2D
                     for (int s = 0; s < submeshCount; s++)
                         raster.DrawMesh(mesh, matrix, lightMaterial, s, sourcePass);
 
-                    var size = light.Sprite.bounds.size;
+                    var size = activeSprite.bounds.size;
                     var center = matrix.MultiplyPoint3x4(Vector2.Scale(light.LightOrigin, size));
                     _normalLightProperties.Clear();
                     _normalLightProperties.SetVector(LightPosId,

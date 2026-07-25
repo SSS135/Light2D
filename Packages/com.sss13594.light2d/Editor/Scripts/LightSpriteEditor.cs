@@ -88,10 +88,12 @@ namespace Light2D
         private static readonly GUIContent LightOriginApexLabel = new GUIContent("Light Origin",
             "Correction offset for the cone apex, in the sprite's local XY (leave at 0,0 to originate exactly at " +
             "the transform). Switching Type never rewrites this.");
-        // Normal Map Height only feeds the normal-mapped light pass, so it is shown only when an Override Sprite is set.
+        // Normal Map Height is the light's height above the plane - a placement value like Light Origin, so it
+        // is drawn with the placement properties and stays visible for every light. Its effect is gated by the
+        // normal-mapped pass, which the tooltip states; hiding the field only made the setting undiscoverable.
         private static readonly GUIContent NormalMapHeightLabel = new GUIContent("Normal Map Height",
-            "Height of the light above the 2D plane, used only by the normal-mapped light pass (needs normal " +
-            "mapping enabled on the owning LightingSystem). Ignored otherwise.");
+            "Height of the light above the 2D plane, used as the light height by normal mapping. Takes effect " +
+            "only when the owning LightingSystem has Normal Mapping enabled; ignored otherwise.");
         private static readonly GUIContent SortingOrderLabel = new GUIContent("Sorting Order",
             "Draw order among lights; lower values draw first.");
         private static readonly GUIContent OwnerLabel = new GUIContent("Owner",
@@ -176,6 +178,9 @@ namespace Light2D
             // Light Origin is a correction offset for Point (centre) and Spot (apex); Line ignores it, so hide it.
             if (!isLine)
                 EditorGUILayout.PropertyField(_lightOrigin, isSpot ? LightOriginApexLabel : LightOriginCenterLabel);
+            // The height above the plane belongs next to the Light Origin XY correction: together they place the
+            // light in 3D for normal mapping. Drawn for every Type, with or without an Override Sprite.
+            EditorGUILayout.PropertyField(_normalMapHeight, NormalMapHeightLabel);
             EditorGUILayout.PropertyField(_sortingOrder, SortingOrderLabel);
             EditorGUILayout.PropertyField(_owner, OwnerLabel);
 
@@ -283,13 +288,7 @@ namespace Light2D
         private void DrawSpriteOverride()
         {
             EditorGUILayout.PropertyField(_sprite, SpriteOverrideLabel);
-            if (_sprite.objectReferenceValue != null)
-            {
-                // The normal-mapped light pass runs only for lights with an override sprite, so Normal Map
-                // Height is meaningful only here (and further, only when the LightingSystem enables normal mapping).
-                EditorGUILayout.PropertyField(_normalMapHeight, NormalMapHeightLabel);
-            }
-            else if (!_sprite.hasMultipleDifferentValues)
+            if (_sprite.objectReferenceValue == null && !_sprite.hasMultipleDifferentValues)
             {
                 EditorGUILayout.HelpBox(
                     "Empty: the falloff is generated from Type, Falloff, and Spot Angle. Assign a sprite to override generation.",

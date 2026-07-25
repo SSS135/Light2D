@@ -657,7 +657,16 @@ namespace Light2D
                 Light2DRenderRegistry.PrepareObstacleSnapshot(_obstacleSnapshot, extendedContext);
                 Light2DRenderRegistry.PrepareCoverageSnapshot(_coverageSnapshot, extendedContext);
                 LightSprite.PrepareSnapshot(_lightSprites, _lighting.XZPlane, _lighting, _extendedPlanes);
-                BuildSourceEntries(_lightSprites, _sourceEntries);
+                // Either/or, exactly like LightingSystem.RenderLightSources: with normal mapping on, every light
+                // is drawn by the per-light single-light + normal pass pair below, so the flat "Light2D Sources"
+                // pass draws no lights at all (it still runs to clear the accumulation target those passes blend
+                // into). Feeding lights to both paths double-counted every light the normal path picked up,
+                // because the normal pass accumulates onto the flat result (SetRenderAttachment ReadWrite +
+                // NormalMappedLight.shader's Blend OneMinusDstColor One).
+                if (_lighting.EnableNormalMapping)
+                    _sourceEntries.Clear();
+                else
+                    BuildSourceEntries(_lightSprites, _sourceEntries);
 
                 int obstaclePass = ResolvePassForSnapshot(_obstacleSnapshot, ForwardLightMode);
                 // Values-only source of truth: the LightingSystem-wide obstacle multiplier is pushed onto the
@@ -710,15 +719,23 @@ namespace Light2D
                         black);
                 }
 
+                // With normal mapping on, _sourceEntries is empty (see above), so this pass only clears `sources`
+                // for the per-light normal passes to accumulate into.
                 int sourcePass = ResolvePassForSnapshot(_sourceEntries, ForwardLightMode);
                 AddDrawPass(renderGraph, "Light2D Sources", Light2DProfiling.Sources, sources, _sourceEntries,
                     sourcePass, smallView, smallProjection, cameraView, cameraProjection, Color.clear, context, true,
                     obstacles, normals, black);
                 if (_lighting.EnableNormalMapping)
                 {
+                    // Every light goes through the pair exactly once, drawn with the sprite it actually draws:
+                    // the generated falloff sprite, or the Sprite override when one is assigned (the override-only
+                    // Sprite gate used to skip every generated-falloff light, leaving it with no normal response).
                     foreach (var lightSprite in _lightSprites)
                     {
-                        if (lightSprite == null || lightSprite.Sprite == null ||
+                        if (lightSprite == null)
+                            continue;
+                        var activeSprite = lightSprite.ActiveLightSprite;
+                        if (activeSprite == null ||
                             !TryBuildLightEntry(lightSprite, out var lightEntry) ||
                             !GeometryUtility.TestPlanesAABB(_smallPlanes, lightEntry.WorldBounds))
                             continue;
@@ -727,8 +744,8 @@ namespace Light2D
                         int singleLightPass = Light2DDraw.ResolvePass(lightEntry.Material, ForwardLightMode);
                         AddSingleLightPass(renderGraph, context, lightEntry, singleLightPass, singleLight, obstacles,
                             smallView, smallProjection, cameraView, cameraProjection, sizes, black);
-                        AddNormalLightPass(renderGraph, context, lightSprite, singleLight, normals, sources,
-                            smallCamera, black);
+                        AddNormalLightPass(renderGraph, context, lightSprite, activeSprite, singleLight, normals,
+                            sources, smallCamera, black);
                     }
                 }
 
@@ -1131,11 +1148,21 @@ namespace Light2D
                 }
             }
 
+            // One light drawn into its own scratch target, structurally identical to AddDrawPass: an unsafe pass
+            // (native command buffer) with SetRenderTarget + the RAW projection. That pairing is the only one
+            // proven to render upright in this backend, and it must match the flat "Light2D Sources" pass
+            // exactly, because with normal mapping on this pass is the only thing that positions the light.
+            // Pre-applying GL.GetGPUProjectionMatrix(projection, true) here applied the render-texture GPU
+            // adjustment TWICE - the command buffer applies it itself when it executes into the bound texture
+            // (same reason as AddDrawPass and LightingSystem.RenderNormalMappedLightSources) - which cancels the
+            // Y flip and rendered this scratch target VERTICALLY MIRRORED. AddNormalLightPass then composites it
+            // with an identity fullscreen blit, so the mirror reached the screen intact: a light tracked the
+            // mouse with normal mapping off and jumped to the mirrored Y with it on.
             private static void AddSingleLightPass(RenderGraph graph, CameraContext context, Light2DDrawEntry lightEntry,
                 int shaderPass, TextureHandle target, TextureHandle obstacles, Matrix4x4 view, Matrix4x4 projection,
                 Matrix4x4 cameraView, Matrix4x4 cameraProjection, Sizes sizes, TextureHandle black)
             {
-                using (var builder = graph.AddRasterRenderPass<SingleLightPassData>("Light2D Draw Normal-Mapped Light",
+                using (var builder = graph.AddUnsafePass<SingleLightPassData>("Light2D Draw Normal-Mapped Light",
                            out var data))
                 {
                     data.Mesh = lightEntry.Mesh;
@@ -1146,7 +1173,8 @@ namespace Light2D
                     data.Target = target;
                     data.Obstacles = obstacles;
                     data.View = view;
-                    data.Projection = GL.GetGPUProjectionMatrix(projection, true);
+                    // Raw projection, exactly like AddDrawPass (see the comment above this method).
+                    data.Projection = projection;
                     data.CameraView = cameraView;
                     data.CameraProjection = cameraProjection;
                     data.XZ = context.Lighting.XZPlane;
@@ -1157,37 +1185,51 @@ namespace Light2D
                     data.Black = black;
                     builder.UseTexture(obstacles, AccessFlags.Read);
                     builder.UseTexture(black, AccessFlags.Read);
-                    builder.SetRenderAttachment(target, 0, AccessFlags.Write);
+                    // Unsafe passes bind no attachment automatically; the render func issues SetRenderTarget.
+                    builder.UseTexture(target, AccessFlags.Write);
                     builder.AllowGlobalStateModification(true);
-                    builder.SetRenderFunc(static (SingleLightPassData pass, RasterGraphContext rg) =>
+                    builder.SetRenderFunc(static (SingleLightPassData pass, UnsafeGraphContext rg) =>
                     {
+                        var cmd = rg.cmd;
                         Light2DProfiling.Sources.Begin();
-                        rg.cmd.ClearRenderTarget(RTClearFlags.Color, Color.clear, 1, 0);
-                        rg.cmd.SetViewProjectionMatrices(pass.View, pass.Projection);
-                        rg.cmd.SetGlobalTexture(UrpObstacleTex, pass.Obstacles);
-                        rg.cmd.SetGlobalFloat(PixelsPerBlock, pass.PixelsPerMeter);
-                        rg.cmd.SetGlobalVector(ExtendedScale, pass.ExtendedScale);
-                        rg.cmd.SetGlobalVector(PositionOffset, pass.PositionOffset);
-                        SetKeywords(rg.cmd, pass.XZ, false);
+                        cmd.SetRenderTarget(pass.Target);
+                        cmd.ClearRenderTarget(RTClearFlags.Color, Color.clear, 1, 0);
+                        cmd.SetViewProjectionMatrices(pass.View, pass.Projection);
+                        cmd.SetGlobalTexture(UrpObstacleTex, pass.Obstacles);
+                        cmd.SetGlobalFloat(PixelsPerBlock, pass.PixelsPerMeter);
+                        cmd.SetGlobalVector(ExtendedScale, pass.ExtendedScale);
+                        cmd.SetGlobalVector(PositionOffset, pass.PositionOffset);
+                        // Normal mapping is validated orthographic-only (ValidateAndUpdate), so the
+                        // perspective keyword is always off here.
+                        SetKeywords(cmd, pass.XZ, false);
                         for (int s = 0; s < pass.SubmeshCount; s++)
-                            rg.cmd.DrawMesh(pass.Mesh, pass.Matrix, pass.Material, s, pass.ShaderPass);
-                        ClearKeywords(rg.cmd);
-                        ClearTextureGlobals(rg.cmd, pass.Black);
-                        rg.cmd.SetViewProjectionMatrices(pass.CameraView, pass.CameraProjection);
+                            cmd.DrawMesh(pass.Mesh, pass.Matrix, pass.Material, s, pass.ShaderPass);
+                        ClearKeywords(cmd);
+                        ClearTextureGlobals(cmd, pass.Black);
+                        cmd.SetViewProjectionMatrices(pass.CameraView, pass.CameraProjection);
                         Light2DProfiling.Sources.End();
                     });
                 }
             }
 
+            // activeSprite is the sprite the light draws (generated falloff or Sprite override); its bounds place
+            // the emission origin that becomes the viewport-space _LightPos.xy, with NormalMapHeight in z.
             private static void AddNormalLightPass(RenderGraph graph, CameraContext context, LightSprite light,
-                TextureHandle singleLight, TextureHandle normals, TextureHandle target,
+                Sprite activeSprite, TextureHandle singleLight, TextureHandle normals, TextureHandle target,
                 Light2DCameraGeometry smallCamera, TextureHandle black)
             {
-                Vector2 size = light.Sprite.bounds.size;
+                Vector2 size = activeSprite.bounds.size;
                 Vector3 center = light.transform.localToWorldMatrix.MultiplyPoint3x4(
                     Vector2.Scale(light.LightOrigin, size));
                 Vector4 clipPosition = smallCamera.Projection * smallCamera.View *
                                        new Vector4(center.x, center.y, 0, 1);
+                // The RAW (OpenGL-convention) light-camera projection is deliberate: it yields y-up viewport
+                // coordinates with 0 at the bottom of the light image, which is exactly the space the shader's
+                // fullscreen lightUV/normalUV live in. GetFullScreenTriangleTexCoord's y=0 always addresses the
+                // texture row that an upright light/normal target stores the bottom of the image in - on
+                // flipped-UV platforms (row 0 written from clip y=+1 after the GPU adjustment) and on OpenGL
+                // (row 0 written from clip y=-1) alike. So _LightPos.y needs NO extra flip here; adding one
+                // would mirror the highlight inside a correctly positioned light.
                 Vector2 viewportPosition = (Vector2)clipPosition / clipPosition.w * 0.5f + Vector2.one * 0.5f;
                 var lightPosition = new Vector3(viewportPosition.x, viewportPosition.y, light.NormalMapHeight);
                 Matrix4x4 cameraToWorld = smallCamera.View.inverse;
@@ -1288,10 +1330,16 @@ namespace Light2D
             }
 
             // Coverage blend: final = lerp(rawGame, composite, coverage). Runs after AddOverlayPass only when
-            // coverage is active. The _Scale/_Offset/_ExtendedToSmallTextureScale globals reproduce the overlay's
+            // coverage is active. _Scale/_Offset/_ExtendedToSmallTextureScale reproduce the overlay's
             // small-light -> extended UV mapping (§1.4) so the coverage RT samples aligned with the composite.
-            // The coverage-blend shader (Light2D/Coverage Blend) samples _Light2DURPGameTex/_Light2DURPCompositeTex/
-            // _Light2DURPCoverageTex declared in the self-contained CoverageBlend.hlsl.
+            // Unlike LightOverlay.shader, CoverageBlend.shader declares all three in its Properties block, and a
+            // material value always overrides a global one - so they must be pushed onto the coverage-blend
+            // material, exactly like this pass's neighbour pushes the overlay's Properties-declared floats.
+            // Setting them as globals instead left the material on its serialized Properties defaults
+            // (_Scale (1,1), _Offset (0,0), _ExtendedToSmallTextureScale (1,1)), which dropped the
+            // extended->small remap and shrank the whole coverage region by extended/small.
+            // The coverage-blend shader samples _Light2DURPGameTex/_Light2DURPCompositeTex/_Light2DURPCoverageTex
+            // declared in the self-contained CoverageBlend.hlsl; those are not properties, so they stay globals.
             private void AddCoverageBlendPass(RenderGraph graph, CameraContext context, Camera camera,
                 TextureHandle composite, TextureHandle game, TextureHandle coverage, TextureHandle destination,
                 Sizes sizes, Light2DCameraGeometry lightCamera, TextureHandle black)
@@ -1302,19 +1350,20 @@ namespace Light2D
                     data.Composite = composite;
                     data.Game = game;
                     data.Coverage = coverage;
-                    data.Material = context.CoverageBlendMaterial;
-                    data.ExtendedScale = new Vector2(sizes.Small.x / (float)sizes.Extended.x,
-                        sizes.Small.y / (float)sizes.Extended.y);
+                    var material = context.CoverageBlendMaterial;
+                    data.Material = material;
                     // Scale/Offset mirror AddOverlayPass exactly so coverageUV == the overlay's ambientUV mapping.
                     float sourceSize = camera.orthographic
                         ? camera.orthographicSize
                         : Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f) * _lighting.LightObstaclesDistance;
                     float scaleY = sourceSize / Mathf.Max(0.00001f, lightCamera.OrthographicSize);
-                    data.Scale = new Vector2(scaleY * camera.aspect / lightCamera.Aspect, scaleY);
                     Vector3 worldOffset = Quaternion.Inverse(camera.transform.rotation) *
                                           (lightCamera.Position - camera.transform.position);
-                    data.Offset = Vector2.Scale(new Vector2(1f / sizes.Small.x, 1f / sizes.Small.y),
-                        -(Vector2)worldOffset * _lighting.LightPixelsPerUnityMeter);
+                    material.SetVector(ExtendedScale, new Vector2(sizes.Small.x / (float)sizes.Extended.x,
+                        sizes.Small.y / (float)sizes.Extended.y));
+                    material.SetVector(Scale, new Vector2(scaleY * camera.aspect / lightCamera.Aspect, scaleY));
+                    material.SetVector(Offset, Vector2.Scale(new Vector2(1f / sizes.Small.x, 1f / sizes.Small.y),
+                        -(Vector2)worldOffset * _lighting.LightPixelsPerUnityMeter));
                     data.Black = black;
                     builder.UseTexture(composite, AccessFlags.Read);
                     builder.UseTexture(game, AccessFlags.Read);
@@ -1328,9 +1377,6 @@ namespace Light2D
                         rg.cmd.SetGlobalTexture(UrpCompositeTex, pass.Composite);
                         rg.cmd.SetGlobalTexture(UrpGameTex, pass.Game);
                         rg.cmd.SetGlobalTexture(UrpCoverageTex, pass.Coverage);
-                        rg.cmd.SetGlobalVector(ExtendedScale, pass.ExtendedScale);
-                        rg.cmd.SetGlobalVector(Scale, pass.Scale);
-                        rg.cmd.SetGlobalVector(Offset, pass.Offset);
                         Blitter.BlitTexture(rg.cmd, pass.Composite, Vector2.one, pass.Material, 0);
                         rg.cmd.SetGlobalTexture(UrpCompositeTex, pass.Black);
                         rg.cmd.SetGlobalTexture(UrpCoverageTex, pass.Black);
@@ -1610,10 +1656,8 @@ namespace Light2D
                 internal TextureHandle Composite;
                 internal TextureHandle Game;
                 internal TextureHandle Coverage;
+                // The sampling transform rides on this material (see AddCoverageBlendPass), not in pass data.
                 internal Material Material;
-                internal Vector2 ExtendedScale;
-                internal Vector2 Scale;
-                internal Vector2 Offset;
                 internal TextureHandle Black;
             }
         }

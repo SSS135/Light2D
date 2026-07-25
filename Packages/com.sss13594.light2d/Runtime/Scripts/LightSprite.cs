@@ -23,8 +23,8 @@ namespace Light2D
         public Vector2 LightOrigin = Vector2.zero;
 
         [Tooltip("Height of the light above the 2D plane, consumed only by the normal-mapped light pass " +
-                 "(default 1). Requires an Override Sprite and normal mapping enabled on the owning " +
-                 "LightingSystem; ignored otherwise.")]
+                 "(default 1). Requires normal mapping enabled on the owning LightingSystem; ignored " +
+                 "otherwise.")]
         public float NormalMapHeight = 1f;
 
         [Tooltip("LightingSystem that draws this light. Leave empty to draw for any system, or set it to " +
@@ -113,6 +113,13 @@ namespace Light2D
                     : Light2DLightTextureGenerator.GetSprite(Type, Falloff, SpotAngle, Sides, SpotSoftness);
             }
         }
+
+        // Render-path view of the sprite this light actually draws (the generated falloff sprite, or the Sprite
+        // override when one is assigned). Both backends' normal-mapped light passes need the drawn sprite's
+        // bounds to place the emission origin, and Sprite alone is null for every generated-falloff light -
+        // gating the normal path on it dropped those lights entirely. ActiveSprite stays protected so the
+        // CustomSprite contract is unchanged.
+        internal Sprite ActiveLightSprite { get { return ActiveSprite; } }
 
         // Lights auto-resolve their draw material from Shadows so a LightSprite "just works" with no Material
         // assigned (the register-and-draw core draws through DrawMaterial in both backends). An explicitly
