@@ -29,13 +29,14 @@ sysinfo.txt
 /*.log
 /*-results.xml
 
-# Restored NuGet plugins for the embedded editor-automation MCP (tracked folder
-# metas are kept; the restored assemblies inside are regenerated on import).
-/Assets/Plugins/NuGet/
+# Machine-local MCP client configuration
+/.mcp.json
+/opencode.json
+/.claude/settings.local.json
 
-# Embedded editor-automation MCP host: a separate, unrelated dev tool kept on disk
+# Embedded Unity MCP Streamlined host: a separate, unrelated dev tool kept on disk
 # (Unity auto-discovers embedded packages under Packages/) but not committed here.
-/Packages/com.sss135.editor-automation-mcp/
+/Packages/com.sss135.unity-mcp-streamlined/
 
 # Numbered URP global-settings copies that URP regenerates. NEVER the unnumbered
 # sentinel Assets/UniversalRenderPipelineGlobalSettings.asset.

@@ -1,13 +1,12 @@
 {
   "dependencies": {
-    "com.sss135.editor-automation-mcp": {
-      "version": "file:com.sss135.editor-automation-mcp",
+    "com.sss135.unity-mcp-streamlined": {
+      "version": "file:com.sss135.unity-mcp-streamlined",
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.unity.test-framework": "1.1.33",
-        "com.unity.modules.uielements": "1.0.0",
-        "extensions.unity.playerprefsex": "2.1.3"
+        "com.unity.test-framework": "1.4.0",
+        "com.unity.modules.uielements": "1.0.0"
       }
     },
     "com.sss13594.light2d": {
@@ -159,13 +158,6 @@
         "com.unity.modules.physics2d": "1.0.0",
         "com.unity.modules.physics": "1.0.0"
       }
-    },
-    "extensions.unity.playerprefsex": {
-      "version": "2.1.3",
-      "depth": 1,
-      "source": "registry",
-      "dependencies": {},
-      "url": "https://package.openupm.com"
     },
     "com.unity.modules.animation": {
       "version": "1.0.0",

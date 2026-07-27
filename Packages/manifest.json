@@ -13,15 +13,7 @@
     "com.unity.modules.ui": "1.0.0"
   },
   "testables": [
-    "com.sss13594.light2d"
-  ],
-  "scopedRegistries": [
-    {
-      "name": "package.openupm.com",
-      "url": "https://package.openupm.com",
-      "scopes": [
-        "extensions.unity"
-      ]
-    }
+    "com.sss13594.light2d",
+    "com.sss135.unity-mcp-streamlined"
   ]
 }

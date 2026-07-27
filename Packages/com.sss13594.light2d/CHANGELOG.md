@@ -181,7 +181,7 @@ host is 6000.5.4f1.
 - Replaced unqualified editor `Resources.Load` calls with package-qualified
   `AssetDatabase` paths.
 - The package development host (`TestProject`) and an editor-automation MCP endpoint
-  on port 17777. Host automation is self-contained and has no external
+  on a project-derived port. Host automation is self-contained and has no external
   sibling-project fallback.
 - EditMode suites covering contracts, lifecycle and resource release, components,
   diagnostics, editor workflows, package integrity, shader import, and URP
@@ -221,9 +221,12 @@ host is 6000.5.4f1.
 
 - Development host migrated to Unity 6000.5.4f1. The external
   Unity 6000.4.7f1 / ShaderGraph 17.4.0 URP importer defect is resolved on the new
-  host; the only remaining limitation is that a runtime-created URP pipeline does
-  not activate under batchmode PlayMode, so the URP PlayMode tests `Assert.Ignore`
-  via a pipeline-activation guard.
+  host. Passive frames still do not advance a runtime-created URP pipeline in
+  batchmode, but the four URP PlayMode tests now render explicitly through
+  `RenderPipeline.SubmitRenderRequest` with `SingleCameraRequest`; all pixel
+  assertions run with no skip path. Current verification: full EditMode 358 total
+  (347 pass, 11 intentional skips), Light2D EditMode 120/120, and selected PlayMode
+  11/11 (Built-in 4/4, URP 4/4, sample smokes 2/2, Rocket visual 1/1).
 - Runtime components now carry tooltips and `[AddComponentMenu]` entries.
 
 ### Migration notes

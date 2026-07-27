@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "editor-automation": {
-      "type": "http",
-      "url": "http://127.0.0.1:17777/mcp"
-    }
-  }
-}

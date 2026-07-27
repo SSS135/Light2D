@@ -31,9 +31,9 @@ Open the repository root directly. It is a Unity 6000.5.4f1 project whose `Asset
 7. Manually verify URP with both Universal Renderer Data and 2D Renderer Data when renderer integration changes.
 8. Check `git diff --check` and ensure generated host files are not staged.
 
-The EditMode suites cover contract behavior (public API surface, pipeline classification, and legacy-API removal), lifecycle and resource release, component resources, diagnostics, editor workflows, package integrity, shader import, and deterministic URP feature setup — roughly 103 test methods. They run green with no skips on the current host. The package PlayMode suite holds about 17 test methods: four Built-in tests covering rendered output, obstacle attenuation, and owned-resource cleanup; three target-alignment tests; six coverage-volume tests; and four URP rendering tests (aligned non-square target output, partial viewport-rect alignment, reduced-render-scale composition, and two-base-camera lighting isolation). Each URP PlayMode test `Assert.Ignore`s only when the runtime-created URP pipeline fails to activate in batchmode (the `IgnoreIfPipelineInactive` guard described under URP Verification Status below); on a host where the pipeline activates they run fully.
+The EditMode suites cover contract behavior (public API surface, pipeline classification, and legacy-API removal), lifecycle and resource release, component resources, diagnostics, editor workflows, package integrity, shader import, and deterministic URP feature setup. The package PlayMode suite includes four Built-in tests covering rendered output, obstacle attenuation, and owned-resource cleanup; target-alignment and coverage-volume tests; and four URP rendering tests (aligned non-square target output, partial viewport-rect alignment, reduced-render-scale composition, and two-base-camera lighting isolation). The URP tests drive rendering explicitly with `RenderPipeline.SubmitRenderRequest` and `UniversalRenderPipeline.SingleCameraRequest`; they have no skip path.
 
-The host project additionally provides a sample PlayMode suite in assembly `Light2D.TestProject.SampleTests` under `Assets/Light2DTestAutomation/Tests/`: two frame-advance sample smoke tests plus three visual smoke tests that write PNG artifacts to `TestResults/Light2DSampleVisual/` (Rocket, Rocket Tilemap, and Light Volume captures) before asserting. Across the package and host suites that is about 22 PlayMode test methods in total. The EditMode suites and the Built-in PlayMode tests have been exercised on the current host; the URP PlayMode tests self-skip there when the pipeline does not activate in batchmode (see URP Verification Status below).
+The host project additionally provides a sample PlayMode suite in assembly `Light2D.TestProject.SampleTests` under `Assets/Light2DTestAutomation/Tests/`: two frame-advance sample smoke tests plus three visual smoke tests that write PNG artifacts to `TestResults/Light2DSampleVisual/` (Rocket, Rocket Tilemap, and Light Volume captures) before asserting. Current Unity 6000.5.4f1 evidence is: full EditMode 358 total (347 pass, 11 intentional skips); Light2D EditMode 120/120; and selected PlayMode 11/11, comprising Built-in 4/4, URP 4/4, sample smokes 2/2, and Rocket visual 1/1.
 
 ## Batch Commands
 
@@ -96,25 +96,25 @@ URP RenderGraph support for `UniversalRendererData` and `Renderer2DData` is impl
 
 The external Unity 6000.4.7f1 / ShaderGraph 17.4.0 importer defect that previously blocked URP validation is resolved on the Unity 6000.5.4f1 host. On the old host the URP `.shadergraph`/`.urtshader` assets cached permanently as `DefaultAsset`, URP global settings could not populate their resource fields ("Host type is not matching any asset type"), and a runtime-created `UniversalRenderPipelineAsset` never activated. On 6000.5.4f1 those ShaderGraphs import correctly and the global-settings sentinel populates its resource fields.
 
-The remaining limitation is narrower and is a batchmode/test-harness artifact rather than a rendering defect: a runtime-created URP pipeline does not activate under batchmode PlayMode (`RenderPipelineManager.currentPipeline` stays null after many frames, with no error and a real GPU). The four URP PlayMode tests therefore `Assert.Ignore` through the `IgnoreIfPipelineInactive` guard, which is scoped strictly to non-activation so it cannot mask a genuine URP failure. On a host where the runtime pipeline activates, the full URP suite runs and any failure is a real regression. URP pixel correctness is verified through an interactive/edit-mode path rather than batchmode PlayMode; do not claim URP pixel correctness from a batch run alone.
+Passive frames remain insufficient to advance a runtime-created URP pipeline in batchmode: `RenderPipelineManager.currentPipeline` stays null after frame yields. The four URP PlayMode tests do not depend on passive activation. Each issues `RenderPipeline.SubmitRenderRequest` with a `UniversalRenderPipeline.SingleCameraRequest` against the source camera, warming ambient history and then capturing the settled frame. This composes URP on demand, leaves no skip path, and runs every pixel assertion; all four tests pass in batchmode on Unity 6000.5.4f1.
 
 ## Editor Automation MCP
 
-The host embeds `com.sss135.editor-automation-mcp`. While the editor is open and responsive, it serves:
+The host embeds `com.sss135.unity-mcp-streamlined`. Do not also install official Unity-MCP: the streamlined derivative intentionally shares assembly and code identities with it, so the packages cannot coexist in one Unity project. While the editor is open and responsive, the gateway serves:
 
 ```text
-http://127.0.0.1:17777/mcp
+http://127.0.0.1:<port>/mcp
 ```
 
-The root `.mcp.json` configures that endpoint. There is no separate server process. The active port is also written to `Library/EditorAutomationHttp/port.txt`.
+The root `.mcp.json` configures the stdio proxy. The in-editor gateway writes its active project-derived port to `Library/UnityMcpStreamlined/gateway-port` and its token beside it; do not assume a fixed port. On first import, wait for package import, script compilation, and any resulting domain reload to finish before using MCP. The setup menu and gateway are unavailable until Unity is ready.
 
 Code edits require an asset refresh and completed Unity compilation before tests exercise the new assembly. An unfocused Windows editor can stall refresh or domain reload. Before a recompile-triggering MCP call, run the one-shot helper:
 
 ```powershell
-& "X:\src\unity\Light2D\Packages\com.sss135.editor-automation-mcp\Tools\wake-unity.ps1" -ProjectFilter "Light2D"
+& "X:\src\unity\Light2D\Packages\com.sss135.unity-mcp-streamlined\Tools\wake-unity.ps1" -ProjectFilter "Light2D"
 ```
 
-Then request `assets.refresh`, poll `editor.application-get-state` until compilation and updating are both settled, run `tests.run`, poll its job ticket, and inspect `console.get-logs`. The gateway disappears during domain reload; reconnect only after its health endpoint responds again. If port 17777 is already occupied, close the other Unity editor using it.
+Then request `assets.refresh`, poll `editor.application-get-state` until compilation and updating are both settled, run `tests.run`, poll its job ticket, and inspect `console.get-logs`. The gateway disappears during domain reload; the stdio proxy reconnects after the gateway republishes its active port and token. For direct diagnostics, read `gateway-port` rather than using a hard-coded endpoint. If its derived port conflicts with another process, stop that process rather than changing Light2D configuration.
 
 ## Manual Matrix
 

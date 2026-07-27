@@ -87,7 +87,7 @@ PlayerSettings:
   androidApplicationEntry: 2
   defaultIsNativeResolution: 1
   macRetinaSupport: 1
-  runInBackground: 0
+  runInBackground: 1
   muteOtherAudioSources: 0
   Prepare IOS For Recording: 0
   Force IOS Speakers When Recording: 0
@@ -587,26 +587,7 @@ PlayerSettings:
   webGLCloseOnQuit: 0
   webWasm2023: 0
   webEnableSubmoduleStrippingCompatibility: 0
-  scriptingDefineSymbols:
-    Android: EDITOR_AUTOMATION_READY
-    EmbeddedLinux: EDITOR_AUTOMATION_READY
-    GameCoreScarlett: EDITOR_AUTOMATION_READY
-    GameCoreXboxOne: EDITOR_AUTOMATION_READY
-    Kepler: EDITOR_AUTOMATION_READY
-    LinuxHeadlessSimulation: EDITOR_AUTOMATION_READY
-    Nintendo Switch: EDITOR_AUTOMATION_READY
-    Nintendo Switch 2: EDITOR_AUTOMATION_READY
-    PS4: EDITOR_AUTOMATION_READY
-    PS5: EDITOR_AUTOMATION_READY
-    QNX: EDITOR_AUTOMATION_READY
-    Server: EDITOR_AUTOMATION_READY
-    Standalone: EDITOR_AUTOMATION_READY
-    VisionOS: EDITOR_AUTOMATION_READY
-    WebGL: EDITOR_AUTOMATION_READY
-    Windows Store Apps: EDITOR_AUTOMATION_READY
-    XboxOne: EDITOR_AUTOMATION_READY
-    iPhone: EDITOR_AUTOMATION_READY
-    tvOS: EDITOR_AUTOMATION_READY
+  scriptingDefineSymbols: {}
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend: {}
