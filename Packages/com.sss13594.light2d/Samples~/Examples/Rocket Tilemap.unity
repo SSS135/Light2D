@@ -390,7 +390,7 @@ MonoBehaviour:
   MaxLightTexturePixels: 16777216
   AmbientWarmupCycles: 100
   LightPixelSize: 0.5
-  LightCameraSizeAdd: 8
+  LightCameraSizeAdd: 25
   LightCameraFovAdd: 30
   EnableAmbientLight: 1
   BlurLightSources: 0

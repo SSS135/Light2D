@@ -260,7 +260,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 61930e16e81db5c43a4ecc22422a0953, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Color: {r: 0.50507104, g: 1, b: 0.102941155, a: 0.7607843}
+  Color: {r: 0.50507104, g: 1, b: 0.102941155, a: 1}
   Sprite: {fileID: 0}
   SortingOrder: 0
   Material: {fileID: 0}
@@ -272,7 +272,8 @@ MonoBehaviour:
   Length: 3
   Throw: 1.5
   Sides: 0
-  Intensity: 0.8
-  Falloff: 0.5
+  Intensity: 0.6567164
+  Falloff: -0.179
   SpotAngle: 45
+  SpotSoftness: -1
   Shadows: 1
