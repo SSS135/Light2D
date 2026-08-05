@@ -95,7 +95,7 @@ namespace Light2D.TestProject.Tests
         {
             Assert.That(context.Lighting != null && context.Lighting.isActiveAndEnabled, Is.True,
                 "The LightingSystem did not stay active through the frame advancement.");
-            Assert.That(Object.FindObjectsByType<LightingSystem>(FindObjectsSortMode.None), Has.Length.EqualTo(1),
+            Assert.That(Object.FindObjectsByType<LightingSystem>(), Has.Length.EqualTo(1),
                 "The scene no longer has exactly one active LightingSystem after the frame advancement.");
             Assert.That(context.Lighting.IsRenderingReady, Is.True,
                 "The LightingSystem is no longer ready to render (overlay material lost or pipeline unsupported).");
@@ -107,7 +107,7 @@ namespace Light2D.TestProject.Tests
                 "The ambient texture was not allocated during rendering.");
 
             var enabledLightSprites = 0;
-            foreach (LightSprite lightSprite in Object.FindObjectsByType<LightSprite>(FindObjectsSortMode.None))
+            foreach (LightSprite lightSprite in Object.FindObjectsByType<LightSprite>())
             {
                 if (lightSprite.isActiveAndEnabled)
                     enabledLightSprites++;

@@ -167,7 +167,7 @@ namespace Light2D
         private static void ResetRegistry()
         {
             LightSprites.Clear();
-            foreach (var lightSprite in FindObjectsByType<LightSprite>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var lightSprite in FindObjectsByType<LightSprite>(FindObjectsInactive.Exclude))
                 LightSprites.Add(lightSprite);
         }
 

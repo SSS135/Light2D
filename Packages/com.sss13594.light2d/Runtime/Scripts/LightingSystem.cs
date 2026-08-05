@@ -363,7 +363,7 @@ namespace Light2D
         {
             ActiveInstances.Clear();
             InstanceSnapshot.Clear();
-            foreach (var instance in FindObjectsByType<LightingSystem>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var instance in FindObjectsByType<LightingSystem>(FindObjectsInactive.Exclude))
                 ActiveInstances.Add(instance);
         }
 

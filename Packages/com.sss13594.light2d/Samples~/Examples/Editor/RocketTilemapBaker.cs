@@ -167,13 +167,13 @@ namespace Light2D.Examples
             // 3. Start from the procedural Rocket scene, then swap terrain for the fixed cave.
             var scene = EditorSceneManager.OpenScene(sourceScenePath, OpenSceneMode.Single);
 
-            var lightingSystem = UnityEngine.Object.FindFirstObjectByType<LightingSystem>();
+            var lightingSystem = UnityEngine.Object.FindAnyObjectByType<LightingSystem>();
             if (lightingSystem == null)
                 throw new InvalidOperationException("The Rocket scene has no LightingSystem to reuse.");
             var mainCamera = lightingSystem.GetComponent<Camera>();
             if (mainCamera == null)
                 throw new InvalidOperationException("The Rocket LightingSystem has no Camera on its GameObject.");
-            var spacecraft = UnityEngine.Object.FindFirstObjectByType<Spacecraft>();
+            var spacecraft = UnityEngine.Object.FindAnyObjectByType<Spacecraft>();
             if (spacecraft == null || spacecraft.MainRigidbody == null)
                 throw new InvalidOperationException("The Rocket scene has no Spacecraft with a MainRigidbody.");
 
@@ -407,7 +407,7 @@ namespace Light2D.Examples
         // also carries InputManager) and the empty "StaticObjects" Container root it fills at runtime.
         private static void RemoveProceduralTerrain()
         {
-            var generator = UnityEngine.Object.FindFirstObjectByType<MapGenerator>();
+            var generator = UnityEngine.Object.FindAnyObjectByType<MapGenerator>();
             if (generator == null)
                 return;
 

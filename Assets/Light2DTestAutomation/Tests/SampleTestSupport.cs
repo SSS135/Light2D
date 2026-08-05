@@ -85,7 +85,7 @@ namespace Light2D.TestProject.Tests
                 yield return null;
 
                 LightingSystem[] lightingSystems =
-                    UnityEngine.Object.FindObjectsByType<LightingSystem>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                    UnityEngine.Object.FindObjectsByType<LightingSystem>(FindObjectsInactive.Exclude);
                 Assert.That(lightingSystems, Has.Length.EqualTo(1),
                     $"Expected exactly one active LightingSystem in '{sceneFileName}'.");
                 context.Lighting = lightingSystems[0];
