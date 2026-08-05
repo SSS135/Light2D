@@ -1,10 +1,11 @@
 # Light2D Examples
 
-The sample contains three scenes:
+The sample contains four scenes:
 
 - **Small Examples** cycles through direct lights, sprite and mesh obstacles, ambient emitters, blur and quality controls, and XY normal mapping. Primary click or one-finger tap changes the example. Secondary click or a two-finger tap changes light color.
 - **Rocket** combines direct and ambient light with generated obstacle meshes. Use the arrow keys to fly, `Space` for landing gear, `C` for flares, `R` to restart, and `F1` to pause. On mobile, use the on-screen controls.
 - **Rocket Tilemap** renders the same style of cave through a baked `Tilemap` occluded by a texture-aware `LightObstacleTilemap` (requires the `com.unity.2d.tilemap` package), so transparent tile pixels pass light.
+- **Light Volume** demonstrates `Light2DVolume` coverage. The block world renders raw and full-brightness by default (`DefaultCoverage = 0`); a single Box volume re-enables Light2D over the cave, so the interior reads dark and is lit only by a mouse-controlled lantern while the surface stays untouched. Also requires `com.unity.2d.tilemap`.
 
 ## Render Pipeline Setup
 
@@ -16,7 +17,7 @@ Light2D has no layers to configure: each light source, ambient emitter, and obst
 
 ## Support
 
-- Desktop and mobile input work without forcing an Input System package dependency. The sample scripts read through the Input System package automatically when it is present in the project (the `Light2D.Samples.Runtime` assembly gates this on the package), and fall back to the legacy `Input` class otherwise. Because the sample scenes drive their on-screen touch UI through uGUI's legacy input modules, keep **Active Input Handling** (Player Settings) set to **Input Manager (Old)** or **Both**; the scenes' uGUI does not run under **Input System Package (New)** only.
+- Desktop and mobile input need no project-side setup. The sample scripts read through the Input System package when it is present and fall back to the legacy `Input` class otherwise; every read site is double-guarded on `LIGHT2D_SAMPLES_INPUT_SYSTEM && ENABLE_INPUT_SYSTEM` with a legacy `#else` branch, and `LIGHT2D_SAMPLES_INPUT_SYSTEM` comes from the `Light2D.Samples.Runtime` assembly's `versionDefines`. `com.unity.inputsystem` is a declared package dependency. The on-screen overlay is UI Toolkit (`UI/SampleUI.uxml` driven by `SampleUiController.cs`), not uGUI, but the scenes' `EventSystem` input modules are mixed: **Small Examples** uses `InputSystemUIInputModule`, while **Rocket**, **Rocket Tilemap**, and **Light Volume** use `StandaloneInputModule`. Set **Active Input Handling** (Player Settings) to **Both** — it is the only value that satisfies all four scenes.
 - Orthographic XY normal mapping is supported.
 - XR is not supported.
 - URP Base/Overlay camera stacks are not supported. Use independent Base cameras instead.

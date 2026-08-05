@@ -54,8 +54,7 @@ occlusion from existing art, or Built-in Render Pipeline support (see
 - [Frequently asked questions](Documentation~/FAQ.md)
 - [Migration and upgrade notes](Documentation~/MIGRATION.md)
 - [Troubleshooting](Documentation~/TROUBLESHOOTING.md)
-- [Development and testing](Documentation~/TESTING.md)
-- [Diagnostics and benchmarking](Documentation~/BENCHMARKING.md)
+- [Runtime diagnostics](Documentation~/BENCHMARKING.md)
 - [Changelog](CHANGELOG.md)
 - [License](LICENSE.md)
 
@@ -80,7 +79,7 @@ when that tag is available.
 **Local disk:** Select **Install package from disk...** and choose the package's `package.json` under `Packages/com.sss13594.light2d/`. A manifest entry for a checkout is:
 
 ```json
-"com.sss13594.light2d": "file:X:/src/unity/Light2D/Packages/com.sss13594.light2d"
+"com.sss13594.light2d": "file:C:/path/to/Light2D/Packages/com.sss13594.light2d"
 ```
 
 Unity installs the package dependencies declared in `package.json`, including URP 17.3 even when the consuming project uses the Built-in Render Pipeline.
@@ -176,7 +175,7 @@ Current limitations:
 - Very small obstacles can disappear at low light-texture resolutions. Off-screen lights can clip if the light-camera margin is too small.
 - XR rendering and URP camera stacks (Overlay cameras, or Base cameras with an active Overlay stack) are not supported and are skipped safely with one warning per camera. Independent URP Base cameras, including split screen, are supported.
 
-The package ships EditMode suites (contracts, lifecycle and resource release, components, diagnostics, editor workflows, package integrity, shader import, and URP feature/camera policy) plus Built-in and URP PlayMode suites. See [TESTING.md](Documentation~/TESTING.md) for the current verification status of each backend.
+The package ships EditMode suites (contracts, lifecycle and resource release, components, diagnostics, editor workflows, package integrity, shader import, and URP feature/camera policy) plus Built-in and URP PlayMode suites. Both backends are behaviorally verified by those suites: the Built-in tests cover rendered output, obstacle attenuation, target alignment, coverage volumes, and owned-resource cleanup, and the URP tests cover aligned non-square targets, partial viewport rects, reduced render scale, and two-base-camera lighting isolation on both Universal Renderer Data and 2D Renderer Data.
 
 ## Package Layout
 
@@ -197,6 +196,10 @@ The package name is `com.sss13594.light2d`. Runtime types are in the `Light2D` n
 
 The supported public runtime API is limited to the scene components (`LightingSystem`, `LightSprite`, `LightObstacleSprite`, `LightObstacleMesh`, `LightObstacleGenerator`, `LightAmbientEmitter`, `Light2DVolume`, and — when `com.unity.2d.tilemap` is installed — `LightObstacleTilemap`), the `CustomSprite` abstract base shared by `LightSprite`/`LightObstacleSprite`, the `Light2DUniversalRendererFeature`, the diagnostics surface (`Light2DProfiling`, `Light2DDiagnostics`, `Light2DFrameMetrics`), and the `Light2DPipeline` readiness classification exposed through `LightingSystem.ActivePipeline` and `LightingSystem.IsRenderingReady`. Serialized field names on these components are compatibility contracts and are preserved across releases. Everything else is internal implementation and may change without notice; a contract test enforces the exported type list. The legacy `Util` and `Point2` helpers were removed in 2.0.0.
 
+## Support
+
+Report bugs and request features on the [GitHub issue tracker](https://github.com/SSS135/Light2D/issues). For anything that does not belong in a public issue, email <sss13594@gmail.com>. Include your Unity version, render pipeline, and Light2D version from `package.json`.
+
 ## License
 
-Light2D is available under the [MIT License](LICENSE.md).
+Light2D is available under the [MIT License](LICENSE.md). Third-party components bundled with the samples are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

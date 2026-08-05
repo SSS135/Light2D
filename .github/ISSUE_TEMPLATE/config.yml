@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/SSS135/Light2D/blob/master/README.md
+    about: Installation, architecture, migration, troubleshooting, and FAQ.
+  - name: Email the maintainer
+    url: mailto:sss13594@gmail.com
+    about: For anything you would rather not discuss in a public issue.

@@ -44,7 +44,7 @@ namespace Light2D.TestProject.Editor
             if (settings == null)
                 throw new InvalidOperationException(
                     $"URP failed to create global settings at '{GlobalSettingsPath}'. " +
-                    "This host has no external fallback; resolve the Unity/ShaderGraph import defect described in Documentation~/TESTING.md and rerun.");
+                    "This host has no external fallback; resolve the Unity/ShaderGraph import defect described in docs/TESTING.md and rerun.");
 
             RegisterAndValidate(settings);
             Debug.Log($"Generated and registered host URP global settings at '{GlobalSettingsPath}'.");

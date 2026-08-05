@@ -84,15 +84,14 @@ namespace Light2D.Examples
         private const string TilesFolderRelative = "Tiles/LightVolume";
         private static readonly string[] TileAssetNames = { "GrassTile", "EarthTile", "CaveBgTile" };
 
-        // Art payload mirrored alongside the scene so both sample trees stay byte-identical. The previous
-        // painted-cave art (grass/cave_bg/stalactite/cave_mouth/cave_mask/boulder) is no longer placed by
-        // the scene but is still mirrored so the two trees never diverge.
+        // Art payload mirrored alongside the scene so both sample trees stay byte-identical. This is the
+        // complete set of LightVolume art on disk; MirrorFile throws FileNotFoundException on a missing
+        // source, so a name may only be listed here while the PNG and its meta exist in both trees.
         private const string ArtFolderMetaRelative = "Images/LightVolume.meta";
         private const string ArtFolderRelative = "Images/LightVolume";
         private static readonly string[] ArtFileNames =
         {
-            "sun", "cloud", "grass", "cave_bg", "stalactite", "lantern", "halo",
-            "cave_mouth", "cave_mask", "boulder", "grass_block", "earth_block", "cave_bg_block"
+            "sun", "cloud", "lantern", "halo", "grass_block", "earth_block", "cave_bg_block"
         };
 
         // Coordinate system: orthographic size 5 at world origin -> 36 px/world-unit in a 640x360 capture;

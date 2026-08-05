@@ -130,8 +130,9 @@ The repository root is the Unity 6000.5.4f1 project used to develop and test the
 - [Frequently asked questions](Packages/com.sss13594.light2d/Documentation~/FAQ.md)
 - [Migration and upgrade notes](Packages/com.sss13594.light2d/Documentation~/MIGRATION.md)
 - [Troubleshooting](Packages/com.sss13594.light2d/Documentation~/TROUBLESHOOTING.md)
-- [Development and testing](Packages/com.sss13594.light2d/Documentation~/TESTING.md)
-- [Diagnostics and benchmarking](Packages/com.sss13594.light2d/Documentation~/BENCHMARKING.md)
+- [Runtime diagnostics](Packages/com.sss13594.light2d/Documentation~/BENCHMARKING.md)
+- [Development and testing](docs/TESTING.md)
+- [Benchmarking protocol](docs/BENCHMARKING.md)
 - [Changelog](Packages/com.sss13594.light2d/CHANGELOG.md)
 
 ## License

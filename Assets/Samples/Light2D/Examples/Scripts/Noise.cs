@@ -34,6 +34,9 @@ namespace Light2D.Examples
     /// <summary>
     /// Implementation of the Perlin simplex noise, an improved Perlin noise algorithm.
     /// Based loosely on SimplexNoise1234 by Stefan Gustavson <http://staffwww.itn.liu.se/~stegu/aqsis/aqsis-newnoise/>
+    /// SimplexNoise1234 is (c) 2003-2005 Stefan Gustavson; its author released
+    /// that reference implementation into the public domain in 2011. This file
+    /// itself is distributed under The Unlicense, reproduced in the header above.
     /// 
     /// </summary>
     public class Noise

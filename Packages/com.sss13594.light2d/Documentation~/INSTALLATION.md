@@ -6,7 +6,7 @@
 - Built-in Render Pipeline or Universal Render Pipeline 17.3.
 - Optional: `com.unity.2d.tilemap` for the `LightObstacleTilemap` occluder.
 
-The package declares URP 17.3 and uGUI 2.0 dependencies. Do not remove or change those dependencies when installing from source. Light2D 2.0 has no layer requirement — lighting roles are expressed as components (see [Add Content](#add-content)).
+The package declares URP 17.3, uGUI 2.0, and Input System 1.19 dependencies. URP is a runtime requirement of the URP backend and is installed even in Built-in projects; uGUI and the Input System are required by the sample scenes' `EventSystem` and its input module, not by the package runtime. Do not remove or change those dependencies when installing from source. Light2D 2.0 has no layer requirement — lighting roles are expressed as components (see [Add Content](#add-content)).
 
 ## Install from Git
 
@@ -29,7 +29,7 @@ Clone or extract this repository outside the consuming project’s generated dir
 The equivalent `Packages/manifest.json` dependency uses an absolute or manifest-relative path to the embedded package folder:
 
 ```json
-"com.sss13594.light2d": "file:X:/src/unity/Light2D/Packages/com.sss13594.light2d"
+"com.sss13594.light2d": "file:C:/path/to/Light2D/Packages/com.sss13594.light2d"
 ```
 
 Unity’s package cache is read-only in normal use. Use a Git or local-disk package when modifying Light2D itself.
@@ -67,7 +67,7 @@ Light2D’s URP backend is a URP 17 RenderGraph renderer feature. It supports bo
 
 The feature runs after transparents by default, requests an intermediate camera texture, and only enqueues for a source camera containing an enabled `LightingSystem`. It derives expanded culling and view/projection matrices from that source camera. If a camera selects a different renderer index through Universal Additional Camera Data, install the feature on that renderer data rather than only on the URP asset’s default renderer. There are no layers to exclude and no helper camera to assign.
 
-Support for both Universal Renderer Data and 2D Renderer Data is implemented; see [Development and Testing](TESTING.md#urp-verification-status) for the current URP verification status.
+Both Universal Renderer Data and 2D Renderer Data are implemented and behaviorally verified by the package's URP PlayMode suite.
 
 For HDR output, enable HDR on the source camera and URP asset. Set the URP asset’s **HDR Color Buffer Precision** to **64 Bits** when `LightingSystem` **16-bit HDR Color** is enabled; otherwise the final camera composition reduces precision.
 

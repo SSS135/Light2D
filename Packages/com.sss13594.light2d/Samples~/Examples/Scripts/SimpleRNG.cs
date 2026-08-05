@@ -1,3 +1,13 @@
+// SimpleRNG - a simple random number generator based on George Marsaglia's
+// MWC (multiply with carry) generator.
+//
+// Written by John D. Cook and released by its author into the public domain.
+// Source: http://www.johndcook.com/blog/csharp_simple_rng/
+//
+// Adapted for the Light2D examples (instance-based API instead of static).
+// No warranty of any kind. See THIRD-PARTY-NOTICES.md in the Light2D package
+// root for the full third-party attribution list.
+
 using System;
 using System.Collections.Generic;
 

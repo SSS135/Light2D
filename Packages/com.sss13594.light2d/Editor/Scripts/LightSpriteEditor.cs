@@ -55,7 +55,7 @@ namespace Light2D
         private static readonly GUIContent TypeLabel = new GUIContent("Type",
             "Point emits radially, Spot projects a soft cone whose apex sits at the transform, and Line emits along a Length-by-Throw bar.");
         private static readonly GUIContent ColorLabel = new GUIContent("Color",
-            "Light colour, multiplied by Intensity. HDR: channels above 1 need the owning LightingSystem's 64 Bit Color enabled.");
+            "Light colour, multiplied by Intensity. HDR: channels above 1 need the owning LightingSystem's 16-bit HDR Color enabled.");
         private static readonly GUIContent IntensityLabel = new GUIContent("Intensity",
             "Brightness multiplied into the light colour. Type a value above the slider to overdrive it.");
         private static readonly GUIContent RadiusLabel = new GUIContent("Radius",
@@ -326,7 +326,7 @@ namespace Light2D
                 warned = true;
             }
 
-            // Trap 3 (soft): overbright Intensity/Color while the owning system has 64 Bit Color off, so it clamps.
+            // Trap 3 (soft): overbright Intensity/Color while the owning system has 16-bit HDR Color off, so it clamps.
             var system = ResolveOwningSystem();
             if (system != null && !system.HDR)
             {
@@ -334,7 +334,7 @@ namespace Light2D
                 if (_intensity.floatValue > 1f || color.r > 1f || color.g > 1f || color.b > 1f)
                 {
                     EditorGUILayout.HelpBox(
-                        "Intensity or the HDR colour exceeds 1, but the owning LightingSystem has 64 Bit Color disabled, so the extra brightness is clamped.",
+                        "Intensity or the HDR colour exceeds 1, but the owning LightingSystem has 16-bit HDR Color disabled, so the extra brightness is clamped.",
                         MessageType.Info);
                     warned = true;
                 }

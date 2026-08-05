@@ -2,101 +2,7 @@
 
 All notable package changes are documented here. This file at the package root is the canonical changelog location.
 
-## [Unreleased]
-
-Light-source authoring, an obstacle preview, and shader modernization on the 2.x
-line; the package version is unchanged.
-
-### Breaking changes
-
-- `LightSprite.LightOrigin` changed from `Vector3` to `Vector2` — it is now a pure
-  XY correction offset (center/apex, hidden for Line lights); the light's height
-  above the plane moved to the new `NormalMapHeight` field.
-- Removed the `LightSprite.Shape` enum. A light's footprint now comes from
-  `LightType` (Point/Spot/Line) and its serialized fields, not a shape selector.
-- `CustomSprite` is now a public **abstract** base and can no longer be added as a
-  component on its own.
-- Removed the `CustomSprite` renderer-facade members `Renderer`, `RendererEnabled`,
-  and `IsPartOfStaticBatch`; role components own no scene renderer to expose.
-- Role components (lights, obstacles, volumes) no longer own a `MeshRenderer` or
-  `MeshFilter`. Each builds an internal mesh plus a generated material and draws
-  through the registry; the ambient emitter and `LightObstacleMesh` keep a
-  `MeshFilter` only as an optional/required self-mesh input.
-- `LightingSystem` is now values-only: the per-feature override toggles are removed,
-  and its material slots are hidden and auto-populated from `Light2DDefaultResources`
-  (including the new `ObstacleMaterial`).
-- Renamed the `LightingSystem` HDR setting label "64 Bit Color" to
-  "16-bit HDR Color"; the serialized `HDR` field name is unchanged.
-- Removed the dead shaders `Light2D/Internal/Alpha Replace`,
-  `Light2D/Internal/Light Blender`, and `Light2D/Light Overlay Single Camera`; the
-  orphaned per-count light materials `Light1Point.mat`, `Light30Points.mat`,
-  `Light50Points.mat`, `Light60Points.mat`, and `Light70Points.mat`; and the
-  duplicate sample `AlphaBlended.shader`.
-
-### Added
-
-- First-class `LightSprite` authoring fields: `LightType` (Point/Spot/Line),
-  `Radius`, `Intensity`, an HDR light color, `Falloff` (edge hardness over `0..1`,
-  or a progressively longer/dimmer inverse-square-style tail over `-1..0`),
-  `SpotAngle`, and `ShadowQuality`.
-- Procedurally generated light falloff textures — no light bitmaps are shipped —
-  shared, cached, and LRU-bounded across lights with matching parameters. An
-  assigned `Sprite` overrides the generated falloff.
-- `LightSpriteEditor` custom inspector: a Type-led layout with draggable scene
-  handles for radius and the spot cone, and HelpBox warnings with Fix buttons.
-- **Obstacle Preview** editor window (**Window > Light2D > Obstacle Preview**) that
-  renders the live obstacle transmission buffer a `LightingSystem` produces
-  (Built-in in play mode, URP in edit and play mode).
-- Authorable ambient knobs on `LightingSystem` (obstacle multiplier and add,
-  emission multiplier, sampling distance, and iteration count) and an optional
-  colored ambient bounce that lets an obstacle's color tint the indirect fill; off
-  by default.
-- `LightSprite.NormalMapHeight` (default 1): the light's height above the plane used
-  by normal mapping, shown only when a sprite override is set.
-- Line-light shaping on `LightSprite`: `Length`, `Throw`, and `Sides`
-  (`Both`/`Front`/`Back`). `Radius` is unused for a Line light.
-- `LightingSystem.ObstacleColor`, a global obstacle multiplier applied through the
-  `_Light2DObstacleGlobalMul` shader property.
-- `Light2DDefaultResources.ObstacleMaterial`, auto-populating the hidden obstacle
-  material slot on `LightingSystem`.
-- Thruster lights in the Rocket sample (`ThrusterLight.cs`) with a 0.05 s rise and
-  0.3 s fall.
-- A values-only `LightingSystem` inspector with non-collapsible headers, live
-  play-mode value tuning (structural fields stay locked), a "16-bit HDR Color"
-  toggle, and a read-only "Estimated Light Textures" block.
-- A Light Volume visual smoke test that captures a PNG regression artifact.
-
-### Fixed
-
-- URP SubShader selection: the object shaders drawn with `CommandBuffer.DrawMesh`
-  now list their URP SubShader first, and the fullscreen Blit shaders tag their
-  Built-in SubShader `"RenderPipeline"="BuiltInPipeline"`, so URP no longer selects
-  the Built-in pass and renders Light2D black.
-- Spot lights now emit from their apex at the transform position.
-- The `LightSprite` scene gizmo disc now matches the visible reach (`Radius * 0.5`).
-- `Light2DVolume` scene handles now scale correctly under a scaled transform.
-- Self-mesh `LightObstacleMesh` now receives a default obstacle material instead of
-  being silently undrawn.
-- `Light2D/Fast Blur` under URP now matches the Built-in blur tap pattern.
-
-### Changed
-
-- Light size now comes from the new serialized `LightSprite.Radius` field, baked
-  into the light mesh, instead of `transform.localScale`.
-- Unified the per-sample-count ray-march light shaders `Light2D/Light 20 Points`
-  through `Light2D/Light 90 Points` into a single `Light2D/Light Points` shader
-  driven by a `_PathTrackingSamples` property.
-- Migrated the Small Examples sample walls to `SpriteRenderer`-sourced obstacles;
-  the obstacle `Material` slots are hidden.
-- Re-baselined the Light Volume world-gate visual reference from 0.45 to 0.42, an
-  intentional scene edit.
-
-### Removed
-
-- The legacy immediate-mode methods `LightSprite.DrawLightingNow` and
-  `LightSprite.DrawLightNormalsNow`.
-
-## [2.0.0] - 2026-07-21
+## [2.0.0] - 2026-08-05
 
 Light2D 2.0.0 is the first published release. It converts the legacy
 `Assets/Light2D` project into the root UPM package `com.sss13594.light2d` and ships a
@@ -122,6 +28,29 @@ host is 6000.5.4f1.
   the remaining `LIGHT2D_2DTK` / 2D Toolkit compile branches and the obsolete 2D
   Toolkit enable workflow. These types were unreferenced by package serialized
   assets; code that consumed them must migrate to `UnityEngine` equivalents.
+- `LightSprite.LightOrigin` changed from `Vector3` to `Vector2` — it is now a pure
+  XY correction offset (center/apex, hidden for Line lights); the light's height
+  above the plane moved to the new `NormalMapHeight` field.
+- Removed the `LightSprite.Shape` enum. A light's footprint now comes from
+  `LightType` (Point/Spot/Line) and its serialized fields, not a shape selector.
+- `CustomSprite` is now a public **abstract** base and can no longer be added as a
+  component on its own.
+- Removed the `CustomSprite` renderer-facade members `Renderer`, `RendererEnabled`,
+  and `IsPartOfStaticBatch`; role components own no scene renderer to expose.
+- Role components (lights, obstacles, volumes) no longer own a `MeshRenderer` or
+  `MeshFilter`. Each builds an internal mesh plus a generated material and draws
+  through the registry; the ambient emitter and `LightObstacleMesh` keep a
+  `MeshFilter` only as an optional/required self-mesh input.
+- `LightingSystem` is now values-only: the per-feature override toggles are removed,
+  and its material slots are hidden and auto-populated from `Light2DDefaultResources`
+  (including the new `ObstacleMaterial`).
+- Renamed the `LightingSystem` HDR setting label "64 Bit Color" to
+  "16-bit HDR Color"; the serialized `HDR` field name is unchanged.
+- Removed the dead shaders `Light2D/Internal/Alpha Replace`,
+  `Light2D/Internal/Light Blender`, and `Light2D/Light Overlay Single Camera`; the
+  orphaned per-count light materials `Light1Point.mat`, `Light30Points.mat`,
+  `Light50Points.mat`, `Light60Points.mat`, and `Light70Points.mat`; and the
+  duplicate sample `AlphaBlended.shader`.
 
 ### Added
 
@@ -188,6 +117,47 @@ host is 6000.5.4f1.
   feature/camera policy, plus Built-in behavioral PlayMode coverage and URP PlayMode
   tests. Validated a Built-in Windows x64 sample-player build with a successful
   `BuildReport`, zero reported errors, and zero actionable step errors.
+- First-class `LightSprite` authoring fields: `LightType` (Point/Spot/Line),
+  `Radius`, `Intensity`, an HDR light color, `Falloff` (edge hardness over `0..1`,
+  or a progressively longer/dimmer inverse-square-style tail over `-1..0`),
+  `SpotAngle`, and `Shadows`.
+- `LightSprite.SpotSoftness` (default -1): angular penumbra for Spot in degrees —
+  how many degrees the cone edge takes to fade, independent of the radial `Falloff`.
+  Negative is Auto (derive the edge softness from `Falloff`), 0 is a hard edge, and
+  180 fades across the whole half-cone.
+- Procedurally generated light falloff textures — no light bitmaps are shipped —
+  shared, cached, and LRU-bounded across lights with matching parameters. An
+  assigned `Sprite` overrides the generated falloff.
+- `LightSpriteEditor` custom inspector: a Type-led layout with draggable scene
+  handles for radius and the spot cone, and HelpBox warnings with Fix buttons.
+- **Obstacle Preview** editor window (**Window > Light2D > Obstacle Preview**) that
+  renders the live obstacle transmission buffer a `LightingSystem` produces
+  (Built-in in play mode, URP in edit and play mode).
+- Authorable ambient knobs on `LightingSystem` (obstacle multiplier and add,
+  emission multiplier, sampling distance, and iteration count) and an optional
+  colored ambient bounce that lets an obstacle's color tint the indirect fill; off
+  by default.
+- `LightSprite.NormalMapHeight` (default 1): the light's height above the plane used
+  by normal mapping, shown only when a sprite override is set.
+- Line-light shaping on `LightSprite`: `Length`, `Throw`, and `Sides`
+  (`Both`/`Front`/`Back`). `Radius` is unused for a Line light.
+- `LightingSystem.ObstacleColor`, a global obstacle multiplier applied through the
+  `_Light2DObstacleGlobalMul` shader property.
+- `Light2DDefaultResources.ObstacleMaterial`, auto-populating the hidden obstacle
+  material slot on `LightingSystem`.
+- Thruster lights in the Rocket sample (`ThrusterLight.cs`) with a 0.05 s rise and
+  0.3 s fall.
+- A values-only `LightingSystem` inspector with non-collapsible headers, live
+  play-mode value tuning (structural fields stay locked), a "16-bit HDR Color"
+  toggle, and a read-only "Estimated Light Textures" block.
+- A Light Volume visual smoke test that captures a PNG regression artifact.
+- `THIRD-PARTY-NOTICES.md` at the package root, plus upstream license headers on the
+  third-party sample scripts `SimpleRNG.cs` (public domain, John D. Cook) and
+  `Noise.cs` (The Unlicense, with the SimplexNoise1234 derivation credited).
+- Package manifest metadata: a `bugs` URL pointing at the GitHub issue tracker,
+  `unityRelease` `20f1` beside `unity` `6000.3`, and an explicit
+  `com.unity.inputsystem` dependency (the sample scenes' EventSystem input modules
+  require it).
 
 ### Fixed
 
@@ -212,10 +182,29 @@ host is 6000.5.4f1.
   shader in player builds, not only in the editor — `LightObstacleTilemap`
   previously produced no obstacle geometry in a build.
 - Sample scripts hardened against hangs and null-reference errors (`Bat`,
-  `MapGenerator`, `Flare`, `Wisp`).
+  `MapGenerator`, `Flare`).
 - Per-frame allocation and redundant-work guards in the Built-in and URP render
   loops (material-clone gating, border-mesh rebuild guard, cached obstacle-mesh
   parent lookup, de-duplicated resource reconciliation).
+- URP SubShader selection: the object shaders drawn with `CommandBuffer.DrawMesh`
+  now list their URP SubShader first, and the fullscreen Blit shaders tag their
+  Built-in SubShader `"RenderPipeline"="BuiltInPipeline"`, so URP no longer selects
+  the Built-in pass and renders Light2D black.
+- Spot lights now emit from their apex at the transform position.
+- The `LightSprite` scene gizmo disc now matches the visible reach (`Radius * 0.5`).
+- `Light2DVolume` scene handles now scale correctly under a scaled transform.
+- Self-mesh `LightObstacleMesh` now receives a default obstacle material instead of
+  being silently undrawn.
+- `Light2D/Fast Blur` under URP now matches the Built-in blur tap pattern.
+- The `LightSprite` inspector still labelled the HDR setting "64 Bit Color" in its
+  Color tooltip and its clamp HelpBox; both now read "16-bit HDR Color", matching
+  the `LightingSystem` inspector.
+- The **Light Volume** sample scene was missing from the sample README and the
+  `samples` manifest description; both now list all four scenes.
+- The sample README claimed the scenes drive their UI through uGUI legacy input
+  modules and that **Active Input Handling** may be Old or Both. The overlay is UI
+  Toolkit and the scenes' input modules are mixed, so **Both** is the only value
+  that satisfies all four scenes; the README now states that.
 
 ### Changed
 
@@ -228,6 +217,40 @@ host is 6000.5.4f1.
   (347 pass, 11 intentional skips), Light2D EditMode 120/120, and selected PlayMode
   11/11 (Built-in 4/4, URP 4/4, sample smokes 2/2, Rocket visual 1/1).
 - Runtime components now carry tooltips and `[AddComponentMenu]` entries.
+- Light size now comes from the new serialized `LightSprite.Radius` field, baked
+  into the light mesh, instead of `transform.localScale`.
+- Unified the per-sample-count ray-march light shaders `Light2D/Light 20 Points`
+  through `Light2D/Light 90 Points` into a single `Light2D/Light Points` shader
+  driven by a `_PathTrackingSamples` property.
+- Migrated the Small Examples sample walls to `SpriteRenderer`-sourced obstacles;
+  the obstacle `Material` slots are hidden.
+- Re-baselined the Light Volume world-gate visual reference from 0.45 to 0.42, an
+  intentional scene edit.
+- The maintainer test and host runbook moved out of the package to `docs/TESTING.md`
+  in the repository, and the benchmarking QA protocol split out to
+  `docs/BENCHMARKING.md`. The package's `Documentation~/BENCHMARKING.md` is now
+  **Runtime Diagnostics** and documents only the public `Light2DProfiling` markers
+  and `Light2DDiagnostics` surface.
+- Recompressed the Rocket sample skybox `Sky.png` from 8.3 MB to 2.6 MB by dropping
+  its fully-opaque alpha channel; the decoded RGB output is unchanged and the asset
+  GUID is preserved.
+- Package manifest `author.name` is now `Alexander Penkin` with a contact email,
+  matching `LICENSE.md` and the publisher identity. The package id, `author.url`,
+  and every GitHub URL are unchanged.
+
+### Removed
+
+- The legacy immediate-mode methods `LightSprite.DrawLightingNow` and
+  `LightSprite.DrawLightNormalsNow`.
+- The sample include `Resources/Shaders/Noise.cginc`. It carried a CC BY-NC-SA 3.0
+  header, whose NonCommercial and share-alike terms are incompatible with the
+  package's MIT license. Nothing `#include`d it.
+- Unused sample payload: six LightVolume art PNGs (`boulder`, `cave_bg`,
+  `cave_mask`, `cave_mouth`, `grass`, `stalactite`),
+  `Images/Lights/DirectionalLight.psd`, the dead scripts `SpiderLeg`, `Wisp`, and
+  `UICustomSlider`, and the orphan materials `UnlitMesh.mat` and
+  `ParticleLight.mat`, whose `_MainTex` references resolved to nothing. No scene,
+  prefab, or script referenced any of them.
 
 ### Migration notes
 
@@ -245,38 +268,38 @@ host is 6000.5.4f1.
 - See [MIGRATION.md](Documentation~/MIGRATION.md#upgrading-to-200) for the complete
   sequence and rollback guidance.
 
-## [1.4]
+## [1.4] - pre-UPM
 
 - Added single-camera mode through `LightingSystem.AffectOnlyThisCamera`.
 - Added XZ-plane support.
 
-## [1.3]
+## [1.3] - pre-UPM
 
 - Added normal mapping.
 - Added the ability to turn bloom off by setting the overlay material’s additive-light power to zero.
 - Added point filtering for pixelated lighting textures.
 - Fixed lighting after orthographic camera-size changes and camera Z rotation.
 
-## [1.2.1]
+## [1.2.1] - pre-UPM
 
 - Added `LightObstacleGenerator.LightObstacleScale`.
 - Improved perspective-camera handling.
 - Added fallback behavior when 64-bit color is unavailable.
 - Updated lighting when camera field of view changes at runtime.
 
-## [1.2]
+## [1.2] - pre-UPM
 
 - Improved legacy 2D Toolkit and perspective-camera support.
 - Fixed mobile shader compilation issues.
 
-## [1.1]
+## [1.1] - pre-UPM
 
 - Added perspective-camera support using `LightCameraFovAdd`.
 
-## [1.0.1]
+## [1.0.1] - pre-UPM
 
 - Added Unity 5 support.
 
-## [1.0]
+## [1.0] - pre-UPM
 
 - Initial release.

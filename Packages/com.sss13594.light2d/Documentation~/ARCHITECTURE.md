@@ -53,7 +53,7 @@ to a new `LightingSystem`. There is no `Lighting Camera` prefab and no
 
 `Light2DUniversalRendererFeature` owns rendering. Its RenderGraph pass derives culling and view/projection matrices from the source camera, draws the registered role components, imports ambient history, and replaces camera color. Contexts and history are keyed by `LightingSystem`, so multiple source cameras do not share ambient state. The feature is attached to renderer data, but enqueues only when the currently rendered camera itself has an enabled `LightingSystem`.
 
-Universal Renderer Data and 2D Renderer Data integration is implemented. See [TESTING.md](TESTING.md#urp-verification-status) for the current URP verification status.
+Universal Renderer Data and 2D Renderer Data integration is implemented, and both are behaviorally verified by the package's URP PlayMode suite.
 
 Do not route Built-in work through the renderer feature or URP work through `OnRenderImage`. `LightingSystem.IsScriptableRenderPipelineActive` prevents the Built-in backend from running under an SRP.
 
@@ -78,8 +78,7 @@ composition, with no change to the frozen overlay shaders: the volumes rasterize
 their shapes into the coverage mask, the overlay writes into an intermediate
 composite target, and one final blit blends the raw color and the composite by the
 mask. The Built-in path is behaviorally verified; the URP path is a structural
-mirror of it (see [TESTING.md](TESTING.md#urp-verification-status) for the current
-URP verification status).
+mirror of it.
 
 ### DefaultCoverage baseline
 
