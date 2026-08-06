@@ -36,12 +36,7 @@
 - Do not launch Unity unless the user requests it or the task requires runtime validation and no prohibition applies.
 - The Unity MCP Streamlined gateway runs inside the open host editor on a deterministic project-derived loopback port. Root `.mcp.json` launches its stdio proxy, which discovers the active port and token under `Library/UnityMcpStreamlined/`.
 - On first import, wait for package import, script compilation, and any resulting domain reload to finish before using MCP. The setup menu and gateway are unavailable until Unity is ready. Do not install official Unity-MCP in this project: the streamlined derivative intentionally shares assembly and code identities with it, so they cannot coexist.
-- Unity may stop processing refresh/reload work while unfocused. Before a recompile-triggering MCP request, run:
-
-```powershell
-& "X:\src\unity\Light2D\Packages\com.sss135.unity-mcp-streamlined\Tools\wake-unity.ps1" -ProjectFilter "Light2D"
-```
-
+- An unfocused or minimized editor serves MCP normally. Never wake, focus, or raise the Unity window; the `wake-unity.ps1` script that older instructions called for has been deleted. The gateway binds its socket synchronously during `[InitializeOnLoad]` and an internal tick pump keeps the parked main loop serving requests, so a minimized editor answers in roughly 200-500 ms and `editor.start` with `hidden: true` reaches ready without any interaction. Stealing the user's foreground focus is a defect, not a workaround.
 - After source edits, call `assets.refresh` and poll `editor.application-get-state` until `IsCompiling` and `IsUpdating` are false and compilation has completed. MCP disconnects during domain reload; the stdio proxy reconnects after the gateway republishes its active port and token under `Library/UnityMcpStreamlined/`.
 - Save all scenes before `tests.run`. Poll the returned job ticket and inspect `console.get-logs` after completion. A passing test result can still leave logged exceptions.
 - Do not assume a fixed gateway port. For direct diagnostics, read `Library/UnityMcpStreamlined/gateway-port`; if its derived port conflicts with another process, stop that process rather than changing Light2D configuration.
