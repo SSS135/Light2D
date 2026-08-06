@@ -38,10 +38,6 @@ sysinfo.txt
 # (Unity auto-discovers embedded packages under Packages/) but not committed here.
 /Packages/com.sss135.unity-mcp-streamlined/
 
-# Unity Asset Store Tools: publishing tooling used to upload the package, not part
-# of the product. Kept on disk while a release is in flight; never committed.
-/Packages/com.unity.asset-store-tools/
-
 # Numbered URP global-settings copies that URP regenerates. NEVER the unnumbered
 # sentinel Assets/UniversalRenderPipelineGlobalSettings.asset.
 /Assets/UniversalRenderPipelineGlobalSettings [0-9]*.asset
