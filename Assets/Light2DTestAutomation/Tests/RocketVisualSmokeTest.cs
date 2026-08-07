@@ -770,7 +770,7 @@ namespace Light2D.TestProject.Tests
         private static List<Vector2> CollectCaveLightPositions()
         {
             var positions = new List<Vector2>();
-            foreach (LightSprite light in Object.FindObjectsByType<LightSprite>())
+            foreach (LightSprite light in Object.FindObjectsByType<LightSprite>(FindObjectsSortMode.None))
             {
                 if (light.isActiveAndEnabled && light.GetComponentInParent<Spacecraft>() == null)
                     positions.Add(light.transform.position);

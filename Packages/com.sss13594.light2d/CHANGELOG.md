@@ -155,7 +155,7 @@ host is 6000.5.4f1.
   third-party sample scripts `SimpleRNG.cs` (public domain, John D. Cook) and
   `Noise.cs` (The Unlicense, with the SimplexNoise1234 derivation credited).
 - Package manifest metadata: a `bugs` URL pointing at the GitHub issue tracker,
-  `unityRelease` `20f1` beside `unity` `6000.3`, and an explicit
+  `unityRelease` `0f1` beside `unity` `6000.3`, and an explicit
   `com.unity.inputsystem` dependency (the sample scenes' EventSystem input modules
   require it).
 

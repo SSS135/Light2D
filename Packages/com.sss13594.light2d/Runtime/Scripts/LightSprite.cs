@@ -167,7 +167,8 @@ namespace Light2D
         private static void ResetRegistry()
         {
             LightSprites.Clear();
-            foreach (var lightSprite in FindObjectsByType<LightSprite>(FindObjectsInactive.Exclude))
+            // Explicit sort mode: the single-argument overload is 6000.4+, and the package floor is 6000.3.
+            foreach (var lightSprite in FindObjectsByType<LightSprite>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 LightSprites.Add(lightSprite);
         }
 

@@ -363,7 +363,8 @@ namespace Light2D
         {
             ActiveInstances.Clear();
             InstanceSnapshot.Clear();
-            foreach (var instance in FindObjectsByType<LightingSystem>(FindObjectsInactive.Exclude))
+            // Explicit sort mode: the single-argument overload is 6000.4+, and the package floor is 6000.3.
+            foreach (var instance in FindObjectsByType<LightingSystem>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 ActiveInstances.Add(instance);
         }
 
